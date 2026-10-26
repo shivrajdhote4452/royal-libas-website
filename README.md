@@ -4,14 +4,14 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 1** — Database, Backend Core & Admin Login Complete
+- **Status:** **Phase 2** — Catalogue APIs, Badges & Dummy Seed Data Complete
 
 ---
 
-## Phase 0 & Phase 1 Notes
+## Phase 0, 1 & 2 Notes
 
-> ⚠️ **SAMPLE PHOTOS & SAMPLE PRICES ONLY:**
-> All storefront catalogue items and imagery currently shown on the frontend are development mockups. Real product photography and pricing will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
+> ⚠️ **SAMPLE / DUMMY PHOTOS ONLY:**
+> All storefront catalogue items and imagery currently shown on the frontend and APIs are development mockups (`DUMMY — ...`). Real product photography and pricing will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
 > 
 > Cart, checkout, Razorpay payments, and customer tracking are scheduled for subsequent phases per the build plan.
 
@@ -21,7 +21,7 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Money Convention:** All monetary amounts (`mrp`, `selling_price`, `subtotal`, `shipping_charge`, `discount`, `total`, `unit_price_snapshot`, `line_total`) are stored and calculated strictly in **Rupees with two decimal places (`Numeric(10, 2)`)** (e.g. `2999.00`).
 - **Stock & Variant Rule:** Stock and selling prices live strictly on `product_variants`, never on `products`. Stock has a database constraint `stock >= 0`.
-- **Order Price Snapshots:** Order line items snapshot unit prices and product details at purchase time.
+- **Derived Badges:** Products dynamically derive `Sold Out` (when total stock = 0), `Low Stock` (total stock <= 5), `Bestseller`, and `New` (created within 14 days).
 
 ---
 
@@ -63,7 +63,12 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    alembic upgrade head
    ```
 
-5. Create Initial Admin User:
+5. Seed Initial Catalogue Data (Idempotent):
+   ```bash
+   python seed.py
+   ```
+
+6. Create Initial Admin User:
    ```bash
    # Interactive prompt:
    python create_admin.py
@@ -72,15 +77,19 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    python create_admin.py --email admin@royallibas.com --password YourSecurePassword
    ```
 
-6. Run the FastAPI development server:
+7. Run the FastAPI development server:
    ```bash
    uvicorn app.main:app --reload --port 8000
    ```
 
-7. Verify the backend endpoints:
+8. Verify the backend endpoints:
    - Health check: `http://localhost:8000/health` -> `{"status": "ok"}`
+   - Catalogue Listing: `GET http://localhost:8000/products` (supports `?category=`, `?collection=`, `?size=`, `?sort=price_asc|price_desc|newest`)
+   - Product Detail: `GET http://localhost:8000/products/{slug}`
+   - Collections: `GET http://localhost:8000/collections`
    - Admin Login: `POST http://localhost:8000/admin/login` -> returns JWT access token
    - Admin Profile: `GET http://localhost:8000/admin/me` (requires Bearer token)
+   - Admin Products: `POST /admin/products`, `PATCH /admin/products/{id}`, `POST /admin/products/{id}/variants`, `PATCH /admin/variants/{id}`
    - Interactive Swagger API docs: `http://localhost:8000/docs`
 
 ---

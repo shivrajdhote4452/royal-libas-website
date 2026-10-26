@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import admin
+from app.routers import admin, products, collections
 
 app = FastAPI(
     title="Royal Libas by Tanya API",
-    description="Backend API for Royal Libas custom shop (Phase 1: Database & Admin Auth)",
-    version="0.2.0",
+    description="Backend API for Royal Libas custom shop (Phase 2: Catalogue APIs & Badges)",
+    version="0.3.0",
 )
 
 # Enable CORS for frontend integration
@@ -19,6 +19,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(admin.router)
+app.include_router(products.router)
+app.include_router(collections.router)
 
 
 @app.get("/health")
@@ -32,6 +34,6 @@ def root():
     """Root endpoint for Royal Libas API."""
     return {
         "app": "Royal Libas by Tanya API",
-        "phase": 1,
-        "message": "Database and Admin Auth operational. Health check at /health",
+        "phase": 2,
+        "message": "Catalogue APIs, Badges, and Admin Management operational. Health check at /health",
     }

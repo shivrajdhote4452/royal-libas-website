@@ -1,0 +1,327 @@
+from decimal import Decimal
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session, joinedload
+
+from app.auth import get_current_admin
+from app.database import get_db
+from app.models import Admin, Product, ProductVariant, ProductImage, Collection
+from app.schemas import (
+    ProductCreate,
+    ProductUpdate,
+    ProductListResponse,
+    ProductDetailResponse,
+    ProductVariantCreate,
+    ProductVariantUpdate,
+    ProductVariantResponse,
+)
+from app.services.product_service import (
+    build_product_list_response,
+    build_product_detail_response,
+    build_variant_response,
+)
+
+router = APIRouter(tags=["products"])
+
+
+# ==========================================
+# Public Endpoints
+# ==========================================
+
+@router.get("/products", response_model=List[ProductListResponse])
+def list_products(
+    category: Optional[str] = Query(None, description="Filter by category"),
+    collection: Optional[str] = Query(None, description="Filter by collection slug or name"),
+    size: Optional[str] = Query(None, description="Filter by available variant size"),
+    sort: Optional[str] = Query("newest", description="Sort order: newest, price_asc, price_desc"),
+    include_inactive: bool = Query(False, description="Include inactive products (admin only)"),
+    db: Session = Depends(get_db),
+):
+    """List products with filters (category, collection, size) and sorting (newest, price_asc, price_desc)."""
+    query = (
+        db.query(Product)
+        .options(
+            joinedload(Product.variants),
+            joinedload(Product.images),
+            joinedload(Product.collections),
+        )
+    )
+
+    if not include_inactive:
+        query = query.filter(Product.is_active == True)
+
+    if category:
+        query = query.filter(Product.category == category)
+
+    if collection:
+        query = query.join(Product.collections).filter(
+            (Collection.slug == collection) | (Collection.name == collection)
+        )
+
+    products = query.all()
+
+    # In-memory filter for size if specified (ensure variant with that size has stock > 0)
+    if size:
+        filtered = []
+        for p in products:
+            matching = [v for v in p.variants if v.size.upper() == size.upper() and v.stock > 0]
+            if matching:
+                filtered.append(p)
+        products = filtered
+
+    # Transform to response models with derived prices and badges
+    responses = [build_product_list_response(p) for p in products]
+
+    # Sorting
+    if sort == "price_asc":
+        # Sort by min_price ascending (None values last)
+        responses.sort(key=lambda x: (x.min_price is None, x.min_price or Decimal(0)))
+    elif sort == "price_desc":
+        # Sort by min_price descending
+        responses.sort(key=lambda x: (x.min_price is None, -(x.min_price or Decimal(0))))
+    elif sort == "newest":
+        responses.sort(key=lambda x: x.id, reverse=True)
+
+    return responses
+
+
+@router.get("/products/{slug}", response_model=ProductDetailResponse)
+def get_product_by_slug(slug: str, db: Session = Depends(get_db)):
+    """Retrieve complete product details, ordered images, live variant stock, and fabric info by slug."""
+    product = (
+        db.query(Product)
+        .options(
+            joinedload(Product.variants),
+            joinedload(Product.images),
+            joinedload(Product.collections),
+        )
+        .filter(Product.slug == slug)
+        .first()
+    )
+
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with slug '{slug}' not found",
+        )
+
+    return build_product_detail_response(product)
+
+
+# ==========================================
+# Admin Endpoints (Requires Admin Token)
+# ==========================================
+
+@router.post("/admin/products", response_model=ProductDetailResponse, status_code=status.HTTP_201_CREATED)
+def admin_create_product(
+    payload: ProductCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Create a new product with optional initial variants and images. Admin auth required."""
+    existing = db.query(Product).filter(Product.slug == payload.slug).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A product with slug '{payload.slug}' already exists",
+        )
+
+    product = Product(
+        name=payload.name,
+        slug=payload.slug,
+        description=payload.description,
+        fabric=payload.fabric,
+        care=payload.care,
+        size_chart=payload.size_chart,
+        category=payload.category,
+        is_bestseller=payload.is_bestseller,
+        is_active=payload.is_active,
+    )
+
+    # Attach collections
+    if payload.collection_ids:
+        collections = (
+            db.query(Collection)
+            .filter(Collection.id.in_(payload.collection_ids))
+            .all()
+        )
+        product.collections = collections
+
+    # Attach variants
+    if payload.variants:
+        for v in payload.variants:
+            variant = ProductVariant(
+                size=v.size,
+                colour=v.colour,
+                sku=v.sku,
+                mrp=v.mrp,
+                selling_price=v.selling_price,
+                stock=v.stock,
+            )
+            product.variants.append(variant)
+
+    # Attach images
+    if payload.images:
+        for img in payload.images:
+            image = ProductImage(
+                url=img.url,
+                sort_order=img.sort_order,
+                alt_text=img.alt_text,
+            )
+            product.images.append(image)
+
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+
+    return build_product_detail_response(product)
+
+
+@router.patch("/admin/products/{id}", response_model=ProductDetailResponse)
+def admin_update_product(
+    id: int,
+    payload: ProductUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Update product fields, active status, or collection associations."""
+    product = db.query(Product).filter(Product.id == id).first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with id {id} not found",
+        )
+
+    # Check slug uniqueness if changing
+    if payload.slug and payload.slug != product.slug:
+        existing = db.query(Product).filter(Product.slug == payload.slug).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"A product with slug '{payload.slug}' already exists",
+            )
+        product.slug = payload.slug
+
+    if payload.name is not None:
+        product.name = payload.name
+    if payload.description is not None:
+        product.description = payload.description
+    if payload.fabric is not None:
+        product.fabric = payload.fabric
+    if payload.care is not None:
+        product.care = payload.care
+    if payload.size_chart is not None:
+        product.size_chart = payload.size_chart
+    if payload.category is not None:
+        product.category = payload.category
+    if payload.is_bestseller is not None:
+        product.is_bestseller = payload.is_bestseller
+    if payload.is_active is not None:
+        product.is_active = payload.is_active
+
+    if payload.collection_ids is not None:
+        collections = (
+            db.query(Collection)
+            .filter(Collection.id.in_(payload.collection_ids))
+            .all()
+        )
+        product.collections = collections
+
+    db.commit()
+    db.refresh(product)
+
+    return build_product_detail_response(product)
+
+
+@router.post(
+    "/admin/products/{id}/variants",
+    response_model=ProductVariantResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def admin_add_variant(
+    id: int,
+    payload: ProductVariantCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Add a new variant (size, colour, prices, stock) to an existing product."""
+    product = db.query(Product).filter(Product.id == id).first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with id {id} not found",
+        )
+
+    # Check unique constraint on product + size + colour
+    existing_variant = (
+        db.query(ProductVariant)
+        .filter(
+            ProductVariant.product_id == id,
+            ProductVariant.size == payload.size,
+            ProductVariant.colour == payload.colour,
+        )
+        .first()
+    )
+    if existing_variant:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Variant for size '{payload.size}' and colour '{payload.colour}' already exists on this product",
+        )
+
+    # SKU uniqueness check if provided
+    if payload.sku:
+        sku_exists = db.query(ProductVariant).filter(ProductVariant.sku == payload.sku).first()
+        if sku_exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Variant with SKU '{payload.sku}' already exists",
+            )
+
+    variant = ProductVariant(
+        product_id=id,
+        size=payload.size,
+        colour=payload.colour,
+        sku=payload.sku,
+        mrp=payload.mrp,
+        selling_price=payload.selling_price,
+        stock=payload.stock,
+    )
+    db.add(variant)
+    db.commit()
+    db.refresh(variant)
+
+    return build_variant_response(variant)
+
+
+@router.patch("/admin/variants/{id}", response_model=ProductVariantResponse)
+def admin_update_variant(
+    id: int,
+    payload: ProductVariantUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Update price, stock, or attributes for an existing variant."""
+    variant = db.query(ProductVariant).filter(ProductVariant.id == id).first()
+    if not variant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Variant with id {id} not found",
+        )
+
+    if payload.selling_price is not None:
+        variant.selling_price = payload.selling_price
+    if payload.mrp is not None:
+        variant.mrp = payload.mrp
+    if payload.stock is not None:
+        variant.stock = payload.stock
+    if payload.sku is not None:
+        variant.sku = payload.sku
+    if payload.colour is not None:
+        variant.colour = payload.colour
+    if payload.size is not None:
+        variant.size = payload.size
+
+    db.commit()
+    db.refresh(variant)
+
+    return build_variant_response(variant)
