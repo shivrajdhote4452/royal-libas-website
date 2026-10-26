@@ -1,11 +1,24 @@
-import { Product } from '../types/product';
+export interface SampleProduct {
+  id: string;
+  slug: string;
+  name: string;
+  price: number;
+  sample_price_label: string;
+  fabric: string;
+  is_sample: boolean;
+  description: string;
+  images: string[];
+  sizes: Array<{ size: string; stock: number }>;
+  placeholderBgColor: string;
+  placeholderTextColor: string;
+}
 
 /**
- * SAMPLE PRODUCTS ONLY (Phase 0 Scaffold)
+ * SAMPLE PRODUCTS ONLY (Phase 0 Scaffold reference)
  * NOTE: Do NOT use, search for, or invent real Royal Libas / Tanya photos.
  * Replace all in Phase 6 with Tanya's real photography.
  */
-export const SAMPLE_PRODUCTS: Product[] = [
+export const SAMPLE_PRODUCTS: SampleProduct[] = [
   {
     id: 'sample-1',
     slug: 'maroon-festive-kurti-set',

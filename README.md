@@ -4,16 +4,16 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 2** — Catalogue APIs, Badges & Dummy Seed Data Complete
+- **Status:** **Phase 3** — Storefront Shell, Home, Shop & Product Pages Complete
 
 ---
 
-## Phase 0, 1 & 2 Notes
+## Phase 0 – 3 Notes
 
 > ⚠️ **SAMPLE / DUMMY PHOTOS ONLY:**
 > All storefront catalogue items and imagery currently shown on the frontend and APIs are development mockups (`DUMMY — ...`). Real product photography and pricing will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
 > 
-> Cart, checkout, Razorpay payments, and customer tracking are scheduled for subsequent phases per the build plan.
+> Cart checkout, Razorpay payments, and customer order tracking logic will be activated in **Phase 4** and **Phase 5** per the build plan.
 
 ---
 
