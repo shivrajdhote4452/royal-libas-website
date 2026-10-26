@@ -4,23 +4,25 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 3** — Storefront Shell, Home, Shop & Product Pages Complete
+- **Status:** **Phase 4** — Cart, Guest Checkout, Razorpay Webhook & COD Orders Complete
 
 ---
 
-## Phase 0 – 3 Notes
+## Phase 0 – 4 Notes
 
 > ⚠️ **SAMPLE / DUMMY PHOTOS ONLY:**
 > All storefront catalogue items and imagery currently shown on the frontend and APIs are development mockups (`DUMMY — ...`). Real product photography and pricing will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
 > 
-> Cart checkout, Razorpay payments, and customer order tracking logic will be activated in **Phase 4** and **Phase 5** per the build plan.
+> Customer order tracking details page (`/track-order`) will be expanded with shipping logistics partner webhooks in **Phase 5**.
 
 ---
 
-## Money & Stock Conventions (Reference A)
+## Money, Stock & Payment Architecture
 
 - **Money Convention:** All monetary amounts (`mrp`, `selling_price`, `subtotal`, `shipping_charge`, `discount`, `total`, `unit_price_snapshot`, `line_total`) are stored and calculated strictly in **Rupees with two decimal places (`Numeric(10, 2)`)** (e.g. `2999.00`).
-- **Stock & Variant Rule:** Stock and selling prices live strictly on `product_variants`, never on `products`. Stock has a database constraint `stock >= 0`.
+- **Authoritative Server Calculations:** Totals, line amounts, and discounts are computed strictly from database prices on the backend. Frontend prices and totals are never trusted (verified via automated Tamper Tests).
+- **Atomic Stock Decrements:** Stock decrement occurs in the exact same database transaction as order creation. If variant stock is insufficient or 0, the transaction rolls back cleanly with HTTP 400 (`"That size just sold out!"`).
+- **Cryptographic Webhook Verification:** Online prepaid orders require verified HMAC SHA256 signatures (`X-Razorpay-Signature`) on `POST /payments/razorpay/webhook`. Idempotent processing guarantees duplicate webhooks do not re-modify or error.
 - **Derived Badges:** Products dynamically derive `Sold Out` (when total stock = 0), `Low Stock` (total stock <= 5), `Bestseller`, and `New` (created within 14 days).
 
 ---
@@ -63,7 +65,7 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    alembic upgrade head
    ```
 
-5. Seed Initial Catalogue Data (Idempotent):
+5. Seed Initial Catalogue Data & Coupons (Idempotent):
    ```bash
    python seed.py
    ```
@@ -90,7 +92,18 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    - Admin Login: `POST http://localhost:8000/admin/login` -> returns JWT access token
    - Admin Profile: `GET http://localhost:8000/admin/me` (requires Bearer token)
    - Admin Products: `POST /admin/products`, `PATCH /admin/products/{id}`, `POST /admin/products/{id}/variants`, `PATCH /admin/variants/{id}`
+   - Cart Validation: `POST /cart/validate` (live database stock & prices)
+   - Orders: `POST /orders` (authoritative server total calculation, atomic stock decrement), `GET /orders/{order_code}`
+   - Payments: `POST /payments/razorpay/create-order`, `POST /payments/razorpay/webhook` (HMAC SHA256 verified)
+   - Coupons: `POST /coupons/validate` (tested with `WELCOME10`, `FESTIVE100`)
    - Interactive Swagger API docs: `http://localhost:8000/docs`
+
+9. Run Automated Test Suites:
+   ```bash
+   python tests/test_phase1.py   # Auth, JWT, DB constraints
+   python tests/test_phase2.py   # Catalogue, badges, filters, admin APIs
+   python tests/test_phase4.py   # Tamper tests, atomic stock, Razorpay HMAC webhook
+   ```
 
 ---
 
@@ -133,10 +146,14 @@ royal-libas-website/
 │   ├── alembic/          # Database migrations structure
 │   ├── alembic.ini       # Alembic configuration
 │   ├── app/
-│   │   ├── main.py       # FastAPI application & GET /health endpoint
-│   │   ├── models.py     # SQLAlchemy models placeholder
-│   │   ├── schemas.py    # Pydantic schemas placeholder
-│   │   └── routers/      # API routers package placeholder
+│   │   ├── main.py       # FastAPI application & router registrations
+│   │   ├── config.py     # Application configuration & env vars
+│   │   ├── models.py     # SQLAlchemy models (products, variants, orders, coupons, addresses)
+│   │   ├── schemas.py    # Pydantic schemas
+│   │   ├── services/     # Order authoritative math, payment webhook HMAC
+│   │   └── routers/      # API routers (products, collections, cart, orders, payments, coupons, admin)
+│   ├── tests/            # Automated test suites (test_phase1, test_phase2, test_phase4)
+│   ├── seed.py           # Idempotent seed script
 │   └── requirements.txt  # Python backend dependencies
 └── frontend/
     ├── index.html        # Entry HTML with luxury typography
@@ -149,17 +166,23 @@ royal-libas-website/
         ├── index.css     # Tailwind styling directives
         ├── components/
         │   ├── Header.tsx      # Boutique brand header and navigation
-        │   └── ProductCard.tsx # Card with SAMPLE PHOTO badge & image fallback
+        │   ├── Footer.tsx      # Boutique footer with policies & contact
+        │   └── ProductCard.tsx # Card with dynamic badges & fallback
         ├── context/
-        │   └── CartContext.tsx # Empty cart state provider for Phase 0
-        ├── data/
-        │   └── sampleProducts.ts # 5 sample products with seeded placeholder URLs
+        │   └── CartContext.tsx # Persistent cart state provider with quantity controls
         ├── pages/
-        │   ├── Home.tsx    # Home page with hero & 5 sample products grid
-        │   ├── Shop.tsx    # Sample shop catalogue placeholder
-        │   └── Product.tsx # Product detail page with 3 sample images gallery
-        └── types/
-            └── product.ts  # TypeScript interfaces for products & stock
+        │   ├── Home.tsx        # Home page with 8 exact brand blocks
+        │   ├── Shop.tsx        # API-driven shop catalogue with filter sidebar & sort
+        │   ├── Product.tsx     # Product detail page with stock-aware size selector
+        │   ├── Cart.tsx        # Shopping bag with live stock validation
+        │   ├── Checkout.tsx    # 1-page express guest checkout (COD & Razorpay)
+        │   ├── OrderSuccess.tsx# Confirmed order details & timeline
+        │   └── TrackOrder.tsx  # Track order lookup placeholder
+        ├── types/
+        │   ├── product.ts      # TypeScript interfaces for products & collections
+        │   └── order.ts        # TypeScript interfaces for checkout & orders
+        └── lib/
+            └── api.ts          # API client for backend communication
 ```
 
 ---

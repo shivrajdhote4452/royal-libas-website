@@ -16,6 +16,7 @@ interface CartContextType {
   totalItems: number;
   subtotal: number;
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
+  updateQuantity: (variantId: number, quantity: number) => void;
   removeFromCart: (variantId: number) => void;
   clearCart: () => void;
 }
@@ -25,6 +26,7 @@ const CartContext = createContext<CartContextType>({
   totalItems: 0,
   subtotal: 0,
   addToCart: () => {},
+  updateQuantity: () => {},
   removeFromCart: () => {},
   clearCart: () => {},
 });
@@ -64,6 +66,18 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
+  const updateQuantity = (variantId: number, quantity: number) => {
+    if (quantity <= 0) {
+      removeFromCart(variantId);
+      return;
+    }
+    setItems((prevItems) =>
+      prevItems.map((item) =>
+        item.variantId === variantId ? { ...item, quantity } : item
+      )
+    );
+  };
+
   const removeFromCart = (variantId: number) => {
     setItems((prevItems) => prevItems.filter((i) => i.variantId !== variantId));
   };
@@ -79,6 +93,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         totalItems,
         subtotal,
         addToCart,
+        updateQuantity,
         removeFromCart,
         clearCart,
       }}

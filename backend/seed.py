@@ -13,7 +13,7 @@ This script checks existing slugs and can run repeatedly without duplicating or 
 import json
 from decimal import Decimal
 from app.database import SessionLocal, Base, engine
-from app.models import Product, ProductVariant, ProductImage, Collection
+from app.models import Product, ProductVariant, ProductImage, Collection, Coupon
 
 # Ensure all database tables exist
 Base.metadata.create_all(bind=engine)
@@ -33,6 +33,23 @@ COLLECTIONS_DATA = [
         "name": "Bestsellers",
         "slug": "bestsellers",
         "description": "Our most loved boutique silhouettes and festive signature sets.",
+    },
+]
+
+COUPONS_DATA = [
+    {
+        "code": "WELCOME10",
+        "type": "PERCENT",
+        "value": Decimal("10.00"),
+        "min_order_value": Decimal("1500.00"),
+        "is_active": True,
+    },
+    {
+        "code": "FESTIVE100",
+        "type": "FLAT",
+        "value": Decimal("100.00"),
+        "min_order_value": Decimal("1000.00"),
+        "is_active": True,
     },
 ]
 
@@ -263,6 +280,26 @@ def seed_database(session_factory=None):
                         alt_text=imgdata["alt_text"],
                     )
                     db.add(image)
+
+        # 3. Seed or update coupons
+        for cpdata in COUPONS_DATA:
+            cp = db.query(Coupon).filter(Coupon.code == cpdata["code"]).first()
+            if not cp:
+                cp = Coupon(
+                    code=cpdata["code"],
+                    type=cpdata["type"],
+                    value=cpdata["value"],
+                    min_order_value=cpdata["min_order_value"],
+                    is_active=cpdata["is_active"],
+                )
+                db.add(cp)
+                print(f"  [+] Created coupon: {cp.code}")
+            else:
+                cp.type = cpdata["type"]
+                cp.value = cpdata["value"]
+                cp.min_order_value = cpdata["min_order_value"]
+                cp.is_active = cpdata["is_active"]
+                print(f"  [*] Updated coupon: {cp.code}")
 
         db.commit()
         print("Success: Database catalogue seeded successfully!")

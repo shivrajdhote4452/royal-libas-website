@@ -31,3 +31,10 @@ if "YOUR_JWT_SECRET_HERE" in JWT_SECRET:
 
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+
+# Razorpay Configuration
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_placeholder")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "rzp_secret_placeholder")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", os.getenv("RAZORPAY_KEY_SECRET", "rzp_webhook_secret_placeholder"))
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
