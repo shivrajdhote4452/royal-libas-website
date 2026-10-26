@@ -16,13 +16,11 @@ if config.config_file_name is not None:
 # Load environment variables
 load_dotenv()
 
-# Override sqlalchemy.url with DATABASE_URL from environment if available
-db_url = os.getenv("DATABASE_URL")
-if db_url:
-    config.set_main_option("sqlalchemy.url", db_url)
-
-# Add your model's MetaData object here for 'autogenerate' support
+# Use centralized DATABASE_URL from app.config
+from app.config import DATABASE_URL
 from app.models import Base
+
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:

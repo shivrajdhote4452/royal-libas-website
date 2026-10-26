@@ -4,16 +4,24 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 0** — Scaffold + Sample Catalogue (Sample photos & mock data only)
+- **Status:** **Phase 1** — Database, Backend Core & Admin Login Complete
 
 ---
 
-## Phase 0 Notes & Notice
+## Phase 0 & Phase 1 Notes
 
 > ⚠️ **SAMPLE PHOTOS & SAMPLE PRICES ONLY:**
-> All catalogue items and imagery currently shown are development mockups. Real product photography and pricing will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
+> All storefront catalogue items and imagery currently shown on the frontend are development mockups. Real product photography and pricing will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
 > 
-> Cart, checkout, Razorpay payments, and admin dashboard are scheduled for subsequent phases per the build plan.
+> Cart, checkout, Razorpay payments, and customer tracking are scheduled for subsequent phases per the build plan.
+
+---
+
+## Money & Stock Conventions (Reference A)
+
+- **Money Convention:** All monetary amounts (`mrp`, `selling_price`, `subtotal`, `shipping_charge`, `discount`, `total`, `unit_price_snapshot`, `line_total`) are stored and calculated strictly in **Rupees with two decimal places (`Numeric(10, 2)`)** (e.g. `2999.00`).
+- **Stock & Variant Rule:** Stock and selling prices live strictly on `product_variants`, never on `products`. Stock has a database constraint `stock >= 0`.
+- **Order Price Snapshots:** Order line items snapshot unit prices and product details at purchase time.
 
 ---
 
@@ -27,7 +35,7 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 ## 1. Backend Setup & Run
 
-The backend provides the REST API built with FastAPI.
+The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
 
 ### Steps:
 
@@ -50,18 +58,30 @@ The backend provides the REST API built with FastAPI.
    pip install -r requirements.txt
    ```
 
-4. Run the FastAPI development server:
+4. Run Database Migrations (Alembic):
+   ```bash
+   alembic upgrade head
+   ```
+
+5. Create Initial Admin User:
+   ```bash
+   # Interactive prompt:
+   python create_admin.py
+
+   # Or with arguments:
+   python create_admin.py --email admin@royallibas.com --password YourSecurePassword
+   ```
+
+6. Run the FastAPI development server:
    ```bash
    uvicorn app.main:app --reload --port 8000
    ```
 
-5. Verify the backend health endpoint:
-   - In browser or terminal: `http://localhost:8000/health`
-   - Response:
-     ```json
-     {"status": "ok"}
-     ```
-   - Interactive Swagger API docs are available at `http://localhost:8000/docs`.
+7. Verify the backend endpoints:
+   - Health check: `http://localhost:8000/health` -> `{"status": "ok"}`
+   - Admin Login: `POST http://localhost:8000/admin/login` -> returns JWT access token
+   - Admin Profile: `GET http://localhost:8000/admin/me` (requires Bearer token)
+   - Interactive Swagger API docs: `http://localhost:8000/docs`
 
 ---
 

@@ -4,6 +4,11 @@
 .env.*.local
 *.env
 
+# Local Databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Local references and docs (Do NOT commit phase-wise plan PDF)
 *.pdf
 
