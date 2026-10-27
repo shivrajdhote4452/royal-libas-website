@@ -53,10 +53,13 @@ export const ShippingPolicy: React.FC = () => {
             <h2 className="font-serif text-lg font-bold text-[#5E1224]">1. Shipping Charges & Payment Modes</h2>
             <ul className="list-disc list-inside space-y-1.5 text-xs sm:text-sm text-gray-600 font-light">
               <li>
-                <strong>Prepaid Orders (UPI, NetBanking, Credit/Debit Cards):</strong> <strong>FREE Express Shipping</strong> across all pincodes in India.
+                <strong>Prepaid Orders (UPI, NetBanking, Credit/Debit Cards via Cashfree):</strong> <strong>FREE Standard Shipping</strong> across all serviceable pincodes in India.
               </li>
               <li>
-                <strong>Cash on Delivery (COD) Orders:</strong> Free on orders meeting the boutique threshold, or a nominal delivery fee of <strong>₹99</strong>.
+                <strong>Cash on Delivery (COD) Orders:</strong> <strong>FREE</strong> on orders of <strong>₹1,500 and above</strong>; ₹99 delivery fee applies to COD orders under ₹1,500.
+              </li>
+              <li>
+                <strong>Express Delivery:</strong> ₹99 across all payment modes for priority 2–3 day transit.
               </li>
             </ul>
           </section>

@@ -163,22 +163,59 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#B58A3C] truncate">
               {product.fabric || product.category || 'Atelier Collection'}
             </span>
-            {/* 5-star preview */}
-            <div className="flex items-center text-[11px] text-[#B58A3C] tracking-tighter" aria-label="5 stars">
-              ★★★★★
-            </div>
+            {product.category && (
+              <span className="text-[10px] text-gray-400 font-medium tracking-wider uppercase">
+                {product.category}
+              </span>
+            )}
           </div>
 
           <h3 className="font-serif text-sm sm:text-base font-semibold text-[#2B1B1E] group-hover:text-[#5E1224] transition-colors line-clamp-1">
             {product.name}
           </h3>
 
-          {/* Color dots preview matching PDF Page 3 & 4 */}
-          <div className="flex items-center gap-1.5 mt-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#5E1224] border border-black/10 inline-block" title="Maroon" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[#B58A3C] border border-black/10 inline-block" title="Gold" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[#FCF8F0] border border-gray-300 inline-block" title="Ivory" />
-          </div>
+          {/* Color dots preview dynamically derived from product variants */}
+          {(() => {
+            const COLOR_MAP: Record<string, string> = {
+              'Deep Maroon': '#5E1224',
+              'Ivory Pearl': '#FCF8F0',
+              'Emerald Green': '#1B4D3E',
+              'Emerald Jewel': '#0F52BA',
+              'Dusty Rose': '#C8858E',
+              'Champagne Gold': '#D4AF37',
+              'Sage Green': '#8F9779',
+              'Midnight Navy': '#1B243B',
+              'Powder Blue': '#9BB7D4',
+              'Peach Bloom': '#E8A598',
+              'Deep Wine': '#4A1525',
+              'Mustard Ochre': '#D49B28',
+              'Terracotta Rust': '#B85338',
+              'Lilac Frost': '#B8A9C9',
+              'Sea Green': '#2E8B57',
+              'Royal Plum': '#582949',
+            };
+            const uniqueColours = Array.from(
+              new Set(product.variants?.map((v) => v.colour).filter(Boolean))
+            ) as string[];
+
+            if (!uniqueColours.length) return null;
+
+            return (
+              <div className="flex items-center gap-1.5 mt-2">
+                {uniqueColours.slice(0, 4).map((col) => (
+                  <span
+                    key={col}
+                    className="w-2.5 h-2.5 rounded-full border border-black/15 inline-block shadow-xs"
+                    style={{ backgroundColor: COLOR_MAP[col] || '#8C6F5B' }}
+                    title={col}
+                  />
+                ))}
+                {uniqueColours.length > 4 && (
+                  <span className="text-[9px] text-gray-400 font-medium">+{uniqueColours.length - 4}</span>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between">
             <div className="flex items-baseline gap-2 flex-wrap no-motion">

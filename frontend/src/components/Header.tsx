@@ -52,13 +52,13 @@ export const Header: React.FC = () => {
             : 'border-b border-[#E8DFD0]'
         }`}
       >
-        {/* Top Announcement Bar (PDF Page 2 & 4) */}
+        {/* Top Announcement Bar (Handbook Section 03 & Configured Business Rules) */}
         <div className="bg-[#5E1224] text-[#FCF8F0] text-[10.5px] sm:text-xs py-2 px-4 sm:px-8 tracking-[0.16em] uppercase font-medium flex items-center justify-between transition-all duration-300">
           <div className="hidden md:block w-28 text-[10px] text-[#D4AF67] tracking-widest font-serif">
             ROYAL LIBAS
           </div>
           <div className="flex-1 text-center">
-            <span className="font-medium tracking-[0.18em]">COMPLIMENTARY SHIPPING ON ALL ORDERS &nbsp;|&nbsp; FESTIVE EDIT NOW LIVE</span>
+            <span className="font-medium tracking-[0.18em]">COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS &nbsp;|&nbsp; FREE COD ABOVE ₹1,500</span>
           </div>
           <div className="hidden md:flex items-center gap-1.5 text-[10.5px] text-[#FCF8F0] font-medium tracking-wider">
             <span>INDIA (INR) ▾</span>
@@ -103,6 +103,39 @@ export const Header: React.FC = () => {
               </Link>
               <div className="relative group">
                 <Link
+                  to="/shop"
+                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] ${
+                    location.search.includes('category') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                  }`}
+                >
+                  <span>CATEGORIES</span>
+                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-200 group-hover:rotate-180" />
+                </Link>
+
+                {/* Categories Dropdown */}
+                <div className="absolute top-full left-0 w-52 bg-[#FCF8F0] rounded-none border border-[#E8DFD0] shadow-xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50">
+                  <Link
+                    to="/shop?category=Kurti+Sets"
+                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                  >
+                    Kurti Sets (8)
+                  </Link>
+                  <Link
+                    to="/shop?category=Festive+Sets"
+                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                  >
+                    Festive Sets (4)
+                  </Link>
+                  <Link
+                    to="/shop?category=Co-ord+Sets"
+                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                  >
+                    Co-ord Sets (4)
+                  </Link>
+                </div>
+              </div>
+              <div className="relative group">
+                <Link
                   to="/shop?collection=festive-edit"
                   className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] ${
                     location.search.includes('collection') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
@@ -113,35 +146,27 @@ export const Header: React.FC = () => {
                 </Link>
 
                 {/* Sub-menu Dropdown */}
-                <div className="absolute top-full left-0 w-56 bg-[#FCF8F0] rounded-lg border border-[#E8DFD0] shadow-xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50">
+                <div className="absolute top-full left-0 w-56 bg-[#FCF8F0] rounded-none border border-[#E8DFD0] shadow-xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50">
                   <Link
                     to="/shop?collection=festive-edit"
-                    className="block px-3 py-2 rounded text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
                   >
                     Festive Edit
                   </Link>
                   <Link
                     to="/shop?collection=everyday-cotton"
-                    className="block px-3 py-2 rounded text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
                   >
                     Everyday Cotton
                   </Link>
                   <Link
                     to="/shop?collection=bestsellers"
-                    className="block px-3 py-2 rounded text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
                   >
                     Bestsellers
                   </Link>
                 </div>
               </div>
-              <Link
-                to="/shop?collection=festive-edit"
-                className={`transition-colors py-1 hover:text-[#5E1224] ${
-                  location.search.includes('festive-edit') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
-                }`}
-              >
-                BRIDAL
-              </Link>
             </nav>
 
             {/* Center Logo - Floral Motif Identity */}

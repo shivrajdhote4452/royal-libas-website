@@ -106,6 +106,18 @@ def test_flagship_products_attributes():
 
 def test_sample_product_checkout_cashfree_and_cod():
     """Verify complete checkout journey using sample products."""
+    # Ensure test product has stock for repeatable test runs
+    db = SessionLocal()
+    try:
+        p = db.query(Product).filter(Product.slug == "noorani-chanderi-kurti-set").first()
+        if p and p.variants:
+            for v in p.variants:
+                if v.stock < 5:
+                    v.stock = 10
+            db.commit()
+    finally:
+        db.close()
+
     # Fetch an in-stock variant of Noorani Chanderi Kurti Set
     res = client.get("/products/noorani-chanderi-kurti-set")
     assert res.status_code == 200

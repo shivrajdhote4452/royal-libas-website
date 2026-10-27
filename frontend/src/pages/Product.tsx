@@ -77,18 +77,12 @@ export const ProductPage: React.FC = () => {
             localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(updated));
           } catch {}
 
-          // Color inference
-          if (data.name.toLowerCase().includes('maroon') || data.name.toLowerCase().includes('zari')) {
-            setSelectedColor('Maroon');
-          } else if (data.name.toLowerCase().includes('chandni') || data.name.toLowerCase().includes('ivory')) {
-            setSelectedColor('Ivory');
-          } else if (data.name.toLowerCase().includes('emerald') || data.name.toLowerCase().includes('sage')) {
-            setSelectedColor('Emerald');
-          } else if (data.name.toLowerCase().includes('pink') || data.name.toLowerCase().includes('gulabi')) {
-            setSelectedColor('Rose Pink');
-          } else {
-            setSelectedColor('Maroon');
-          }
+          // Structured variant colour initialization
+          const productColours = Array.from(
+            new Set(data.variants.map((v) => v.colour).filter(Boolean))
+          ) as string[];
+          const initialColor = firstAvailable?.colour || productColours[0] || '';
+          setSelectedColor(initialColor);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -396,10 +390,13 @@ export const ProductPage: React.FC = () => {
               <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#2B1B1E] leading-tight">
                 {product.name}
               </h1>
-              {/* Star reviews preview matching PDF Page 5 */}
+              {/* Craftsmanship and Category Header */}
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-sm text-[#B58A3C] tracking-tight">★★★★★</span>
-                <span className="text-xs text-gray-500 font-medium">(128 reviews)</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#B58A3C]">
+                  {product.category || 'Atelier Collection'}
+                </span>
+                <span className="text-gray-300">&bull;</span>
+                <span className="text-[11px] text-gray-500 font-medium">Handcrafted Silhouette</span>
               </div>
             </div>
 
@@ -430,33 +427,63 @@ export const ProductPage: React.FC = () => {
               </p>
             )}
 
-            {/* Color Swatches */}
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-gray-900">
-                COLOUR: <span className="text-[#5E1224] font-bold">{selectedColor}</span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                {[
-                  { name: 'Maroon', hex: '#5E1224' },
-                  { name: 'Ivory', hex: '#FCF8F0' },
-                  { name: 'Emerald', hex: '#1B4D3E' },
-                  { name: 'Rose Pink', hex: '#D47D97' },
-                ].map((c) => (
-                  <button
-                    key={c.name}
-                    type="button"
-                    onClick={() => setSelectedColor(c.name)}
-                    style={{ backgroundColor: c.hex }}
-                    className={`w-7 h-7 rounded-full border transition-all ${
-                      selectedColor === c.name
-                        ? 'ring-2 ring-[#5E1224] ring-offset-2 scale-110 shadow-sm'
-                        : 'border-black/20 hover:scale-105'
-                    }`}
-                    title={c.name}
-                  />
-                ))}
-              </div>
-            </div>
+            {/* Color Swatches derived strictly from product variants */}
+            {(() => {
+              const COLOR_MAP: Record<string, string> = {
+                'Deep Maroon': '#5E1224',
+                'Ivory Pearl': '#FCF8F0',
+                'Emerald Green': '#1B4D3E',
+                'Emerald Jewel': '#0F52BA',
+                'Dusty Rose': '#C8858E',
+                'Champagne Gold': '#D4AF37',
+                'Sage Green': '#8F9779',
+                'Midnight Navy': '#1B243B',
+                'Powder Blue': '#9BB7D4',
+                'Peach Bloom': '#E8A598',
+                'Deep Wine': '#4A1525',
+                'Mustard Ochre': '#D49B28',
+                'Terracotta Rust': '#B85338',
+                'Lilac Frost': '#B8A9C9',
+                'Sea Green': '#2E8B57',
+                'Royal Plum': '#582949',
+              };
+              const uniqueColours = Array.from(
+                new Set(product.variants.map((v) => v.colour).filter(Boolean))
+              ) as string[];
+
+              if (!uniqueColours.length && !selectedColor) return null;
+
+              return (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-gray-900">
+                    COLOUR:{' '}
+                    <span className="text-[#5E1224] font-bold">
+                      {selectedColor || uniqueColours[0] || 'Original Silhouette'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    {uniqueColours.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          setSelectedColor(c);
+                          const matching = product.variants.find((v) => v.colour === c && v.stock > 0);
+                          if (matching) setSelectedVariant(matching);
+                        }}
+                        style={{ backgroundColor: COLOR_MAP[c] || '#8C6F5B' }}
+                        className={`w-7 h-7 rounded-full border transition-all ${
+                          selectedColor === c
+                            ? 'ring-2 ring-[#5E1224] ring-offset-2 scale-110 shadow-sm'
+                            : 'border-black/20 hover:scale-105'
+                        }`}
+                        title={c}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Size Selector (PDF Page 5) */}
             <div className="space-y-2.5">
@@ -478,28 +505,35 @@ export const ProductPage: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-6 gap-2">
-                {product.variants.map((v) => {
-                  const soldOut = v.stock <= 0;
-                  const isSelected = selectedVariant?.id === v.id;
+                {(() => {
+                  const matchingVariants = selectedColor
+                    ? product.variants.filter((v) => v.colour === selectedColor)
+                    : product.variants;
+                  const variantsToDisplay = matchingVariants.length > 0 ? matchingVariants : product.variants;
 
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      disabled={soldOut}
-                      onClick={() => setSelectedVariant(v)}
-                      className={`h-11 rounded-none border text-center transition-all duration-200 ${
-                        soldOut
-                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
-                          : isSelected
-                          ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-md font-bold'
-                          : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-[#B58A3C] font-semibold'
-                      }`}
-                    >
-                      <span className="text-xs sm:text-sm">{v.size}</span>
-                    </button>
-                  );
-                })}
+                  return variantsToDisplay.map((v) => {
+                    const soldOut = v.stock <= 0;
+                    const isSelected = selectedVariant?.id === v.id;
+
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        disabled={soldOut}
+                        onClick={() => setSelectedVariant(v)}
+                        className={`h-11 rounded-none border text-center transition-all duration-200 ${
+                          soldOut
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
+                            : isSelected
+                            ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-md font-bold'
+                            : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-[#B58A3C] font-semibold'
+                        }`}
+                      >
+                        <span className="text-xs sm:text-sm">{v.size}</span>
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
@@ -900,7 +934,7 @@ export const ProductPage: React.FC = () => {
       {/* ========================================================
           7. MOBILE STICKY ADD TO CART BAR (Point 1 & PDF Page 13)
           ======================================================== */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FCF8F0]/95 backdrop-blur-md border-t border-[#E8DFD0] p-3 shadow-lg flex items-center justify-between gap-3">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FCF8F0]/95 backdrop-blur-md border-t border-[#E8DFD0] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-lg flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-gray-900 truncate">{product.name}</p>
           <div className="flex items-center gap-1.5 no-motion">

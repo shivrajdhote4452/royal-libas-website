@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
@@ -37,12 +37,15 @@ import { CartDrawer } from './components/CartDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 
 const StorefrontLayout: React.FC = () => {
+  const location = useLocation();
+  const hasBottomNav = !location.pathname.startsWith('/product/') && !location.pathname.startsWith('/checkout');
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#FCF8F0] text-[#2B1B1E] selection:bg-[#B58A3C] selection:text-white pb-14 md:pb-0">
+    <div className="min-h-screen flex flex-col bg-[#FCF8F0] text-[#2B1B1E] selection:bg-[#B58A3C] selection:text-white">
       <Header />
       <CartDrawer />
       <QuickAddModal />
-      <main className="flex-1">
+      <main className={`flex-1 ${hasBottomNav ? 'pb-16 md:pb-0' : ''}`}>
         <Outlet />
       </main>
       <Footer />

@@ -1,14 +1,20 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { Home, ShoppingBag, Heart, Truck } from 'lucide-react';
 import { useWishlist } from '../context/WishlistContext';
 
 export const MobileBottomNav: React.FC = () => {
   const { wishlistCount } = useWishlist();
+  const location = useLocation();
+
+  // Hide mobile bottom nav on PDP and Checkout to prevent collision with sticky purchase bar
+  if (location.pathname.startsWith('/product/') || location.pathname.startsWith('/checkout')) {
+    return null;
+  }
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FCF8F0]/95 backdrop-blur-md border-t border-[#E8DFD0] px-4 py-2 flex items-center justify-around shadow-[0_-4px_16px_rgba(43,27,30,0.06)] font-sans"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FCF8F0]/95 backdrop-blur-md border-t border-[#E8DFD0] px-4 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-[0_-4px_16px_rgba(43,27,30,0.06)] font-sans"
       aria-label="Mobile Bottom Navigation"
     >
       <NavLink

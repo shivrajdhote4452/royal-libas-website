@@ -46,7 +46,7 @@ export const OrderSuccess: React.FC = () => {
       const data = await fetchOrderByCode(orderCode, orderToken);
       setOrder(data);
 
-      // SAFE CART CLEARING: Only clear cart when order is actually confirmed
+      // SAFE CART CLEARING: Only clear cart when order is actually accepted/confirmed
       if (data.payment_status === 'PAID' || data.payment_method === 'COD') {
         clearCart();
       }
@@ -77,6 +77,36 @@ export const OrderSuccess: React.FC = () => {
       isMounted = false;
     };
   }, [orderCode]);
+
+  // Bounded auto-polling for pending prepaid payment (max 5 attempts, every 3 seconds)
+  useEffect(() => {
+    if (!order || order.payment_method !== 'PREPAID' || order.payment_status === 'PAID' || order.status === 'CANCELLED') {
+      return;
+    }
+
+    let pollAttempts = 0;
+    const maxPolls = 5;
+
+    const timer = setInterval(async () => {
+      pollAttempts += 1;
+      try {
+        const syncResult = await syncCashfreePayment(order.order_code);
+        if (syncResult && syncResult.payment_status === 'PAID') {
+          const updated = await fetchOrderByCode(order.order_code, orderToken);
+          setOrder(updated);
+          clearCart();
+          clearInterval(timer);
+          return;
+        }
+      } catch {}
+
+      if (pollAttempts >= maxPolls) {
+        clearInterval(timer);
+      }
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [order?.payment_status, order?.order_code]);
 
   const handleVerifyPayment = async () => {
     if (!orderCode) return;
@@ -277,12 +307,30 @@ export const OrderSuccess: React.FC = () => {
               </p>
             </div>
 
-            <div className="inline-block px-4 py-2 bg-[#FCF8F0] border border-[#B58A3C]/40 text-xs font-mono font-bold tracking-wider text-[#5E1224]">
-              ORDER #{order.order_code}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+              <div className="inline-block px-4 py-1.5 bg-[#FCF8F0] border border-[#B58A3C]/40 text-xs font-mono font-bold tracking-wider text-[#5E1224]">
+                ORDER #{order.order_code}
+              </div>
+              <div className="inline-block px-3 py-1.5 text-xs font-semibold tracking-wider uppercase border border-gray-200">
+                {order.payment_method === 'COD' ? (
+                  <span className="text-amber-900 bg-amber-50 px-2 py-0.5 font-bold">
+                    Cash on Delivery &bull; {formatPrice(order.total)} payable at delivery
+                  </span>
+                ) : (
+                  <span className="text-emerald-900 bg-emerald-50 px-2 py-0.5 font-bold">
+                    Payment Verified via Cashfree
+                  </span>
+                )}
+              </div>
             </div>
 
             <p className="text-xs text-gray-600 max-w-md mx-auto leading-relaxed">
               Your order has been recorded at our atelier. Every garment is hand-inspected, steam-pressed, and packed with care before dispatch.
+              {order.phone && (
+                <span className="block mt-1 text-[11px] text-gray-500">
+                  Dispatch notifications and live tracking will be shared with +91 {order.phone}.
+                </span>
+              )}
             </p>
           </>
         )}

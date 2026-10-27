@@ -15,6 +15,26 @@ import { fetchProducts, fetchCollections } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
 import { useWishlist } from '../context/WishlistContext';
 
+// Verified palette color mappings for catalog variant swatches
+const COLOR_HEX_MAP: Record<string, string> = {
+  'Deep Maroon': '#5E1224',
+  'Ivory Pearl': '#FCF8F0',
+  'Emerald Green': '#1B4D3E',
+  'Emerald Jewel': '#0F52BA',
+  'Dusty Rose': '#C8858E',
+  'Champagne Gold': '#D4AF37',
+  'Sage Green': '#8F9779',
+  'Midnight Navy': '#1B243B',
+  'Powder Blue': '#9BB7D4',
+  'Peach Bloom': '#E8A598',
+  'Deep Wine': '#4A1525',
+  'Mustard Ochre': '#D49B28',
+  'Terracotta Rust': '#B85338',
+  'Lilac Frost': '#B8A9C9',
+  'Sea Green': '#2E8B57',
+  'Royal Plum': '#582949',
+};
+
 export const Shop: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { wishlist } = useWishlist();
@@ -28,7 +48,7 @@ export const Shop: React.FC = () => {
   const currentSearch = searchParams.get('search') || '';
   const inStockOnly = searchParams.get('in_stock') === 'true';
   const wishlistOnly = searchParams.get('wishlist') === 'true';
-  const maxPriceParam = searchParams.get('max_price') || '6000';
+  const maxPriceParam = searchParams.get('max_price');
 
   const [products, setProducts] = useState<Product[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -38,11 +58,39 @@ export const Shop: React.FC = () => {
   // Bottom sheets
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
-  const [maxPrice, setMaxPrice] = useState<number>(Number(maxPriceParam) || 6000);
+
+  // Dynamic catalog price bounds
+  const catalogMaxPrice = useMemo(() => {
+    if (!products.length) return 10000;
+    const max = Math.max(...products.map((p) => p.max_price || p.min_price || 0));
+    return Math.max(max, 6000);
+  }, [products]);
+
+  const catalogMinPrice = useMemo(() => {
+    if (!products.length) return 1500;
+    const min = Math.min(...products.map((p) => p.min_price || 0).filter((v) => v > 0));
+    return min < Infinity ? min : 1500;
+  }, [products]);
+
+  // If user selected max_price exists in query, use it; otherwise null (show all products)
+  const activeUserMaxPrice = maxPriceParam !== null && !isNaN(Number(maxPriceParam))
+    ? Number(maxPriceParam)
+    : null;
+
+  // Local state for slider dragging
+  const [sliderPrice, setSliderPrice] = useState<number>(activeUserMaxPrice ?? 10000);
+
+  useEffect(() => {
+    if (activeUserMaxPrice !== null) {
+      setSliderPrice(activeUserMaxPrice);
+    } else {
+      setSliderPrice(catalogMaxPrice);
+    }
+  }, [activeUserMaxPrice, catalogMaxPrice]);
 
   // Load collections
   useEffect(() => {
-    document.title = 'Shop All Boutique Collections | Royal Libas by Tanya';
+    document.title = 'Shop Handcrafted Festive Silhouettes | Royal Libas by Tanya';
     fetchCollections()
       .then(setCollections)
       .catch((e) => console.error('Failed to load collections:', e));
@@ -90,11 +138,12 @@ export const Shop: React.FC = () => {
     };
   }, [mobileFilterOpen, mobileSortOpen]);
 
-  // Client-side filtering for color, price range, in-stock, wishlist, and search
+  // Filter products by structured data
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const price = p.min_price ?? 0;
-      if (price > maxPrice) return false;
+      // Only filter if user actively set a maximum price
+      if (activeUserMaxPrice !== null && price > activeUserMaxPrice) return false;
       if (inStockOnly && p.total_stock <= 0) return false;
       if (wishlistOnly && !wishlist.includes(p.id)) return false;
 
@@ -103,13 +152,20 @@ export const Shop: React.FC = () => {
         if (!text.includes(currentSearch.toLowerCase())) return false;
       }
 
+      // Filter colour strictly by structured variant attributes
       if (currentColor) {
-        const text = `${p.name} ${p.fabric || ''} ${p.description || ''}`.toLowerCase();
-        if (!text.includes(currentColor.toLowerCase())) return false;
+        const matchesColour = p.variants?.some((v) => {
+          if (!v.colour) return false;
+          const vCol = v.colour.toLowerCase().trim();
+          const fCol = currentColor.toLowerCase().trim();
+          return vCol === fCol || vCol.includes(fCol) || fCol.includes(vCol);
+        });
+        if (!matchesColour) return false;
       }
+
       return true;
     });
-  }, [products, maxPrice, inStockOnly, currentColor, wishlistOnly, wishlist, currentSearch]);
+  }, [products, activeUserMaxPrice, inStockOnly, currentColor, wishlistOnly, wishlist, currentSearch]);
 
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -123,7 +179,7 @@ export const Shop: React.FC = () => {
 
   const clearAllFilters = () => {
     setSearchParams(new URLSearchParams());
-    setMaxPrice(6000);
+    setSliderPrice(catalogMaxPrice);
   };
 
   const hasActiveFilters = Boolean(
@@ -134,7 +190,7 @@ export const Shop: React.FC = () => {
     inStockOnly ||
     wishlistOnly ||
     currentSearch ||
-    maxPrice < 6000 ||
+    activeUserMaxPrice !== null ||
     currentSort !== 'newest'
   );
 
@@ -144,24 +200,57 @@ export const Shop: React.FC = () => {
     ? `Search: "${currentSearch}"`
     : currentCollection
     ? collections.find((c) => c.slug === currentCollection)?.name || 'Collection'
-    : currentCategory || 'Kurti Sets';
+    : currentCategory || 'All Designs';
 
-  // Category counts
-  const categoryCounts = {
-    'Kurti Sets': products.filter((p) => p.category === 'Kurti Sets').length,
-    'Co-ord Sets': products.filter((p) => p.category === 'Co-ord Sets' || p.category === 'Coord Sets').length,
-    'Festive Wear': products.filter((p) => p.category === 'Festive Wear' || p.category === 'Festive Sets').length,
-    'Everyday Cotton': products.filter((p) => p.category === 'Everyday Cotton').length,
-  };
+  // Dynamic category counts from active catalog
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.forEach((p) => {
+      if (p.category) {
+        counts[p.category] = (counts[p.category] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [products]);
 
-  const colors = [
-    { name: 'Maroon', hex: '#5E1224' },
-    { name: 'Antique Gold', hex: '#B58A3C' },
-    { name: 'Sage', hex: '#8A9A86' },
-    { name: 'Pink', hex: '#D47D97' },
-    { name: 'Blue', hex: '#2E5B88' },
-    { name: 'Dark Ink', hex: '#2B1B1E' },
-  ];
+  // Dynamic available variant colours from active catalog
+  const availableColours = useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.forEach((p) => {
+      const coloursForProduct = new Set<string>();
+      p.variants?.forEach((v) => {
+        if (v.colour) coloursForProduct.add(v.colour.trim());
+      });
+      coloursForProduct.forEach((col) => {
+        counts[col] = (counts[col] || 0) + 1;
+      });
+    });
+
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({
+        name,
+        count,
+        hex: COLOR_HEX_MAP[name] || '#8C6F5B',
+      }));
+  }, [products]);
+
+  // Dynamic available sizes from active catalog
+  const availableSizes = useMemo(() => {
+    const sizeSet = new Set<string>();
+    products.forEach((p) => {
+      p.variants?.forEach((v) => {
+        if (v.size) sizeSet.add(v.size);
+      });
+    });
+    const order = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    return Array.from(sizeSet).sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      return a.localeCompare(b);
+    });
+  }, [products]);
 
   const sortOptions = [
     { label: 'Recommended / Newest', value: 'newest' },
@@ -189,13 +278,13 @@ export const Shop: React.FC = () => {
               Timeless Traditions for a Brighter Tomorrow
             </h1>
             <p className="text-xs sm:text-sm text-[#FCF8F0]/85 font-light max-w-lg leading-relaxed mx-auto md:mx-0">
-              Exquisite sarees, kurtas, and artisanal ensembles handcrafted from centuries-old heritage, tailored for your modern story.
+              Exquisite festive sets, kurti sets, and artisanal co-ord ensembles handcrafted from centuries-old Indian heritage.
             </p>
           </div>
           <div className="md:col-span-5 aspect-[16/10] sm:aspect-[4/3] rounded-none overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900">
             <img
-              src="/images/editorial/shop_banner.jpg"
-              alt="The Royal Collection"
+              src="/images/products/noorani_maroon_front.jpg"
+              alt="The Royal Libas Atelier Collection"
               className="w-full h-full object-cover object-top"
             />
           </div>
@@ -270,67 +359,123 @@ export const Shop: React.FC = () => {
               </div>
             </div>
 
-            {/* Size Filter */}
-            <div className="space-y-2.5 pt-4 border-t border-gray-100">
-              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
-              <div className="grid grid-cols-4 gap-2">
-                {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((sz) => (
-                  <button
-                    key={sz}
-                    type="button"
-                    onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
-                    className={`h-9 rounded-none border text-xs font-semibold transition-all ${
-                      currentSize === sz
-                        ? 'bg-[#5E1224] text-white border-[#5E1224]'
-                        : 'bg-white text-gray-700 border-[#E8DFD0] hover:border-[#B58A3C]'
-                    }`}
-                  >
-                    {sz}
-                  </button>
-                ))}
+            {/* Curated Collections Filter */}
+            {collections.length > 0 && (
+              <div className="space-y-2.5 pt-4 border-t border-gray-100">
+                <h4 className="text-[11px] uppercase tracking-[0.18em] font-bold text-[#5E1224]">
+                  CURATED EDITS
+                </h4>
+                <div className="space-y-2">
+                  {collections.map((col) => (
+                    <label
+                      key={col.slug}
+                      className="flex items-center justify-between text-xs text-gray-700 cursor-pointer hover:text-[#5E1224]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={currentCollection === col.slug}
+                          onChange={() => updateParam('collection', currentCollection === col.slug ? '' : col.slug)}
+                          className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
+                        />
+                        <span>{col.name}</span>
+                      </div>
+                      <span className="text-gray-400 text-[11px]">({col.product_count})</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Color Filter */}
-            <div className="space-y-2.5 pt-4 border-t border-gray-100">
-              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Color Palette</h4>
-              <div className="flex flex-wrap gap-2.5">
-                {colors.map((c) => (
-                  <button
-                    key={c.name}
-                    type="button"
-                    onClick={() => updateParam('color', currentColor === c.name ? '' : c.name)}
-                    style={{ backgroundColor: c.hex }}
-                    className={`w-7 h-7 rounded-full border transition-all ${
-                      currentColor === c.name
-                        ? 'ring-2 ring-[#5E1224] ring-offset-2 scale-110 shadow-sm'
-                        : 'border-black/20 hover:scale-105'
-                    }`}
-                    title={c.name}
-                  />
-                ))}
+            {/* Size Filter */}
+            {availableSizes.length > 0 && (
+              <div className="space-y-2.5 pt-4 border-t border-gray-100">
+                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  {availableSizes.map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
+                      className={`h-9 rounded-none border text-xs font-semibold transition-all ${
+                        currentSize === sz
+                          ? 'bg-[#5E1224] text-white border-[#5E1224]'
+                          : 'bg-white text-gray-700 border-[#E8DFD0] hover:border-[#B58A3C]'
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Color Palette Filter */}
+            {availableColours.length > 0 && (
+              <div className="space-y-2.5 pt-4 border-t border-gray-100">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Color Palette</h4>
+                  {currentColor && (
+                    <button
+                      type="button"
+                      onClick={() => updateParam('color', '')}
+                      className="text-[10px] text-[#5E1224] hover:underline"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2.5">
+                  {availableColours.map((c) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => updateParam('color', currentColor === c.name ? '' : c.name)}
+                      style={{ backgroundColor: c.hex }}
+                      className={`w-7 h-7 rounded-full border transition-all ${
+                        currentColor === c.name
+                          ? 'ring-2 ring-[#5E1224] ring-offset-2 scale-110 shadow-sm'
+                          : 'border-black/20 hover:scale-105'
+                      }`}
+                      title={`${c.name} (${c.count} items)`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Max Price Slider */}
             <div className="space-y-2.5 pt-4 border-t border-gray-100">
               <div className="flex justify-between items-center text-xs">
                 <span className="uppercase tracking-wider font-bold text-gray-800">Max Price</span>
-                <span className="font-bold text-[#5E1224]">₹{maxPrice.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-[#5E1224]">
+                  {activeUserMaxPrice !== null
+                    ? `₹${sliderPrice.toLocaleString('en-IN')}`
+                    : 'All Prices'}
+                </span>
               </div>
               <input
                 type="range"
-                min="1500"
-                max="6000"
+                min={catalogMinPrice}
+                max={catalogMaxPrice}
                 step="250"
-                value={maxPrice}
+                value={sliderPrice}
                 onChange={(e) => {
                   const val = Number(e.target.value);
-                  setMaxPrice(val);
-                  updateParam('max_price', val.toString());
+                  setSliderPrice(val);
+                }}
+                onMouseUp={() => {
+                  updateParam('max_price', sliderPrice.toString());
+                }}
+                onTouchEnd={() => {
+                  updateParam('max_price', sliderPrice.toString());
                 }}
                 className="w-full accent-[#5E1224] cursor-pointer"
               />
+              <div className="flex justify-between text-[10px] text-gray-400">
+                <span>₹{catalogMinPrice.toLocaleString('en-IN')}</span>
+                <span>₹{catalogMaxPrice.toLocaleString('en-IN')}</span>
+              </div>
             </div>
 
             {/* In Stock Toggle */}
@@ -416,6 +561,12 @@ export const Shop: React.FC = () => {
                     <button onClick={() => updateParam('category', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
+                {currentCollection && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
+                    Collection: {collections.find((c) => c.slug === currentCollection)?.name || currentCollection}
+                    <button onClick={() => updateParam('collection', '')}><X className="w-3.5 h-3.5" /></button>
+                  </span>
+                )}
                 {currentSize && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     Size: {currentSize}
@@ -426,6 +577,12 @@ export const Shop: React.FC = () => {
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     Color: {currentColor}
                     <button onClick={() => updateParam('color', '')}><X className="w-3.5 h-3.5" /></button>
+                  </span>
+                )}
+                {activeUserMaxPrice !== null && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
+                    Max: ₹{activeUserMaxPrice.toLocaleString('en-IN')}
+                    <button onClick={() => updateParam('max_price', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {inStockOnly && (
@@ -494,7 +651,7 @@ export const Shop: React.FC = () => {
       </div>
 
       {/* ========================================================
-          MOBILE FILTERS BOTTOM SHEET (Point 12)
+          MOBILE FILTER BOTTOM SHEET (Point 13)
           ======================================================== */}
       {mobileFilterOpen && (
         <div className="fixed inset-0 z-50 lg:hidden font-sans">
@@ -538,43 +695,95 @@ export const Shop: React.FC = () => {
               ))}
             </div>
 
-            {/* Size */}
-            <div className="space-y-2 pt-3 border-t border-gray-200">
-              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
-              <div className="grid grid-cols-4 gap-2">
-                {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((sz) => (
-                  <button
-                    key={sz}
-                    type="button"
-                    onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
-                    className={`h-10 rounded-none border text-xs font-semibold ${
-                      currentSize === sz
-                        ? 'bg-[#5E1224] text-white border-[#5E1224]'
-                        : 'bg-white text-gray-700 border-[#E8DFD0]'
-                    }`}
-                  >
-                    {sz}
-                  </button>
+            {/* Curated Collections */}
+            {collections.length > 0 && (
+              <div className="space-y-2 pt-3 border-t border-gray-200">
+                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Curated Edits</h4>
+                {collections.map((col) => (
+                  <label key={col.slug} className="flex items-center justify-between text-xs text-gray-700 py-1 cursor-pointer">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={currentCollection === col.slug}
+                        onChange={() => updateParam('collection', currentCollection === col.slug ? '' : col.slug)}
+                        className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
+                      />
+                      <span>{col.name}</span>
+                    </div>
+                    <span className="text-gray-400">({col.product_count})</span>
+                  </label>
                 ))}
               </div>
-            </div>
+            )}
+
+            {/* Size */}
+            {availableSizes.length > 0 && (
+              <div className="space-y-2 pt-3 border-t border-gray-200">
+                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  {availableSizes.map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
+                      className={`h-10 rounded-none border text-xs font-semibold ${
+                        currentSize === sz
+                          ? 'bg-[#5E1224] text-white border-[#5E1224]'
+                          : 'bg-white text-gray-700 border-[#E8DFD0]'
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Colors */}
-            <div className="space-y-2 pt-3 border-t border-gray-200">
-              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Color</h4>
-              <div className="flex flex-wrap gap-2.5">
-                {colors.map((c) => (
-                  <button
-                    key={c.name}
-                    type="button"
-                    onClick={() => updateParam('color', currentColor === c.name ? '' : c.name)}
-                    style={{ backgroundColor: c.hex }}
-                    className={`w-8 h-8 rounded-full border ${
-                      currentColor === c.name ? 'ring-2 ring-[#5E1224] ring-offset-2' : 'border-black/20'
-                    }`}
-                  />
-                ))}
+            {availableColours.length > 0 && (
+              <div className="space-y-2 pt-3 border-t border-gray-200">
+                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Color Palette</h4>
+                <div className="flex flex-wrap gap-2.5">
+                  {availableColours.map((c) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => updateParam('color', currentColor === c.name ? '' : c.name)}
+                      style={{ backgroundColor: c.hex }}
+                      className={`w-8 h-8 rounded-full border ${
+                        currentColor === c.name ? 'ring-2 ring-[#5E1224] ring-offset-2' : 'border-black/20'
+                      }`}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* Price Filter */}
+            <div className="space-y-2 pt-3 border-t border-gray-200">
+              <div className="flex justify-between items-center text-xs">
+                <span className="uppercase tracking-wider font-bold text-gray-800">Max Price</span>
+                <span className="font-bold text-[#5E1224]">
+                  {activeUserMaxPrice !== null
+                    ? `₹${sliderPrice.toLocaleString('en-IN')}`
+                    : 'All Prices'}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={catalogMinPrice}
+                max={catalogMaxPrice}
+                step="250"
+                value={sliderPrice}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setSliderPrice(val);
+                }}
+                onMouseUp={() => updateParam('max_price', sliderPrice.toString())}
+                onTouchEnd={() => updateParam('max_price', sliderPrice.toString())}
+                className="w-full accent-[#5E1224] cursor-pointer"
+              />
             </div>
 
             {/* Footer Buttons */}
