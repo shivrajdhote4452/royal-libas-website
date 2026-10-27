@@ -173,6 +173,12 @@ class Order(Base):
     total = Column(Numeric(10, 2), nullable=False)
     courier_name = Column(String(100), nullable=True)
     tracking_url = Column(String(500), nullable=True)
+    shiprocket_order_id = Column(String(100), nullable=True)
+    shipment_id = Column(String(100), nullable=True)
+    awb_code = Column(String(100), nullable=True)
+    label_url = Column(String(500), nullable=True)
+    manifest_url = Column(String(500), nullable=True)
+    pickup_status = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

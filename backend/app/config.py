@@ -54,3 +54,27 @@ def is_cashfree_configured() -> bool:
         and "placeholder" not in client_id.lower()
         and "placeholder" not in secret.lower()
     )
+
+
+# ==========================================
+# Shiprocket Fulfillment API Configuration (Admin Triggered Only)
+# ==========================================
+SHIPROCKET_API_EMAIL = os.getenv("SHIPROCKET_API_EMAIL", "").strip()
+SHIPROCKET_API_PASSWORD = os.getenv("SHIPROCKET_API_PASSWORD", "").strip()
+SHIPROCKET_PICKUP_LOCATION = os.getenv("SHIPROCKET_PICKUP_LOCATION", "Primary").strip() or "Primary"
+SHIPROCKET_PICKUP_PINCODE = os.getenv("SHIPROCKET_PICKUP_PINCODE", "452001").strip() or "452001"
+
+
+def is_shiprocket_configured() -> bool:
+    """Check if valid non-placeholder Shiprocket credentials are provided."""
+    email = SHIPROCKET_API_EMAIL
+    pwd = SHIPROCKET_API_PASSWORD
+    return bool(
+        email
+        and pwd
+        and not email.startswith("YOUR_")
+        and not pwd.startswith("YOUR_")
+        and "placeholder" not in email.lower()
+        and "placeholder" not in pwd.lower()
+    )
+

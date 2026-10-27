@@ -58,6 +58,9 @@ import {
   PaymentGatewayConfigResponse,
   CouponValidateResponse,
   CouponPublic,
+  FulfillmentConfig,
+  ServiceabilityResponse,
+  ShipmentPayload,
 } from '../types/order';
 
 export async function validateCart(items: CartItemValidate[]): Promise<CartValidateResponse> {
@@ -317,3 +320,69 @@ export async function adminUpdateVariant(token: string, variantId: number, paylo
   }
   return response.json();
 }
+
+export async function fetchFulfillmentConfig(token: string): Promise<FulfillmentConfig> {
+  const response = await fetch(`${API_BASE_URL}/admin/fulfillment/config`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load fulfillment configuration');
+  }
+  return response.json();
+}
+
+export async function checkFulfillmentServiceability(
+  token: string,
+  orderId: number,
+  payload: ShipmentPayload,
+): Promise<ServiceabilityResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/serviceability`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to check courier serviceability');
+  }
+  return response.json();
+}
+
+export async function shipOrderViaFulfillment(
+  token: string,
+  orderId: number,
+  payload: ShipmentPayload,
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/ship`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Fulfillment request failed');
+  }
+  return response.json();
+}
+
+export async function refreshFulfillmentTracking(
+  token: string,
+  orderId: number,
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/refresh-tracking`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to refresh live tracking');
+  }
+  return response.json();
+}
+

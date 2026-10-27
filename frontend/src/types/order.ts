@@ -77,6 +77,11 @@ export interface OrderResponse {
   total: number;
   courier_name?: string | null;
   tracking_url?: string | null;
+  shipment_id?: string | null;
+  awb_code?: string | null;
+  label_url?: string | null;
+  manifest_url?: string | null;
+  pickup_status?: string | null;
   created_at: string;
   updated_at?: string;
   items: OrderItemResponse[];
@@ -116,6 +121,7 @@ export interface OrderTrackResponse {
   total: number;
   courier_name?: string | null;
   tracking_url?: string | null;
+  awb_code?: string | null;
   created_at: string;
   updated_at?: string;
   items: OrderItemResponse[];
@@ -162,3 +168,32 @@ export interface CouponPublic {
   min_order_value: number;
   is_active: boolean;
 }
+
+export interface FulfillmentConfig {
+  is_configured: boolean;
+  provider_name: string;
+  button_label: string;
+  disabled_reason?: string | null;
+}
+
+export interface CourierOption {
+  courier_company_id: number;
+  courier_name: string;
+  rate: number;
+  etd?: string | null;
+  is_recommended?: boolean;
+}
+
+export interface ServiceabilityResponse {
+  available_couriers: CourierOption[];
+  recommended_courier_id?: number | null;
+}
+
+export interface ShipmentPayload {
+  length: number;
+  breadth: number;
+  height: number;
+  weight: number;
+  courier_id?: number | null;
+}
+

@@ -13,9 +13,18 @@ import {
   ChevronUp,
   AlertCircle,
   Loader2,
+  RefreshCw,
+  FileText,
 } from 'lucide-react';
-import { fetchAdminOrders, updateAdminOrderStatus, formatPrice } from '../../lib/api';
-import { OrderResponse } from '../../types/order';
+import {
+  fetchAdminOrders,
+  updateAdminOrderStatus,
+  formatPrice,
+  fetchFulfillmentConfig,
+  refreshFulfillmentTracking,
+} from '../../lib/api';
+import { OrderResponse, FulfillmentConfig } from '../../types/order';
+import { FulfillmentModal } from '../../components/FulfillmentModal';
 
 export const AdminOrders: React.FC = () => {
   const [orders, setOrders] = useState<OrderResponse[]>([]);
@@ -24,7 +33,12 @@ export const AdminOrders: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
 
-  // Fulfillment form modal / inline state for shipping
+  // Fulfillment configuration and modal state
+  const [fulfillmentConfig, setFulfillmentConfig] = useState<FulfillmentConfig | null>(null);
+  const [activeFulfillOrder, setActiveFulfillOrder] = useState<OrderResponse | null>(null);
+  const [refreshingOrderId, setRefreshingOrderId] = useState<number | null>(null);
+
+  // Manual shipping state (fallback)
   const [shippingOrderId, setShippingOrderId] = useState<number | null>(null);
   const [courierName, setCourierName] = useState('Delhivery');
   const [trackingUrl, setTrackingUrl] = useState('');
@@ -37,8 +51,12 @@ export const AdminOrders: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchAdminOrders(token, selectedStatus);
+      const [res, cfg] = await Promise.all([
+        fetchAdminOrders(token, selectedStatus),
+        fetchFulfillmentConfig(token).catch(() => null),
+      ]);
       setOrders(res);
+      if (cfg) setFulfillmentConfig(cfg);
       // Auto-expand first order if none expanded
       if (res.length > 0 && expandedOrderId === null) {
         setExpandedOrderId(res[0].id);
@@ -53,6 +71,19 @@ export const AdminOrders: React.FC = () => {
   useEffect(() => {
     loadOrders();
   }, [token, selectedStatus]);
+
+  const handleRefreshTracking = async (orderId: number) => {
+    setRefreshingOrderId(orderId);
+    setActionError(null);
+    try {
+      const refreshed = await refreshFulfillmentTracking(token, orderId);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? refreshed : o)));
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to refresh live tracking');
+    } finally {
+      setRefreshingOrderId(null);
+    }
+  };
 
   const handleStatusChange = async (
     orderId: number,
@@ -310,6 +341,56 @@ export const AdminOrders: React.FC = () => {
                             <span className="font-bold text-[#5B111A]">{formatPrice(order.total)}</span>
                           </div>
 
+                          {order.awb_code && (
+                            <div className="pt-2 border-t border-gray-100 space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[11px] text-gray-500 font-medium">AWB Code:</span>
+                                <span className="font-mono font-bold text-gray-900 bg-gray-100 px-1.5 py-0.5 rounded text-[11px]">
+                                  {order.awb_code}
+                                </span>
+                              </div>
+                              {order.pickup_status && (
+                                <div className="flex justify-between items-center text-[11px]">
+                                  <span className="text-gray-500">Pickup Status:</span>
+                                  <span className="font-semibold text-indigo-700">{order.pickup_status}</span>
+                                </div>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2 pt-1">
+                                {order.label_url && (
+                                  <a
+                                    href={order.label_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B111A] hover:underline"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>Label PDF</span>
+                                  </a>
+                                )}
+                                {order.manifest_url && (
+                                  <a
+                                    href={order.manifest_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B111A] hover:underline"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>Manifest PDF</span>
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={refreshingOrderId === order.id}
+                                  onClick={() => handleRefreshTracking(order.id)}
+                                  className="inline-flex items-center gap-1 text-[11px] text-indigo-700 hover:text-indigo-900 font-semibold ml-auto disabled:opacity-50"
+                                >
+                                  <RefreshCw className={`w-3 h-3 ${refreshingOrderId === order.id ? 'animate-spin' : ''}`} />
+                                  <span>Refresh tracking</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                           {order.tracking_url && (
                             <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
                               <span className="text-[11px] text-gray-500">
@@ -438,17 +519,45 @@ export const AdminOrders: React.FC = () => {
                       )}
 
                       {(order.status === 'PLACED' || order.status === 'PACKED') && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShippingOrderId(order.id);
-                            setTrackingUrl(order.tracking_url || '');
-                          }}
-                          className="px-3.5 py-2 bg-[#5B111A] hover:bg-[#3A080F] text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Truck className="w-3.5 h-3.5" />
-                          <span>Mark as Shipped</span>
-                        </button>
+                        <>
+                          <div className="relative group">
+                            <button
+                              type="button"
+                              disabled={!fulfillmentConfig?.is_configured}
+                              onClick={() => {
+                                if (fulfillmentConfig?.is_configured) {
+                                  setActiveFulfillOrder(order);
+                                }
+                              }}
+                              title={
+                                !fulfillmentConfig?.is_configured
+                                  ? (fulfillmentConfig?.disabled_reason || '')
+                                  : ''
+                              }
+                              className="px-3.5 py-2 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-200 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed border border-[#5B111A] text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                            >
+                              <Truck className="w-3.5 h-3.5 text-[#C59B27]" />
+                              <span>{fulfillmentConfig?.button_label || 'Ship Parcel'}</span>
+                            </button>
+                            {!fulfillmentConfig?.is_configured && (
+                              <span className="hidden group-hover:block absolute bottom-full left-0 mb-1 z-30 px-2.5 py-1 bg-gray-900 text-white text-[10px] rounded shadow-lg whitespace-nowrap">
+                                {fulfillmentConfig?.disabled_reason || 'Fulfillment service not configured — use manual tracking'}
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShippingOrderId(order.id);
+                              setTrackingUrl(order.tracking_url || '');
+                            }}
+                            className="px-3.5 py-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Truck className="w-3.5 h-3.5 text-gray-500" />
+                            <span>Manual Tracking Entry</span>
+                          </button>
+                        </>
                       )}
 
                       {order.status === 'SHIPPED' && (
@@ -486,6 +595,21 @@ export const AdminOrders: React.FC = () => {
           })}
         </div>
       )}
+
+      {activeFulfillOrder && (
+        <FulfillmentModal
+          order={activeFulfillOrder}
+          isOpen={true}
+          onClose={() => setActiveFulfillOrder(null)}
+          onSuccess={(updated) => {
+            setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+            setActiveFulfillOrder(null);
+          }}
+          token={token}
+          providerLabel={fulfillmentConfig?.button_label}
+        />
+      )}
     </div>
   );
 };
+

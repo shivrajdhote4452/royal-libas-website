@@ -254,27 +254,36 @@ export const TrackOrder: React.FC = () => {
             )}
 
             {/* Courier Tracking Action (When Shipped or Delivered) */}
-            {order.tracking_url && (
+            {(order.tracking_url || order.awb_code) && (
               <div className="p-4 bg-[#FAF7F2] rounded-lg border border-[#E8DFD0] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900">
-                    <Truck className="w-4 h-4 text-[#C59B27]" />
-                    <span>Courier Partner: {order.courier_name || 'Standard Courier'}</span>
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-900">
+                    <div className="flex items-center gap-1.5">
+                      <Truck className="w-4 h-4 text-[#C59B27]" />
+                      <span>Courier Partner: {order.courier_name || 'Standard Courier'}</span>
+                    </div>
+                    {order.awb_code && (
+                      <span className="bg-white px-2 py-0.5 rounded border border-[#E8DFD0] font-mono text-[11px] text-[#5B111A]">
+                        AWB: {order.awb_code}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-600">
                     Your shipment is in transit. Click below to view live GPS tracking on the carrier network.
                   </p>
                 </div>
 
-                <a
-                  href={order.tracking_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#5B111A] hover:bg-[#3A080F] text-white text-xs font-semibold rounded shadow transition-colors shrink-0"
-                >
-                  <span>Track on Courier Site</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                {order.tracking_url && (
+                  <a
+                    href={order.tracking_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#5B111A] hover:bg-[#3A080F] text-white text-xs font-semibold rounded shadow transition-colors shrink-0"
+                  >
+                    <span>Track on Courier Site</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
               </div>
             )}
           </div>

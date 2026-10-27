@@ -398,6 +398,12 @@ class OrderResponse(BaseModel):
     total: Decimal
     courier_name: Optional[str] = None
     tracking_url: Optional[str] = None
+    shiprocket_order_id: Optional[str] = None
+    shipment_id: Optional[str] = None
+    awb_code: Optional[str] = None
+    label_url: Optional[str] = None
+    manifest_url: Optional[str] = None
+    pickup_status: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     items: List[OrderItemResponse] = []
@@ -471,6 +477,7 @@ class OrderTrackResponse(BaseModel):
     total: Decimal
     courier_name: Optional[str] = None
     tracking_url: Optional[str] = None
+    awb_code: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     items: List[OrderItemResponse] = []
@@ -492,6 +499,46 @@ class OrderStatusUpdateRequest(BaseModel):
         if s not in allowed:
             raise ValueError(f"Invalid order status. Allowed statuses: {', '.join(allowed)}")
         return s
+
+
+# ==========================================
+# Shiprocket Fulfillment Schemas
+# ==========================================
+
+class FulfillmentConfigResponse(BaseModel):
+    is_configured: bool
+    provider_name: str
+    button_label: str
+    disabled_reason: Optional[str] = None
+
+
+class FulfillmentServiceabilityRequest(BaseModel):
+    length: float
+    breadth: float
+    height: float
+    weight: float
+
+
+class FulfillmentCourierOption(BaseModel):
+    courier_company_id: int
+    courier_name: str
+    rate: float
+    etd: Optional[str] = None
+    is_recommended: bool = False
+
+
+class FulfillmentServiceabilityResponse(BaseModel):
+    available_couriers: List[FulfillmentCourierOption]
+    recommended_courier_id: Optional[int] = None
+
+
+class FulfillmentShipRequest(BaseModel):
+    length: float
+    breadth: float
+    height: float
+    weight: float
+    courier_id: Optional[int] = None
+
 
 
 class AdminLowStockVariant(BaseModel):
