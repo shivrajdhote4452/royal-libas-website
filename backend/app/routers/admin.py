@@ -1,7 +1,7 @@
 from datetime import datetime, date, time
 from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -25,19 +25,47 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 # ==========================================
-# Admin Authentication
+# Admin Authentication & Rate Limiting
 # ==========================================
 
+# In-memory sliding window rate limiter for admin login
+# Key: client_ip:email, Value: list of failed timestamps
+_login_failed_attempts: dict = {}
+LOGIN_MAX_FAILED_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 300  # 5 minutes lockout
+
+
 @router.post("/login", response_model=TokenResponse)
-def admin_login(payload: AdminLogin, db: Session = Depends(get_db)):
-    """Authenticate admin and return JWT access token."""
+def admin_login(payload: AdminLogin, request: Request, db: Session = Depends(get_db)):
+    """Authenticate admin and return JWT access token with brute-force rate limit protection."""
+    now_ts = datetime.now().timestamp()
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"{client_ip}:{payload.email.lower().strip()}"
+
+    # Filter attempts within sliding lockout window
+    window_start = now_ts - LOGIN_LOCKOUT_SECONDS
+    recent_attempts = [t for t in _login_failed_attempts.get(rate_key, []) if t > window_start]
+    _login_failed_attempts[rate_key] = recent_attempts
+
+    if len(recent_attempts) >= LOGIN_MAX_FAILED_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Account temporarily locked for 5 minutes for security. Please try again later.",
+            headers={"Retry-After": str(LOGIN_LOCKOUT_SECONDS)},
+        )
+
     admin = db.query(Admin).filter(Admin.email == payload.email.lower().strip()).first()
     if not admin or not verify_password(payload.password, admin.password_hash):
+        _login_failed_attempts[rate_key].append(now_ts)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Clear failed attempts on successful login
+    if rate_key in _login_failed_attempts:
+        del _login_failed_attempts[rate_key]
 
     token = create_access_token(data={"sub": str(admin.id), "email": admin.email})
     return TokenResponse(access_token=token, token_type="bearer")
@@ -206,6 +234,14 @@ def admin_update_order_status(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Courier tracking link is required when marking an order Shipped.",
             )
+
+    # Restock inventory atomically in the same transaction if order is cancelled
+    if target_status == "CANCELLED" and order.status != "CANCELLED":
+        for item in order.items:
+            if item.variant_id:
+                variant = db.query(ProductVariant).filter(ProductVariant.id == item.variant_id).first()
+                if variant:
+                    variant.stock += item.quantity
 
     order.status = target_status
     if payload.courier_name is not None:

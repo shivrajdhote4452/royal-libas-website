@@ -1,19 +1,32 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import FRONTEND_URL
 from app.routers import admin, products, collections, cart, orders, payments, coupons
 
 app = FastAPI(
     title="Royal Libas by Tanya API",
-    description="Backend API for Royal Libas custom shop (Phase 4: Cart, Checkout & Payments)",
-    version="0.4.0",
+    description="Backend API for Royal Libas custom shop (Phase 7: Hardened & Production Frozen)",
+    version="0.7.0",
 )
 
-# Enable CORS for frontend integration
+# Secure CORS configuration: allow configured frontend domain and local dev servers
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+if FRONTEND_URL:
+    for url in FRONTEND_URL.split(","):
+        clean_url = url.strip()
+        if clean_url and clean_url not in allowed_origins:
+            allowed_origins.append(clean_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

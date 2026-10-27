@@ -4,7 +4,7 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 6** — Real Catalogue, Policies, and Launch Polish Complete
+- **Status:** **Phase 7** — Testing, Security Hardening & Launch Freeze Complete
 
 ---
 
@@ -205,9 +205,46 @@ royal-libas-website/
 ---
 
 ## Environment Variables
-
+ 
 Copy `.env.example` to `.env` when configuring database and services:
 ```bash
 cp .env.example .env
 ```
 *Note: Never commit real secrets or production credentials to source control.*
+
+---
+
+## Operations & Launch Hardening Runbook (Phase 7)
+
+### 1. Database Backups & Point-in-Time Restore (PITR)
+- **Neon PostgreSQL (Production):**
+  - Neon automatically takes continuous WAL (Write-Ahead Log) snapshots providing 7-day Point-in-Time Recovery (PITR).
+  - To restore or branch from any timestamp:
+    1. Log in to the Neon Console -> select the `royal-libas` project.
+    2. Go to **Branches** -> **Create Branch from Point in Time**.
+    3. Select the timestamp prior to the incident, test the branch connection string, and swap `DATABASE_URL` in hosting settings.
+- **SQLite (Local Development Snapshot):**
+  - To create an immediate local SQL dump:
+    ```bash
+    sqlite3 royal_libas.db .dump > backup_local_$(date +%Y%m%d_%H%M%S).sql
+    ```
+  - To restore from a snapshot:
+    ```bash
+    sqlite3 royal_libas_restored.db < backup_local_TIMESTAMP.sql
+    ```
+
+### 2. Backend Hosting Tier & Cold-Start Behavior
+- **Free-Tier Sleep Characteristics:**
+  - Free tiers on cloud providers (e.g., Render Web Services, Koyeb) automatically spin down web containers after 15 minutes of inactivity.
+  - The first request after sleep experiences a **~45–55 second cold-start latency** while the container boots and connects to the database pool.
+  - The frontend includes loading spinners and graceful timeouts, but cold starts on direct Instagram ad referrals can degrade first-touch conversion.
+- **Production Launch Recommendation (Accepted Decision):**
+  - For public launch on 5 November, run the backend on a persistent non-sleeping tier (e.g., **Render Starter @ $7/mo** or **Railway Hobby @ $5/mo**).
+  - This ensures sub-100ms API response times 24/7 and eliminates payment session timeouts.
+
+### 3. Security & Anti-Abuse Measures
+- **Strict Address & Pincode Validation:** Both frontend and backend enforce exact 6-digit Indian delivery pincodes and required street details, preventing invalid courier dispatch.
+- **Brute-Force Rate Limiting:** The admin login route (`POST /admin/login`) enforces an in-memory sliding window: after 5 consecutive failed attempts, the account is temporarily locked for 5 minutes (`HTTP 429 Too Many Requests` with `Retry-After: 300`).
+- **Atomic Order Cancellation Restock:** Cancelling an order via the admin panel immediately and atomically returns variant stock to the database within the same transaction.
+- **Zero Real Secrets In Code:** Automated regex scans verify zero production credentials, API secrets, or unhashed passwords exist in git history or tracked files.
+- **Restricted CORS Policy:** Allowed origins are strictly scoped to the configured `FRONTEND_URL` and authorized development servers (no open `*` wildcard).

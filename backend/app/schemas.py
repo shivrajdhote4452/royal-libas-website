@@ -246,6 +246,56 @@ class AddressCreate(BaseModel):
     city: str
     state: str
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 2:
+            raise ValueError("Please enter a valid recipient name (at least 2 characters)")
+        return clean
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        clean = "".join(filter(str.isdigit, v or ""))
+        if len(clean) == 12 and clean.startswith("91"):
+            clean = clean[2:]
+        if len(clean) != 10:
+            raise ValueError("Please enter a valid 10-digit Indian mobile number")
+        return clean
+
+    @field_validator("pincode")
+    @classmethod
+    def validate_pincode(cls, v: str) -> str:
+        clean = "".join(filter(str.isdigit, v or ""))
+        if len(clean) != 6:
+            raise ValueError("Please enter a valid 6-digit Indian delivery pincode")
+        return clean
+
+    @field_validator("line1")
+    @classmethod
+    def validate_line1(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 5:
+            raise ValueError("Please provide a complete street address (house/flat number and street)")
+        return clean
+
+    @field_validator("city")
+    @classmethod
+    def validate_city(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 2:
+            raise ValueError("Please enter a valid city name")
+        return clean
+
+    @field_validator("state")
+    @classmethod
+    def validate_state(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 2:
+            raise ValueError("Please enter a valid state")
+        return clean
+
 
 class AddressResponse(BaseModel):
     id: int
@@ -279,6 +329,14 @@ class OrderCreateRequest(BaseModel):
     address: AddressCreate
     items: List[OrderItemRequest]
     coupon_code: Optional[str] = None
+
+    @field_validator("customer_name")
+    @classmethod
+    def validate_customer_name(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 2:
+            raise ValueError("Please enter customer name (at least 2 characters)")
+        return clean
 
     @field_validator("payment_method")
     @classmethod
