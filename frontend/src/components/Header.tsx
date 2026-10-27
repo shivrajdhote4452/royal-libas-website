@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ShoppingBag, Menu, X, Search, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { BrandLogo } from './BrandLogo';
 
 export const Header: React.FC = () => {
   const location = useLocation();
@@ -29,14 +30,13 @@ export const Header: React.FC = () => {
             </button>
           </div>
 
-          {/* Logo / Brand Name - Option C Playfair Display */}
-          <Link to="/" className="group flex flex-col items-center md:items-start focus:outline-none">
-            <span className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-[#5B111A] group-hover:text-[#3A080F] transition-colors">
-              ROYAL LIBAS
-            </span>
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.25em] text-[#C59B27] -mt-1 font-medium">
-              by Tanya
-            </span>
+          {/* Logo / Brand Name - Option 5 Floral Motif Identity */}
+          <Link
+            to="/"
+            className="group flex flex-col items-center justify-center focus:outline-none py-1 transition-transform hover:scale-[1.01]"
+            aria-label="Royal Libas Homepage"
+          >
+            <BrandLogo layout="compact" emblemSize={26} />
           </Link>
 
           {/* Desktop Navigation Links - Option C */}
@@ -124,6 +124,9 @@ export const Header: React.FC = () => {
       {/* Mobile Drawer Navigation Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-[#FAF7F2] border-b border-[#E8DFD0] px-4 pt-3 pb-6 space-y-3 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex justify-center pb-2.5 border-b border-[#E8DFD0]/80">
+            <BrandLogo layout="compact" emblemSize={24} />
+          </div>
           <Link
             to="/"
             onClick={() => setMobileMenuOpen(false)}

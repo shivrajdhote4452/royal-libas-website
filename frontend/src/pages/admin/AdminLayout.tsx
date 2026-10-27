@@ -11,6 +11,7 @@ import {
   LogOut,
   ExternalLink,
 } from 'lucide-react';
+import { BrandLogo } from '../../components/BrandLogo';
 
 export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -45,13 +46,11 @@ export const AdminLayout: React.FC = () => {
       <aside className="hidden lg:flex w-64 bg-[#3A080F] text-white flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-30 shadow-xl border-r border-[#5B111A]">
         <div>
           {/* Brand Header */}
-          <div className="p-6 border-b border-[#5B111A]">
-            <Link to="/admin/dashboard" className="block">
-              <span className="font-serif text-xl font-bold tracking-tight text-white block">
-                ROYAL LIBAS
-              </span>
-              <span className="text-[10px] uppercase tracking-[0.25em] text-[#C59B27] font-medium block">
-                by Tanya • Admin
+          <div className="p-5 border-b border-[#5B111A]">
+            <Link to="/admin/dashboard" className="block text-center hover:opacity-95 transition-opacity" aria-label="Royal Libas Admin Dashboard">
+              <BrandLogo variant="white" layout="compact" emblemSize={28} />
+              <span className="text-[9px] uppercase tracking-[0.25em] text-[#C59B27] font-semibold block mt-1.5">
+                Admin Panel
               </span>
             </Link>
           </div>
@@ -107,11 +106,11 @@ export const AdminLayout: React.FC = () => {
           ======================================================== */}
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
         {/* Mobile Header */}
-        <header className="lg:hidden bg-[#3A080F] text-white p-4 sticky top-0 z-30 flex items-center justify-between border-b border-[#5B111A]">
-          <div>
-            <span className="font-serif text-lg font-bold">Royal Libas</span>
-            <span className="text-[10px] text-[#C59B27] block -mt-1 uppercase tracking-wider">Admin</span>
-          </div>
+        <header className="lg:hidden bg-[#3A080F] text-white p-3.5 sticky top-0 z-30 flex items-center justify-between border-b border-[#5B111A]">
+          <Link to="/admin/dashboard" className="flex items-center gap-2">
+            <BrandLogo variant="white" layout="horizontal" emblemSize={26} showTagline={false} />
+            <span className="text-[9px] text-[#C59B27] uppercase tracking-wider font-semibold border-l border-[#5B111A] pl-2">Admin</span>
+          </Link>
           <div className="flex items-center gap-3">
             <Link to="/" target="_blank" className="text-xs text-[#EAD186]">
               View Store

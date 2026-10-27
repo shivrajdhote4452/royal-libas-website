@@ -1,0 +1,40 @@
+<svg viewBox="0 0 160 160" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
+  <!-- 3 Crown Droplet Dots -->
+  <circle cx="80" cy="10" r="3" fill="#B58A3C" />
+  <circle cx="80" cy="20" r="4.5" fill="#B58A3C" />
+  <circle cx="80" cy="32" r="6.5" fill="#B58A3C" />
+
+  <!-- Side Accent Dots -->
+  <circle cx="16" cy="62" r="3.5" fill="#B58A3C" />
+  <circle cx="144" cy="62" r="3.5" fill="#B58A3C" />
+  <circle cx="2" cy="116" r="3" fill="#B58A3C" />
+  <circle cx="158" cy="116" r="3" fill="#B58A3C" />
+
+  <!-- Center Petal Outer Gold & Inner Maroon -->
+  <path d="M 80 40 C 60 74 58 108 78 140 C 79 141 81 141 82 140 C 102 108 100 74 80 40 Z" fill="#B58A3C" />
+  <path d="M 80 48 C 64 78 63 106 78 136 C 79 137 81 137 82 136 C 97 106 96 78 80 48 Z" fill="#5E1224" />
+  <line x1="80" y1="56" x2="80" y2="128" stroke="#B58A3C" stroke-width="2.2" stroke-linecap="round" />
+
+  <!-- Diagonal Middle Petals -->
+  <path d="M 24 64 C 32 96 56 126 76 139 C 58 112 46 84 24 64 Z" fill="#B58A3C" />
+  <path d="M 30 68 C 38 96 58 122 74 135 C 58 112 48 87 30 68 Z" fill="#5E1224" />
+  <line x1="34" y1="72" x2="68" y2="124" stroke="#B58A3C" stroke-width="2" stroke-linecap="round" />
+
+  <path d="M 136 64 C 128 96 104 126 84 139 C 102 112 114 84 136 64 Z" fill="#B58A3C" />
+  <path d="M 130 68 C 122 96 102 122 86 135 C 102 112 112 87 130 68 Z" fill="#5E1224" />
+  <line x1="126" y1="72" x2="92" y2="124" stroke="#B58A3C" stroke-width="2" stroke-linecap="round" />
+
+  <!-- Lower Sweeping Petals -->
+  <path d="M 8 118 C 22 104 54 116 76 142 C 50 137 24 132 8 118 Z" fill="#B58A3C" />
+  <path d="M 14 118 C 26 108 52 119 72 139 C 48 134 26 130 14 118 Z" fill="#5E1224" />
+  <line x1="18" y1="118" x2="64" y2="135" stroke="#B58A3C" stroke-width="2" stroke-linecap="round" />
+
+  <path d="M 152 118 C 138 104 106 116 84 142 C 110 137 136 132 152 118 Z" fill="#B58A3C" />
+  <path d="M 146 118 C 134 108 108 119 88 139 C 112 134 134 130 146 118 Z" fill="#5E1224" />
+  <line x1="142" y1="118" x2="96" y2="135" stroke="#B58A3C" stroke-width="2" stroke-linecap="round" />
+
+  <!-- Base Pedestal & Flourishes -->
+  <path d="M 76 142 C 68 146 64 150 60 148 C 59 147 60 146 62 147 C 65 147 69 144 75 141 Z" fill="#B58A3C" />
+  <path d="M 84 142 C 92 146 96 150 100 148 C 101 147 100 146 98 147 C 95 147 91 144 85 141 Z" fill="#B58A3C" />
+  <polygon points="80,144 86,152 80,160 74,152" fill="#B58A3C" />
+</svg>

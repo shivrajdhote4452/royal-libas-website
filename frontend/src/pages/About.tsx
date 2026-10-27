@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, ArrowRight, Instagram } from 'lucide-react';
+import { BrandLogo } from '../components/BrandLogo';
 
 export const About: React.FC = () => {
   useEffect(() => {
@@ -13,6 +14,9 @@ export const About: React.FC = () => {
       {/* Hero Header */}
       <section className="relative py-16 sm:py-24 bg-gradient-to-br from-[#5B111A] via-[#480B13] to-[#3A080F] text-[#FAF7F2] text-center px-4">
         <div className="max-w-3xl mx-auto space-y-4">
+          <div className="flex justify-center mb-1">
+            <BrandLogo variant="gold" layout="emblem-only" emblemSize={44} />
+          </div>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF7F2]/10 border border-[#C59B27]/40 text-[#EAD186] text-xs font-semibold uppercase tracking-widest">
             <Sparkles className="w-3.5 h-3.5 text-[#C59B27]" />
             Boutique Atelier • Jaipur

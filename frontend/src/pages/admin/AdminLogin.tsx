@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { adminLogin } from '../../lib/api';
+import { BrandLogo } from '../../components/BrandLogo';
 
 export const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
@@ -29,12 +30,12 @@ export const AdminLogin: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex flex-col justify-center py-12 sm:px-6 lg:px-8 px-4">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
-          Boutique Operations
+        <Link to="/" className="inline-block hover:opacity-95 transition-opacity mb-2" aria-label="Royal Libas Homepage">
+          <BrandLogo layout="stacked" emblemSize={48} />
+        </Link>
+        <span className="text-[10px] uppercase tracking-widest font-bold text-[#C59B27] block mt-1">
+          Boutique Operations Portal
         </span>
-        <h1 className="font-serif text-3xl font-bold text-[#5B111A] mt-1">
-          Royal Libas Admin
-        </h1>
         <p className="mt-2 text-xs text-gray-600">
           Sign in to manage catalogue products, live inventory, and customer shipments.
         </p>

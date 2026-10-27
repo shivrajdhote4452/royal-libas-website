@@ -11,6 +11,7 @@ import { fetchOrderByCode, fetchProducts } from '../lib/api';
 import { OrderResponse } from '../types/order';
 import { Product } from '../types/product';
 import { ProductCard } from '../components/ProductCard';
+import { BrandLogo } from '../components/BrandLogo';
 
 export const OrderSuccess: React.FC = () => {
   const { orderCode } = useParams<{ orderCode: string }>();
@@ -94,6 +95,10 @@ export const OrderSuccess: React.FC = () => {
           1. SUCCESS CARD MATCHING PDF PAGE 7
           ======================================================== */}
       <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-[#E8DFD0] shadow-sm p-8 sm:p-12 text-center space-y-6">
+        {/* Brand Authenticity Header */}
+        <div className="flex justify-center pb-2 border-b border-[#E8DFD0]/60">
+          <BrandLogo layout="compact" emblemSize={28} />
+        </div>
         {isPrepaidPending ? (
           <>
             {/* Pending Verification Icon */}

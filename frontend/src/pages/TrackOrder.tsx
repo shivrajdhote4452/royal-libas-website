@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { trackOrder, formatPrice } from '../lib/api';
 import { OrderTrackResponse } from '../types/order';
+import { BrandLogo } from '../components/BrandLogo';
 
 export const TrackOrder: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -80,6 +81,9 @@ export const TrackOrder: React.FC = () => {
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 min-h-[80vh]">
       {/* Header */}
       <div className="text-center mb-8">
+        <div className="flex justify-center mb-1">
+          <BrandLogo layout="emblem-only" emblemSize={32} />
+        </div>
         <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
           Customer Care
         </span>

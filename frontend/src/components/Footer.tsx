@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Instagram, Mail, ShieldCheck, RefreshCw, Truck } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 export const Footer: React.FC = () => {
   return (
@@ -9,13 +10,8 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 lg:gap-12 pb-12 border-b border-[#E8DFD0]">
           {/* Brand Col */}
           <div className="space-y-4">
-            <Link to="/" className="inline-block">
-              <span className="font-serif text-2xl font-bold tracking-tight text-[#5B111A]">
-                Royal Libas
-              </span>
-              <span className="block text-[10px] uppercase tracking-[0.25em] text-[#C59B27] -mt-1 font-medium">
-                by Tanya
-              </span>
+            <Link to="/" className="inline-block transition-transform hover:scale-[1.01]" aria-label="Royal Libas Homepage">
+              <BrandLogo layout="horizontal" emblemSize={42} />
             </Link>
             <p className="text-xs text-gray-600 leading-relaxed">
               Curated festive silhouettes and effortless everyday co-ord sets. Designed with pure breathable textiles and artisanal craftsmanship in Jaipur, Rajasthan.

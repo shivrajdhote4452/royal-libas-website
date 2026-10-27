@@ -3,6 +3,7 @@
 .env.local
 .env.*.local
 *.env
+test_logo.py
 
 # Local Databases
 *.db
