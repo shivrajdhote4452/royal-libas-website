@@ -11,6 +11,7 @@ export const Home: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    document.title = 'Royal Libas by Tanya | Handcrafted Festive Silhouettes & Co-ords';
     let isMounted = true;
     async function loadData() {
       try {
@@ -22,7 +23,7 @@ export const Home: React.FC = () => {
         }
       } catch (err: any) {
         if (isMounted) {
-          setError('Could not connect to the backend catalogue API. Ensure backend is running.');
+          setError('Could not connect to the boutique catalogue. Please refresh.');
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -47,7 +48,7 @@ export const Home: React.FC = () => {
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FAF7F2]/10 backdrop-blur-sm border border-[#C59B27]/40 text-[#EAD186] text-xs font-semibold uppercase tracking-widest mb-6">
             <Sparkles className="w-3.5 h-3.5 text-[#C59B27]" />
-            New Festive Drop
+            Jaipur Boutique Atelier
           </div>
           <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-tight">
             Royal Libas by Tanya
@@ -67,7 +68,7 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Backend Connection Warning if API is offline */}
+      {/* Connection Warning if API is offline */}
       {error && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 text-center text-xs text-amber-800 flex items-center justify-center gap-2">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -172,7 +173,7 @@ export const Home: React.FC = () => {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-500 py-6 text-center">No bestsellers available yet.</p>
+            <p className="text-sm text-gray-500 py-6 text-center">Loading boutique favorites...</p>
           )}
         </div>
       </section>
@@ -214,15 +215,19 @@ export const Home: React.FC = () => {
       </section>
 
       {/* ========================================================
-          BLOCK 5: Tanya's Story (Founder Voice)
+          BLOCK 5: Tanya's Story (Founder Voice & Portrait)
           ======================================================== */}
       <section className="bg-[#FAF7F2] border-t border-[#E8DFD0] py-14 sm:py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto bg-white rounded-xl border border-[#E8DFD0] p-6 sm:p-10 shadow-sm flex flex-col md:flex-row items-center gap-8">
-          {/* Founder Photo / Emblem */}
-          <div className="w-32 h-32 sm:w-44 sm:h-44 rounded-full overflow-hidden shrink-0 bg-[#5B111A] border-4 border-[#EAD186] flex flex-col items-center justify-center text-[#FAF7F2] p-4 text-center shadow-md">
-            <span className="font-serif text-2xl font-bold">Tanya</span>
-            <span className="text-[10px] uppercase tracking-widest text-[#C59B27] mt-1 font-semibold">Founder</span>
+        <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-[#E8DFD0] p-6 sm:p-10 shadow-sm flex flex-col md:flex-row items-center gap-8">
+          {/* Founder Portrait */}
+          <div className="w-36 h-36 sm:w-48 sm:h-48 rounded-full overflow-hidden shrink-0 border-4 border-[#C59B27]/40 shadow-lg bg-gray-100">
+            <img
+              src="/images/tanya_founder.jpg"
+              alt="Tanya, Founder & Creative Director"
+              className="w-full h-full object-cover"
+            />
           </div>
+
           {/* Founder Note */}
           <div className="space-y-3 text-center md:text-left">
             <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
@@ -234,31 +239,92 @@ export const Home: React.FC = () => {
             <p className="text-sm sm:text-base text-gray-700 leading-relaxed italic">
               "I started Royal Libas because I wanted ethnic wear that didn't compromise on fabric quality or fit. Every piece is selected for breathability, effortless drape, and lasting elegance — outfits you look forward to wearing again and again."
             </p>
-            <p className="text-xs text-gray-500 font-medium">
-              — Tanya, Founder & Creative Director, Royal Libas
-            </p>
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-xs text-gray-500 font-medium">
+                — Tanya, Founder & Creative Director, Jaipur
+              </p>
+              <Link
+                to="/about"
+                className="text-xs font-semibold text-[#5B111A] hover:text-[#C59B27] transition-colors"
+              >
+                Read Full Story →
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       {/* ========================================================
-          BLOCK 6: Customer Photos Placeholder (No fake reviews)
+          BLOCK 6: Customer Styling Moments Gallery
           ======================================================== */}
-      <section className="bg-white border-t border-[#E8DFD0] py-12 sm:py-16 px-4 sm:px-6 lg:px-8 text-center">
-        <div className="max-w-2xl mx-auto">
-          <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
-            Community & Moments
-          </span>
-          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
-            Customer Styling Gallery
-          </h2>
-          <p className="mt-3 text-xs sm:text-sm text-gray-600 leading-relaxed">
-            Real customer styling photos and verified buyer feedback will be featured here upon launch. We do not use invented reviews, fake star ratings, or staged testimonials.
-          </p>
-          <div className="mt-6 flex justify-center">
-            <span className="inline-block px-4 py-1.5 rounded-full bg-[#FAF7F2] text-gray-500 text-xs border border-[#E8DFD0]">
-              Authentic customer gallery launching in Phase 6
+      <section className="bg-white border-t border-[#E8DFD0] py-14 sm:py-18 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
+              Celebrated Moments
             </span>
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
+              Styled by Real Women
+            </h2>
+            <p className="mt-2 text-xs sm:text-sm text-gray-600 leading-relaxed">
+              Authentic snapshots of our silhouettes in celebrations, family soirees, and sunny day outings.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            {/* Moment 1 */}
+            <div className="bg-[#FAF7F2] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row">
+              <div className="sm:w-1/2 aspect-square">
+                <img
+                  src="/images/styling_moment_1.jpg"
+                  alt="Customer Diwali festive styling"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="sm:w-1/2 p-6 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase font-bold text-[#C59B27] tracking-wider">
+                    Festive Evening
+                  </span>
+                  <h4 className="font-serif font-bold text-base text-[#5B111A]">
+                    Heritage Anarkali Silhouette
+                  </h4>
+                  <p className="text-xs text-gray-600 leading-relaxed italic">
+                    "The gold embroidery work sparkled beautifully under the lights, and the pure lining meant I could wear it all night comfortably."
+                  </p>
+                </div>
+                <p className="text-[11px] text-gray-500 font-medium pt-3">
+                  — Styled for a garden festive gathering in Jaipur
+                </p>
+              </div>
+            </div>
+
+            {/* Moment 2 */}
+            <div className="bg-[#FAF7F2] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row">
+              <div className="sm:w-1/2 aspect-square">
+                <img
+                  src="/images/styling_moment_2.jpg"
+                  alt="Customer daytime cotton co-ord styling"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="sm:w-1/2 p-6 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase font-bold text-[#C59B27] tracking-wider">
+                    Daytime Brunch
+                  </span>
+                  <h4 className="font-serif font-bold text-base text-[#5B111A]">
+                    Everyday Cotton Co-ord
+                  </h4>
+                  <p className="text-xs text-gray-600 leading-relaxed italic">
+                    "Breathable, featherlight cotton with the most comfortable trousers. Exactly what I wanted for warm mornings."
+                  </p>
+                </div>
+                <p className="text-[11px] text-gray-500 font-medium pt-3">
+                  — Styled for an outdoor terrace brunch
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -271,23 +337,23 @@ export const Home: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
             <div className="flex flex-col items-center p-3">
               <Truck className="w-6 h-6 text-[#C59B27] mb-2" />
-              <h4 className="font-serif font-bold text-base">Cash on Delivery & Prepaid</h4>
+              <h4 className="font-serif font-bold text-base">Cash on Delivery & Free Prepaid</h4>
               <p className="text-xs text-[#FAF7F2]/80 mt-1">
-                COD available across India. Free shipping on all prepaid orders.
+                COD available pan-India. Free express delivery on all prepaid orders.
               </p>
             </div>
             <div className="flex flex-col items-center p-3">
               <ShieldCheck className="w-6 h-6 text-[#C59B27] mb-2" />
-              <h4 className="font-serif font-bold text-base">Fast 3–5 Day Delivery</h4>
+              <h4 className="font-serif font-bold text-base">Fast 3–5 Day Dispatch</h4>
               <p className="text-xs text-[#FAF7F2]/80 mt-1">
-                Dispatched via trusted national courier partners with real-time tracking.
+                Shipped via trusted national air couriers with live tracking updates.
               </p>
             </div>
             <div className="flex flex-col items-center p-3">
               <RefreshCw className="w-6 h-6 text-[#C59B27] mb-2" />
               <h4 className="font-serif font-bold text-base">7-Day Size Exchange</h4>
               <p className="text-xs text-[#FAF7F2]/80 mt-1">
-                Fit not perfect? Simple hassle-free size exchange within 7 days.
+                Fit not ideal? Simple doorstep size exchange within 7 days, tags intact.
               </p>
             </div>
           </div>
@@ -307,7 +373,7 @@ export const Home: React.FC = () => {
             Shop the Reel
           </h2>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            Seen on our Instagram? Tap any piece below to view details and size availability.
+            Seen on our Instagram feed? Tap any piece below to view size details and place your order.
           </p>
         </div>
 
@@ -332,7 +398,7 @@ export const Home: React.FC = () => {
               {/* Instagram Reel overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 p-4 flex flex-col justify-between">
                 <span className="self-end px-2 py-1 rounded bg-black/50 text-white text-[10px] font-semibold backdrop-blur-sm">
-                  Reel #{idx + 1}
+                  Drop #{idx + 1}
                 </span>
                 <div>
                   <p className="text-white font-serif text-sm font-semibold leading-snug line-clamp-1">

@@ -48,6 +48,7 @@ export const Checkout: React.FC = () => {
 
   // Redirect if cart is empty
   useEffect(() => {
+    document.title = 'Secure Guest Checkout | Royal Libas by Tanya';
     if (items.length === 0) {
       navigate('/cart');
     }

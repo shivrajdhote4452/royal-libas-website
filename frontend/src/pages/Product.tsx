@@ -36,6 +36,7 @@ export const ProductPage: React.FC = () => {
         const data = await fetchProductBySlug(id);
         if (isMounted) {
           setProduct(data);
+          document.title = `${data.name} | Royal Libas by Tanya`;
           setError(null);
           // Pre-select first available variant
           const firstAvailable = data.variants.find((v) => v.stock > 0);

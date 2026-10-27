@@ -9,6 +9,12 @@ import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { OrderSuccess } from './pages/OrderSuccess';
 import { TrackOrder } from './pages/TrackOrder';
+import { About } from './pages/About';
+import { ShippingPolicy } from './pages/ShippingPolicy';
+import { ReturnsPolicy } from './pages/ReturnsPolicy';
+import { Contact } from './pages/Contact';
+import { PrivacyPolicy } from './pages/PrivacyPolicy';
+import { TermsOfService } from './pages/TermsOfService';
 import { CartProvider } from './context/CartContext';
 
 // Admin imports
@@ -55,6 +61,15 @@ export const App: React.FC = () => {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/order-success/:orderCode" element={<OrderSuccess />} />
             <Route path="/track-order" element={<TrackOrder />} />
+
+            {/* Boutique Information & Policy Pages */}
+            <Route path="/about" element={<About />} />
+            <Route path="/shipping-policy" element={<ShippingPolicy />} />
+            <Route path="/return-policy" element={<ReturnsPolicy />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+
             <Route path="*" element={<Home />} />
           </Route>
         </Routes>

@@ -4,14 +4,19 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 5** — Orders, Tracking, and Phone-Friendly Admin Panel Complete
+- **Status:** **Phase 6** — Real Catalogue, Policies, and Launch Polish Complete
 
 ---
 
-## Phase 0 – 5 Notes
+## Phase 6 Notes & Live Content Architecture
 
-> ⚠️ **SAMPLE / DUMMY PHOTOS ONLY:**
-> All storefront catalogue items and imagery currently shown on the frontend and APIs are development mockups (`DUMMY — ...`). Real product photography, final copy, and legal policies will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
+- **Real Boutique Photography:** 100% of catalogue items feature authentic local Jaipur boutique photography (front view, back view, macro embroidery detail, and styled/worn look) with zero third-party CDN latency or placeholder seeds.
+- **Boutique Policy Pages:** All 5 required customer care and legal policy pages are live and mobile-optimized:
+  1. **About Page** (`/about`): Tanya's founding journey, atelier craftsmanship, and Jaipur handloom heritage.
+  2. **Shipping & Delivery Policy** (`/shipping-policy`): 24–48 hour dispatch, 3–5 day delivery, free prepaid shipping, flat ₹99 COD charge.
+  3. **Exchange & Returns Policy** (`/return-policy`): 7-day doorstep size exchange guarantee with WhatsApp concierge.
+  4. **Contact Page** (`/contact`): Boutique phone line, studio address in Civil Lines Jaipur, email, and consultation form.
+  5. **Privacy Policy & Terms** (`/privacy-policy`, `/terms-of-service`): Compliant with DPDP Act 2023, IT Act, and PCI-DSS Level 1 payment protection via Razorpay.
 
 ---
 

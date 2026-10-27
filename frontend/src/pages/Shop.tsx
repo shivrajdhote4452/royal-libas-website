@@ -21,6 +21,7 @@ export const Shop: React.FC = () => {
 
   // Load collections for filter bar
   useEffect(() => {
+    document.title = 'Shop All Boutique Collections | Royal Libas by Tanya';
     fetchCollections()
       .then(setCollections)
       .catch((e) => console.error('Failed to load collections:', e));

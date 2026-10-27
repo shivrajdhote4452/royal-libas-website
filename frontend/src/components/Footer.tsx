@@ -18,7 +18,7 @@ export const Footer: React.FC = () => {
               </span>
             </Link>
             <p className="text-xs text-gray-600 leading-relaxed">
-              Curated festive silhouettes and effortless everyday co-ord sets. Designed with premium fabrics and artisanal craftsmanship for modern women.
+              Curated festive silhouettes and effortless everyday co-ord sets. Designed with pure breathable textiles and artisanal craftsmanship in Jaipur, Rajasthan.
             </p>
             <div className="flex items-center space-x-3 pt-1">
               <a
@@ -31,7 +31,7 @@ export const Footer: React.FC = () => {
                 <Instagram className="w-4 h-4" />
               </a>
               <a
-                href="mailto:contact@royallibas.com"
+                href="mailto:care@royallibas.com"
                 className="w-8 h-8 rounded-full bg-[#5B111A]/10 text-[#5B111A] flex items-center justify-center hover:bg-[#5B111A] hover:text-white transition-colors"
                 aria-label="Email"
               >
@@ -62,6 +62,11 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
+                <Link to="/shop?collection=bestsellers" className="hover:text-[#5B111A] transition-colors">
+                  Bestsellers
+                </Link>
+              </li>
+              <li>
                 <Link to="/shop?category=Kurti+Sets" className="hover:text-[#5B111A] transition-colors">
                   Kurti Sets
                 </Link>
@@ -72,28 +77,49 @@ export const Footer: React.FC = () => {
           {/* Customer Care & Policies */}
           <div>
             <h4 className="font-serif font-bold text-[#5B111A] text-sm uppercase tracking-wider mb-4">
-              Customer Care
+              Customer Care & Policies
             </h4>
             <ul className="space-y-2.5 text-xs text-gray-600">
               <li>
-                <Link to="/track-order" className="hover:text-[#5B111A] transition-colors">
-                  Track Your Order
+                <Link to="/track-order" className="hover:text-[#5B111A] transition-colors font-medium text-[#5B111A]">
+                  Track Your Order →
                 </Link>
               </li>
               <li>
-                <span className="text-gray-500 cursor-default">Size Chart & Fit Guide</span>
+                <Link to="/about" className="hover:text-[#5B111A] transition-colors">
+                  About Tanya & Atelier Story
+                </Link>
               </li>
               <li>
-                <span className="text-gray-500 cursor-default">7-Day Size Exchange Policy</span>
+                <Link to="/shipping-policy" className="hover:text-[#5B111A] transition-colors">
+                  Shipping & Delivery Info (3–5 Days)
+                </Link>
               </li>
               <li>
-                <span className="text-gray-500 cursor-default">Shipping & Delivery Info (3–5 Days)</span>
+                <Link to="/return-policy" className="hover:text-[#5B111A] transition-colors">
+                  7-Day Size Exchange Promise
+                </Link>
+              </li>
+              <li>
+                <Link to="/contact" className="hover:text-[#5B111A] transition-colors">
+                  Contact & WhatsApp Concierge
+                </Link>
+              </li>
+              <li>
+                <Link to="/privacy-policy" className="hover:text-[#5B111A] transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms-of-service" className="hover:text-[#5B111A] transition-colors">
+                  Terms of Service
+                </Link>
               </li>
             </ul>
           </div>
 
           {/* Trust Guarantees */}
-          <div className="bg-white p-4 rounded-lg border border-[#E8DFD0] space-y-3">
+          <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] space-y-3.5 shadow-sm">
             <h4 className="font-serif font-bold text-[#5B111A] text-xs uppercase tracking-wider">
               Boutique Promise
             </h4>
@@ -103,21 +129,25 @@ export const Footer: React.FC = () => {
             </div>
             <div className="flex items-start gap-2.5 text-xs text-gray-600">
               <RefreshCw className="w-4 h-4 text-[#C59B27] shrink-0 mt-0.5" />
-              <span>Hassle-free size exchange within 7 days.</span>
+              <span>Hassle-free 7-day doorstep size exchange.</span>
             </div>
             <div className="flex items-start gap-2.5 text-xs text-gray-600">
               <ShieldCheck className="w-4 h-4 text-[#C59B27] shrink-0 mt-0.5" />
-              <span>100% Genuine Handcrafted Pieces.</span>
+              <span>100% Genuine Handcrafted Pieces tailored in Jaipur.</span>
             </div>
           </div>
         </div>
 
-        {/* Bottom Credits & Phase Notice */}
+        {/* Bottom Credits */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-4 text-center sm:text-left">
-          <p>© {new Date().getFullYear()} Royal Libas by Tanya. All rights reserved.</p>
-          <p className="italic">
-            Phase 3: Storefront Shell, Home, Shop & Product with Live API Integration.
-          </p>
+          <p>© {new Date().getFullYear()} Royal Libas by Tanya. Handcrafted in Jaipur, India. All rights reserved.</p>
+          <div className="flex items-center gap-4 text-gray-400">
+            <Link to="/privacy-policy" className="hover:text-gray-600 transition-colors">Privacy</Link>
+            <span>•</span>
+            <Link to="/terms-of-service" className="hover:text-gray-600 transition-colors">Terms</Link>
+            <span>•</span>
+            <Link to="/contact" className="hover:text-gray-600 transition-colors">Contact</Link>
+          </div>
         </div>
       </div>
     </footer>

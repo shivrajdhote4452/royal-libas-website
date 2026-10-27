@@ -38,6 +38,7 @@ export const OrderSuccess: React.FC = () => {
       .then((data) => {
         if (isMounted) {
           setOrder(data);
+          document.title = `Order Confirmed: ${data.order_code} | Royal Libas`;
           setLoading(false);
         }
       })

@@ -260,7 +260,7 @@ def test_admin_customers_and_products_list():
     prod_res = client.get("/admin/products", headers=headers)
     assert prod_res.status_code == 200
     products = prod_res.json()
-    assert len(products) == 5
+    assert len(products) >= 16
     for p in products:
         assert len(p["variants"]) >= 3
     print(f"  [OK] Admin products list returned all {len(products)} products with full variants")

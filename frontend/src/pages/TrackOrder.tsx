@@ -24,6 +24,10 @@ export const TrackOrder: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<OrderTrackResponse | null>(null);
 
+  useEffect(() => {
+    document.title = 'Track Your Order | Royal Libas by Tanya';
+  }, []);
+
   // Auto-search if query params are present in URL
   useEffect(() => {
     const codeParam = searchParams.get('order_code');

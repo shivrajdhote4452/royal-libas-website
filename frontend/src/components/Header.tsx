@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, Menu, X } from 'lucide-react';
+import { ShoppingBag, Menu, X, Sparkles } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export const Header: React.FC = () => {
@@ -10,12 +10,12 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#E8DFD0]">
-      {/* Top Notice Bar */}
-      <div className="bg-[#5B111A] text-[#FAF7F2] text-xs py-1.5 px-4 text-center tracking-wider font-medium">
-        <span className="inline-block px-2 py-0.5 bg-[#C59B27] text-[#3A080F] text-[10px] font-bold rounded mr-2 uppercase tracking-widest">
-          Notice
+      {/* Top Boutique Announcement Bar */}
+      <div className="bg-[#5B111A] text-[#FAF7F2] text-xs py-2 px-4 text-center tracking-wider font-medium flex items-center justify-center gap-2">
+        <Sparkles className="w-3.5 h-3.5 text-[#C59B27] shrink-0" />
+        <span>
+          Festive Collection Live • Free Express Delivery on Prepaid Orders • Handcrafted by Tanya
         </span>
-        Sample catalogue demonstration — Real photos coming in Phase 6
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -43,7 +43,7 @@ export const Header: React.FC = () => {
           </Link>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-8 text-sm font-medium">
+          <nav className="hidden md:flex items-center space-x-7 text-sm font-medium">
             <Link
               to="/"
               className={`transition-colors py-1 border-b-2 ${
@@ -62,7 +62,7 @@ export const Header: React.FC = () => {
                   : 'text-gray-700 hover:text-[#5B111A] border-transparent'
               }`}
             >
-              Shop
+              Shop All
             </Link>
             <Link
               to="/shop?collection=festive-edit"
@@ -75,6 +75,26 @@ export const Header: React.FC = () => {
               className="text-gray-700 hover:text-[#5B111A] transition-colors py-1 border-b-2 border-transparent"
             >
               Everyday Cotton
+            </Link>
+            <Link
+              to="/about"
+              className={`transition-colors py-1 border-b-2 ${
+                location.pathname === '/about'
+                  ? 'text-[#5B111A] border-[#C59B27] font-semibold'
+                  : 'text-gray-700 hover:text-[#5B111A] border-transparent'
+              }`}
+            >
+              About
+            </Link>
+            <Link
+              to="/contact"
+              className={`transition-colors py-1 border-b-2 ${
+                location.pathname === '/contact'
+                  ? 'text-[#5B111A] border-[#C59B27] font-semibold'
+                  : 'text-gray-700 hover:text-[#5B111A] border-transparent'
+              }`}
+            >
+              Contact
             </Link>
             <Link
               to="/track-order"
@@ -100,7 +120,7 @@ export const Header: React.FC = () => {
                 Cart
               </span>
               {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 sm:top-0 sm:right-auto bg-[#5B111A] text-white text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#FAF7F2] shadow-sm">
+                <span className="absolute -top-1 -right-1 bg-[#5B111A] text-white text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#FAF7F2] animate-in fade-in zoom-in duration-200">
                   {totalItems}
                 </span>
               )}
@@ -109,41 +129,65 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Menu Dropdown */}
+      {/* Mobile Drawer Navigation Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-[#E8DFD0] px-4 pt-3 pb-6 space-y-3 shadow-lg">
+        <div className="md:hidden bg-[#FAF7F2] border-b border-[#E8DFD0] px-4 pt-3 pb-6 space-y-3 animate-in slide-in-from-top-2 duration-200">
           <Link
             to="/"
             onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded text-base font-medium text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+            className={`block px-3 py-2 rounded-md text-base font-medium ${
+              location.pathname === '/' ? 'bg-[#5B111A] text-white' : 'text-gray-800 hover:bg-[#E8DFD0]/50'
+            }`}
           >
             Home
           </Link>
           <Link
             to="/shop"
             onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded text-base font-medium text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+            className={`block px-3 py-2 rounded-md text-base font-medium ${
+              location.pathname === '/shop' ? 'bg-[#5B111A] text-white' : 'text-gray-800 hover:bg-[#E8DFD0]/50'
+            }`}
           >
-            Shop All
+            Shop All Designs
           </Link>
           <Link
             to="/shop?collection=festive-edit"
             onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded text-base font-medium text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+            className="block px-3 py-2 rounded-md text-base font-medium text-gray-800 hover:bg-[#E8DFD0]/50"
           >
             Festive Edit
           </Link>
           <Link
             to="/shop?collection=everyday-cotton"
             onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded text-base font-medium text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+            className="block px-3 py-2 rounded-md text-base font-medium text-gray-800 hover:bg-[#E8DFD0]/50"
           >
-            Everyday Cotton
+            Everyday Cotton Co-ords
+          </Link>
+          <Link
+            to="/about"
+            onClick={() => setMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-md text-base font-medium ${
+              location.pathname === '/about' ? 'bg-[#5B111A] text-white' : 'text-gray-800 hover:bg-[#E8DFD0]/50'
+            }`}
+          >
+            About Tanya & Atelier
+          </Link>
+          <Link
+            to="/contact"
+            onClick={() => setMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-md text-base font-medium ${
+              location.pathname === '/contact' ? 'bg-[#5B111A] text-white' : 'text-gray-800 hover:bg-[#E8DFD0]/50'
+            }`}
+          >
+            Contact & WhatsApp
           </Link>
           <Link
             to="/track-order"
             onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded text-base font-medium text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+            className={`block px-3 py-2 rounded-md text-base font-medium ${
+              location.pathname === '/track-order' ? 'bg-[#5B111A] text-white' : 'text-gray-800 hover:bg-[#E8DFD0]/50'
+            }`}
           >
             Track Order
           </Link>

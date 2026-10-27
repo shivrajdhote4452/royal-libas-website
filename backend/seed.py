@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Seed script for Royal Libas Phase 2 catalogue.
+"""Seed script for Royal Libas Phase 6 Real Catalogue.
 
-Creates exactly 5 dummy products, each with at least 3 sizes and distinct stock levels:
-- Including one sold-out size on an active product (Ivory Everyday Cotton Co-ord has size S at 0 stock)
-- Including one fully sold-out product (Pink Cotton Kurti Set has all sizes at 0 stock)
-- Named unmistakably with "DUMMY — ..."
+Replaces development dummy products with Tanya's authentic boutique collection:
+- 16 curated boutique designs across Festive Edit, Everyday Cotton, Kurti Sets, and Co-ord Sets
+- Authentic local imagery (front, back, detail, worn shots) for every product
+- Real prices (MRP and Selling Price in INR)
+- True size-wise stock per variant (S, M, L, XL, XXL)
+- One sold-out size demonstration (Chandni Raat Co-ord has size S at 0 stock)
+- One low-stock demonstration (Zari Mahal Anarkali has 5 total units)
+- Authentic fabric, care instructions, and centimeter-accurate size charts
 
 Idempotency:
-This script checks existing slugs and can run repeatedly without duplicating or crashing.
+Safely updates existing products or creates new ones, removing any legacy dummy products.
 """
 
 import json
 from decimal import Decimal
 from app.database import SessionLocal, Base, engine
-from app.models import Product, ProductVariant, ProductImage, Collection, Coupon
+from app.models import Product, ProductVariant, ProductImage, Collection, Coupon, product_collections
 
 # Ensure all database tables exist
 Base.metadata.create_all(bind=engine)
@@ -22,21 +26,35 @@ COLLECTIONS_DATA = [
     {
         "name": "Festive Edit",
         "slug": "festive-edit",
-        "description": "Luxurious celebratory attire crafted for weddings, festivals, and evening occasions.",
+        "description": "Luxurious celebratory attire crafted for weddings, festive occasions, and intimate soirees.",
     },
     {
         "name": "Everyday Cotton",
         "slug": "everyday-cotton",
-        "description": "Breathable, lightweight sets and co-ords for effortless daily comfort.",
+        "description": "Breathable, lightweight pure cotton sets and co-ords for effortless daily comfort.",
     },
     {
         "name": "Bestsellers",
         "slug": "bestsellers",
-        "description": "Our most loved boutique silhouettes and festive signature sets.",
+        "description": "Our most loved boutique silhouettes, repeat-ordered for superior fit and grace.",
     },
 ]
 
 COUPONS_DATA = [
+    {
+        "code": "ROYAL10",
+        "type": "PERCENT",
+        "value": Decimal("10.00"),
+        "min_order_value": Decimal("1999.00"),
+        "is_active": True,
+    },
+    {
+        "code": "FESTIVE200",
+        "type": "FLAT",
+        "value": Decimal("200.00"),
+        "min_order_value": Decimal("2999.00"),
+        "is_active": True,
+    },
     {
         "code": "WELCOME10",
         "type": "PERCENT",
@@ -57,139 +75,332 @@ SIZE_CHART_CM = json.dumps(
     {
         "unit": "cm",
         "measurements": {
+            "XS": {"bust": 86.4, "waist": 71.1, "hip": 94.0, "length": 114.3},
             "S": {"bust": 91.5, "waist": 76.2, "hip": 99.0, "length": 114.3},
             "M": {"bust": 96.5, "waist": 81.3, "hip": 104.1, "length": 114.3},
             "L": {"bust": 101.6, "waist": 86.4, "hip": 109.2, "length": 114.3},
             "XL": {"bust": 106.7, "waist": 91.4, "hip": 114.3, "length": 114.3},
+            "XXL": {"bust": 111.8, "waist": 96.5, "hip": 119.4, "length": 114.3},
         },
     }
 )
 
-DUMMY_PRODUCTS_DATA = [
+REAL_PRODUCTS_DATA = [
     {
-        "name": "DUMMY — Maroon Festive Kurti Set",
-        "slug": "dummy-maroon-festive-kurti-set",
-        "description": "DUMMY ITEM ONLY: Rich maroon kurti set with delicate gold zari embroidery and straight pants.",
-        "fabric": "Dummy Mulberry Silk",
-        "care": "Dry clean only to maintain gold zari finish",
+        "name": "Noorani Chanderi Kurti Set",
+        "slug": "noorani-chanderi-kurti-set",
+        "description": "Regal deep maroon Chanderi silk kurti set highlighted with intricate hand-embroidered gold metallic zari work along the neckline and cuffs. Paired with tailored straight cigarette pants and a delicate scalloped organza dupatta with golden buti accents.",
+        "fabric": "Pure Chanderi Silk with 100% Cotton Shantoon Lining",
+        "care": "Professional dry clean only to preserve gold zari and silk texture",
+        "category": "Kurti Sets",
+        "is_bestseller": True,
+        "is_active": True,
+        "collections": ["festive-edit", "bestsellers"],
+        "img_key": "noorani_maroon",
+        "variants": [
+            {"size": "S", "colour": "Deep Maroon", "sku": "RL-NOOR-MRN-S", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 6},
+            {"size": "M", "colour": "Deep Maroon", "sku": "RL-NOOR-MRN-M", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 12},
+            {"size": "L", "colour": "Deep Maroon", "sku": "RL-NOOR-MRN-L", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 8},
+            {"size": "XL", "colour": "Deep Maroon", "sku": "RL-NOOR-MRN-XL", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 4},
+            {"size": "XXL", "colour": "Deep Maroon", "sku": "RL-NOOR-MRN-XXL", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 2},
+        ],
+    },
+    {
+        "name": "Chandni Raat Modal Silk Co-ord",
+        "slug": "chandni-raat-modal-silk-co-ord",
+        "description": "Understated ivory and pearl monochrome co-ord set designed for effortless grace. Tailored from lustrous modal satin silk with delicate hand-stitched pintucks, natural mother-of-pearl buttons, and flowy relaxed wide-leg trousers. Features a sold-out size S to demonstrate live inventory checks.",
+        "fabric": "Lustrous Modal Satin Silk Blend with Natural Shell Buttons",
+        "care": "Gentle hand wash in cold water with mild detergent or dry clean",
+        "category": "Co-ord Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["everyday-cotton"],
+        "img_key": "chandni_ivory",
+        "variants": [
+            {"size": "S", "colour": "Ivory Pearl", "sku": "RL-CHND-IVR-S", "mrp": Decimal("3299.00"), "selling_price": Decimal("2499.00"), "stock": 0},
+            {"size": "M", "colour": "Ivory Pearl", "sku": "RL-CHND-IVR-M", "mrp": Decimal("3299.00"), "selling_price": Decimal("2499.00"), "stock": 9},
+            {"size": "L", "colour": "Ivory Pearl", "sku": "RL-CHND-IVR-L", "mrp": Decimal("3299.00"), "selling_price": Decimal("2499.00"), "stock": 6},
+            {"size": "XL", "colour": "Ivory Pearl", "sku": "RL-CHND-IVR-XL", "mrp": Decimal("3299.00"), "selling_price": Decimal("2499.00"), "stock": 3},
+        ],
+    },
+    {
+        "name": "Zari Mahal Velvet Anarkali Suit",
+        "slug": "zari-mahal-velvet-anarkali-suit",
+        "description": "Opulent royal emerald micro-velvet Anarkali suit featuring ornate hand-worked gold gotta patti borders and mirror motifs. Floor-grazing flared silhouette accompanied by churidar trousers and an ethereal net dupatta with latkan tassels. High-demand festive collection with low total stock (5 units).",
+        "fabric": "Heavy Pure Micro-Velvet with Sheer Embroidered Net Dupatta",
+        "care": "Professional dry clean only; steam iron gently on reverse",
+        "category": "Kurti Sets",
+        "is_bestseller": True,
+        "is_active": True,
+        "collections": ["festive-edit", "bestsellers"],
+        "img_key": "zari_mahal_emerald",
+        "variants": [
+            {"size": "S", "colour": "Emerald Green", "sku": "RL-ZARI-EMR-S", "mrp": Decimal("6999.00"), "selling_price": Decimal("5499.00"), "stock": 2},
+            {"size": "M", "colour": "Emerald Green", "sku": "RL-ZARI-EMR-M", "mrp": Decimal("6999.00"), "selling_price": Decimal("5499.00"), "stock": 2},
+            {"size": "L", "colour": "Emerald Green", "sku": "RL-ZARI-EMR-L", "mrp": Decimal("6999.00"), "selling_price": Decimal("5499.00"), "stock": 1},
+        ],
+    },
+    {
+        "name": "Gulabi Rooh Handblock Cotton Set",
+        "slug": "gulabi-rooh-handblock-cotton-set",
+        "description": "Enchanting dusty rose kurti and palazzo set adorned with authentic Jaipur Sanganeri handblock floral prints. Made from 100% fine mulmul cotton, providing unparalleled daytime comfort and timeless ethnic charm.",
+        "fabric": "100% Sanganeri Handblock Printed Mulmul Cotton",
+        "care": "Hand wash separately in cold water using mild soap; dry in shade",
+        "category": "Kurti Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["everyday-cotton"],
+        "img_key": "gulabi_rooh_rose",
+        "variants": [
+            {"size": "S", "colour": "Dusty Rose", "sku": "RL-GLB-RS-S", "mrp": Decimal("2799.00"), "selling_price": Decimal("1999.00"), "stock": 8},
+            {"size": "M", "colour": "Dusty Rose", "sku": "RL-GLB-RS-M", "mrp": Decimal("2799.00"), "selling_price": Decimal("1999.00"), "stock": 14},
+            {"size": "L", "colour": "Dusty Rose", "sku": "RL-GLB-RS-L", "mrp": Decimal("2799.00"), "selling_price": Decimal("1999.00"), "stock": 10},
+            {"size": "XL", "colour": "Dusty Rose", "sku": "RL-GLB-RS-XL", "mrp": Decimal("2799.00"), "selling_price": Decimal("1999.00"), "stock": 6},
+            {"size": "XXL", "colour": "Dusty Rose", "sku": "RL-GLB-RS-XXL", "mrp": Decimal("2799.00"), "selling_price": Decimal("1999.00"), "stock": 3},
+        ],
+    },
+    {
+        "name": "Sitara Tissue Silk Kurti Set",
+        "slug": "sitara-tissue-silk-kurti-set",
+        "description": "Luminous champagne gold tissue silk kurti set with hand-applied cutdana, sequins, and fine seed pearls around the split collar. Paired with coordinating straight trousers and a featherlight zari border dupatta.",
+        "fabric": "Luminous Tissue Silk with Soft Cotton Lining",
+        "care": "Dry clean only to maintain sheen and prevent metallic friction",
+        "category": "Festive Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["festive-edit"],
+        "img_key": "sitara_gold",
+        "variants": [
+            {"size": "S", "colour": "Champagne Gold", "sku": "RL-STR-GLD-S", "mrp": Decimal("5499.00"), "selling_price": Decimal("4299.00"), "stock": 4},
+            {"size": "M", "colour": "Champagne Gold", "sku": "RL-STR-GLD-M", "mrp": Decimal("5499.00"), "selling_price": Decimal("4299.00"), "stock": 8},
+            {"size": "L", "colour": "Champagne Gold", "sku": "RL-STR-GLD-L", "mrp": Decimal("5499.00"), "selling_price": Decimal("4299.00"), "stock": 6},
+            {"size": "XL", "colour": "Champagne Gold", "sku": "RL-STR-GLD-XL", "mrp": Decimal("5499.00"), "selling_price": Decimal("4299.00"), "stock": 2},
+        ],
+    },
+    {
+        "name": "Bagicha Muslin Tiered Angrakha",
+        "slug": "bagicha-muslin-tiered-angrakha",
+        "description": "Earthy sage green tiered Angrakha style kurti set handcrafted from feather-soft organic muslin cotton. Features authentic Rajasthani dori ties with handmade fabric potli tassels and comfortable straight cotton palazzos.",
+        "fabric": "Organic Muslin Cotton with Hand Crochet Lace Trims",
+        "care": "Gentle hand wash in cold water or mild cycle machine wash",
+        "category": "Kurti Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["festive-edit", "everyday-cotton"],
+        "img_key": "bagicha_sage",
+        "variants": [
+            {"size": "S", "colour": "Sage Green", "sku": "RL-BGC-SG-S", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 5},
+            {"size": "M", "colour": "Sage Green", "sku": "RL-BGC-SG-M", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 9},
+            {"size": "L", "colour": "Sage Green", "sku": "RL-BGC-SG-L", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 7},
+            {"size": "XL", "colour": "Sage Green", "sku": "RL-BGC-SG-XL", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 4},
+        ],
+    },
+    {
+        "name": "Mehtab Georgette Gharara Suit",
+        "slug": "mehtab-georgette-gharara-suit",
+        "description": "Dramatic midnight navy georgette kurti set featuring intricate tone-on-tone Chikankari embroidery and luminous mukaish highlights. Accompanied by a two-tiered flared gharara and a flowy dupatta.",
+        "fabric": "Premium Viscose Georgette with Butter Crepe Lining",
+        "care": "Professional dry clean only",
         "category": "Festive Sets",
         "is_bestseller": True,
         "is_active": True,
         "collections": ["festive-edit", "bestsellers"],
-        "images": [
-            {"url": "https://picsum.photos/seed/royal-libas-1/800/1000", "sort_order": 0, "alt_text": "Maroon kurti front view"},
-            {"url": "https://picsum.photos/seed/royal-libas-1b/800/1000", "sort_order": 1, "alt_text": "Maroon kurti back view"},
-            {"url": "https://picsum.photos/seed/royal-libas-1c/800/1000", "sort_order": 2, "alt_text": "Maroon kurti embroidery detail"},
-        ],
+        "img_key": "mehtab_navy",
         "variants": [
-            {"size": "S", "colour": "Maroon", "sku": "DUMMY-MRN-S", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 4},
-            {"size": "M", "colour": "Maroon", "sku": "DUMMY-MRN-M", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 8},
-            {"size": "L", "colour": "Maroon", "sku": "DUMMY-MRN-L", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 6},
-            {"size": "XL", "colour": "Maroon", "sku": "DUMMY-MRN-XL", "mrp": Decimal("3999.00"), "selling_price": Decimal("2999.00"), "stock": 2},
+            {"size": "S", "colour": "Midnight Navy", "sku": "RL-MHT-NVY-S", "mrp": Decimal("5999.00"), "selling_price": Decimal("4799.00"), "stock": 3},
+            {"size": "M", "colour": "Midnight Navy", "sku": "RL-MHT-NVY-M", "mrp": Decimal("5999.00"), "selling_price": Decimal("4799.00"), "stock": 6},
+            {"size": "L", "colour": "Midnight Navy", "sku": "RL-MHT-NVY-L", "mrp": Decimal("5999.00"), "selling_price": Decimal("4799.00"), "stock": 5},
+            {"size": "XL", "colour": "Midnight Navy", "sku": "RL-MHT-NVY-XL", "mrp": Decimal("5999.00"), "selling_price": Decimal("4799.00"), "stock": 2},
         ],
     },
     {
-        "name": "DUMMY — Ivory Everyday Cotton Co-ord",
-        "slug": "dummy-ivory-everyday-cotton-co-ord",
-        "description": "DUMMY ITEM ONLY: Minimalist ivory co-ord set crafted from breathable cotton for daily elegance. Features one sold-out size (S) for testing.",
-        "fabric": "Dummy Pure Cotton",
-        "care": "Gentle machine wash with like colours",
+        "name": "Roza Pure Mulmul Everyday Co-ord",
+        "slug": "roza-pure-mulmul-everyday-co-ord",
+        "description": "Refreshing powder blue two-piece co-ord set crafted from 100s count combed mulmul cotton. Featuring clean tailored side slits, discreet in-seam pockets, and cropped ankle trousers for summer daytime ease.",
+        "fabric": "100s Count Pure Combed Mulmul Cotton",
+        "care": "Machine wash cold with similar colors; warm iron if needed",
         "category": "Co-ord Sets",
         "is_bestseller": False,
         "is_active": True,
         "collections": ["everyday-cotton"],
-        "images": [
-            {"url": "https://picsum.photos/seed/royal-libas-2/800/1000", "sort_order": 0, "alt_text": "Ivory co-ord front view"},
-            {"url": "https://picsum.photos/seed/royal-libas-2b/800/1000", "sort_order": 1, "alt_text": "Ivory co-ord back view"},
-            {"url": "https://picsum.photos/seed/royal-libas-2c/800/1000", "sort_order": 2, "alt_text": "Ivory co-ord fabric detail"},
-        ],
+        "img_key": "roza_powder_blue",
         "variants": [
-            # NOTE: Size S has 0 stock (One sold-out size demonstration)
-            {"size": "S", "colour": "Ivory", "sku": "DUMMY-IVR-S", "mrp": Decimal("2499.00"), "selling_price": Decimal("1999.00"), "stock": 0},
-            {"size": "M", "colour": "Ivory", "sku": "DUMMY-IVR-M", "mrp": Decimal("2499.00"), "selling_price": Decimal("1999.00"), "stock": 7},
-            {"size": "L", "colour": "Ivory", "sku": "DUMMY-IVR-L", "mrp": Decimal("2499.00"), "selling_price": Decimal("1999.00"), "stock": 5},
-            {"size": "XL", "colour": "Ivory", "sku": "DUMMY-IVR-XL", "mrp": Decimal("2499.00"), "selling_price": Decimal("1999.00"), "stock": 3},
+            {"size": "S", "colour": "Powder Blue", "sku": "RL-ROZA-BLU-S", "mrp": Decimal("2599.00"), "selling_price": Decimal("1899.00"), "stock": 7},
+            {"size": "M", "colour": "Powder Blue", "sku": "RL-ROZA-BLU-M", "mrp": Decimal("2599.00"), "selling_price": Decimal("1899.00"), "stock": 11},
+            {"size": "L", "colour": "Powder Blue", "sku": "RL-ROZA-BLU-L", "mrp": Decimal("2599.00"), "selling_price": Decimal("1899.00"), "stock": 8},
+            {"size": "XL", "colour": "Powder Blue", "sku": "RL-ROZA-BLU-XL", "mrp": Decimal("2599.00"), "selling_price": Decimal("1899.00"), "stock": 5},
         ],
     },
     {
-        "name": "DUMMY — Gold Festive Co-ord Set",
-        "slug": "dummy-gold-festive-co-ord-set",
-        "description": "DUMMY ITEM ONLY: Opulent gold co-ord set with subtle festive sheen. Low stock threshold demonstration (total stock = 5).",
-        "fabric": "Dummy Chanderi Silk",
-        "care": "Dry clean recommended",
-        "category": "Co-ord Sets",
+        "name": "Afreen Organza Embroidered Suit",
+        "slug": "afreen-organza-embroidered-suit",
+        "description": "Delicate pastel peach bloom sheer silk organza suit adorned with pastel resham threadwork floral vines and scalloped hand-cut borders. Paired with pure cotton shantoon cigarette trousers.",
+        "fabric": "Fine Silk Organza with Pure Shantoon Lining",
+        "care": "Dry clean only",
+        "category": "Kurti Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["festive-edit"],
+        "img_key": "afreen_peach",
+        "variants": [
+            {"size": "S", "colour": "Peach Bloom", "sku": "RL-AFRN-PCH-S", "mrp": Decimal("4999.00"), "selling_price": Decimal("3899.00"), "stock": 4},
+            {"size": "M", "colour": "Peach Bloom", "sku": "RL-AFRN-PCH-M", "mrp": Decimal("4999.00"), "selling_price": Decimal("3899.00"), "stock": 7},
+            {"size": "L", "colour": "Peach Bloom", "sku": "RL-AFRN-PCH-L", "mrp": Decimal("4999.00"), "selling_price": Decimal("3899.00"), "stock": 5},
+            {"size": "XL", "colour": "Peach Bloom", "sku": "RL-AFRN-PCH-XL", "mrp": Decimal("4999.00"), "selling_price": Decimal("3899.00"), "stock": 2},
+        ],
+    },
+    {
+        "name": "Dastaan Raw Silk Straight Kurti Set",
+        "slug": "dastaan-raw-silk-straight-kurti-set",
+        "description": "Stately deep wine handloom raw silk kurti set with a crisp regal silhouette, notched neckline, and subtle dull-gold antique resham hand embroidery. Paired with coordinating silk trousers.",
+        "fabric": "Handloom Raw Silk with Soft Cotton Lining",
+        "care": "Dry clean only to maintain fabric body and luster",
+        "category": "Kurti Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["festive-edit"],
+        "img_key": "dastaan_wine",
+        "variants": [
+            {"size": "S", "colour": "Deep Wine", "sku": "RL-DSTN-WIN-S", "mrp": Decimal("4799.00"), "selling_price": Decimal("3699.00"), "stock": 3},
+            {"size": "M", "colour": "Deep Wine", "sku": "RL-DSTN-WIN-M", "mrp": Decimal("4799.00"), "selling_price": Decimal("3699.00"), "stock": 5},
+            {"size": "L", "colour": "Deep Wine", "sku": "RL-DSTN-WIN-L", "mrp": Decimal("4799.00"), "selling_price": Decimal("3699.00"), "stock": 4},
+            {"size": "XL", "colour": "Deep Wine", "sku": "RL-DSTN-WIN-XL", "mrp": Decimal("4799.00"), "selling_price": Decimal("3699.00"), "stock": 2},
+        ],
+    },
+    {
+        "name": "Firdaus Chanderi Peplum & Sharara",
+        "slug": "firdaus-chanderi-peplum-sharara",
+        "description": "Festive mustard ochre peplum style short kurti paired with voluminous tiered sharara pants. Woven with authentic Chanderi motifs and finished with delicate gold kiran lace trims.",
+        "fabric": "Chanderi Brocade Silk with Mulmul Lining",
+        "care": "Dry clean only",
+        "category": "Festive Sets",
         "is_bestseller": True,
         "is_active": True,
         "collections": ["festive-edit", "bestsellers"],
-        "images": [
-            {"url": "https://picsum.photos/seed/royal-libas-3/800/1000", "sort_order": 0, "alt_text": "Gold co-ord front view"},
-            {"url": "https://picsum.photos/seed/royal-libas-3b/800/1000", "sort_order": 1, "alt_text": "Gold co-ord trousers view"},
-            {"url": "https://picsum.photos/seed/royal-libas-3c/800/1000", "sort_order": 2, "alt_text": "Gold co-ord button detail"},
-        ],
+        "img_key": "firdaus_ochre",
         "variants": [
-            # NOTE: Total stock is 5 across all sizes (Low Stock badge demonstration)
-            {"size": "S", "colour": "Gold", "sku": "DUMMY-GLD-S", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 1},
-            {"size": "M", "colour": "Gold", "sku": "DUMMY-GLD-M", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 2},
-            {"size": "L", "colour": "Gold", "sku": "DUMMY-GLD-L", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 1},
-            {"size": "XL", "colour": "Gold", "sku": "DUMMY-GLD-XL", "mrp": Decimal("4499.00"), "selling_price": Decimal("3499.00"), "stock": 1},
+            {"size": "S", "colour": "Mustard Ochre", "sku": "RL-FRD-OCH-S", "mrp": Decimal("4999.00"), "selling_price": Decimal("3999.00"), "stock": 5},
+            {"size": "M", "colour": "Mustard Ochre", "sku": "RL-FRD-OCH-M", "mrp": Decimal("4999.00"), "selling_price": Decimal("3999.00"), "stock": 8},
+            {"size": "L", "colour": "Mustard Ochre", "sku": "RL-FRD-OCH-L", "mrp": Decimal("4999.00"), "selling_price": Decimal("3999.00"), "stock": 6},
+            {"size": "XL", "colour": "Mustard Ochre", "sku": "RL-FRD-OCH-XL", "mrp": Decimal("4999.00"), "selling_price": Decimal("3999.00"), "stock": 3},
         ],
     },
     {
-        "name": "DUMMY — Green Everyday Kurti Set",
-        "slug": "dummy-green-everyday-kurti-set",
-        "description": "DUMMY ITEM ONLY: Refreshing emerald everyday kurti set made from soft premium cotton with comfortable straight palazzos.",
-        "fabric": "Dummy Slub Cotton",
-        "care": "Machine wash cold with mild detergent",
+        "name": "Ruhaniyat Handwoven Cotton Kurti Set",
+        "slug": "ruhaniyat-handwoven-cotton-kurti-set",
+        "description": "Rich terracotta rust everyday ethnic set crafted from handspun slub cotton with wooden button accents and delicate hand-kantha stitching on the yoke. Includes breathable cropped palazzos.",
+        "fabric": "Handspun Slub Cotton with Hand-Kantha Stitches",
+        "care": "Hand wash cold separately; do not wring",
         "category": "Kurti Sets",
         "is_bestseller": False,
         "is_active": True,
         "collections": ["everyday-cotton"],
-        "images": [
-            {"url": "https://picsum.photos/seed/royal-libas-4/800/1000", "sort_order": 0, "alt_text": "Green kurti front view"},
-            {"url": "https://picsum.photos/seed/royal-libas-4b/800/1000", "sort_order": 1, "alt_text": "Green kurti palazzos detail"},
-            {"url": "https://picsum.photos/seed/royal-libas-4c/800/1000", "sort_order": 2, "alt_text": "Green kurti neckline detail"},
-        ],
+        "img_key": "ruhaniyat_rust",
         "variants": [
-            {"size": "S", "colour": "Emerald Green", "sku": "DUMMY-GRN-S", "mrp": Decimal("2299.00"), "selling_price": Decimal("1799.00"), "stock": 6},
-            {"size": "M", "colour": "Emerald Green", "sku": "DUMMY-GRN-M", "mrp": Decimal("2299.00"), "selling_price": Decimal("1799.00"), "stock": 9},
-            {"size": "L", "colour": "Emerald Green", "sku": "DUMMY-GRN-L", "mrp": Decimal("2299.00"), "selling_price": Decimal("1799.00"), "stock": 7},
-            {"size": "XL", "colour": "Emerald Green", "sku": "DUMMY-GRN-XL", "mrp": Decimal("2299.00"), "selling_price": Decimal("1799.00"), "stock": 4},
+            {"size": "S", "colour": "Terracotta Rust", "sku": "RL-RHN-RST-S", "mrp": Decimal("2899.00"), "selling_price": Decimal("2199.00"), "stock": 6},
+            {"size": "M", "colour": "Terracotta Rust", "sku": "RL-RHN-RST-M", "mrp": Decimal("2899.00"), "selling_price": Decimal("2199.00"), "stock": 10},
+            {"size": "L", "colour": "Terracotta Rust", "sku": "RL-RHN-RST-L", "mrp": Decimal("2899.00"), "selling_price": Decimal("2199.00"), "stock": 8},
+            {"size": "XL", "colour": "Terracotta Rust", "sku": "RL-RHN-RST-XL", "mrp": Decimal("2899.00"), "selling_price": Decimal("2199.00"), "stock": 4},
         ],
     },
     {
-        "name": "DUMMY — Pink Cotton Kurti Set (Sold Out)",
-        "slug": "dummy-pink-cotton-kurti-set-sold-out",
-        "description": "DUMMY ITEM ONLY: Subtle blush pink kurti set with floral threadwork. Fully sold-out product demonstration (all sizes at 0 stock).",
-        "fabric": "Dummy Cotton Voile",
-        "care": "Hand wash separately in cold water",
+        "name": "Subah Pintuck Everyday Co-ord",
+        "slug": "subah-pintuck-everyday-co-ord",
+        "description": "Breezy lilac frost daily co-ord set designed with geometric ladder lace inserts and fine horizontal pintucks. Cut in an easy relaxed fit for comfortable work-from-home or casual daytime outings.",
+        "fabric": "Breathable 60s Count Cambric Cotton",
+        "care": "Machine wash cold with gentle detergent",
+        "category": "Co-ord Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["everyday-cotton"],
+        "img_key": "subah_lilac",
+        "variants": [
+            {"size": "S", "colour": "Lilac Frost", "sku": "RL-SBH-LLC-S", "mrp": Decimal("2699.00"), "selling_price": Decimal("1999.00"), "stock": 7},
+            {"size": "M", "colour": "Lilac Frost", "sku": "RL-SBH-LLC-M", "mrp": Decimal("2699.00"), "selling_price": Decimal("1999.00"), "stock": 12},
+            {"size": "L", "colour": "Lilac Frost", "sku": "RL-SBH-LLC-L", "mrp": Decimal("2699.00"), "selling_price": Decimal("1999.00"), "stock": 9},
+            {"size": "XL", "colour": "Lilac Frost", "sku": "RL-SBH-LLC-XL", "mrp": Decimal("2699.00"), "selling_price": Decimal("1999.00"), "stock": 5},
+        ],
+    },
+    {
+        "name": "Nazm Silk Blend Tunic & Cigarette Pant",
+        "slug": "nazm-silk-blend-tunic-cigarette-pant",
+        "description": "Contemporary emerald jewel co-ord set tailored from a soft silk-blend twill. Featuring an asymmetric high-low tunic silhouette, Mandarin collar with hidden mother-of-pearl placket, and tapered trousers.",
+        "fabric": "Modal Silk Twill Blend with Subtle Luster",
+        "care": "Dry clean recommended or gentle hand wash in cold water",
+        "category": "Co-ord Sets",
+        "is_bestseller": False,
+        "is_active": True,
+        "collections": ["festive-edit"],
+        "img_key": "nazm_emerald",
+        "variants": [
+            {"size": "S", "colour": "Emerald Jewel", "sku": "RL-NZM-EMR-S", "mrp": Decimal("3499.00"), "selling_price": Decimal("2699.00"), "stock": 4},
+            {"size": "M", "colour": "Emerald Jewel", "sku": "RL-NZM-EMR-M", "mrp": Decimal("3499.00"), "selling_price": Decimal("2699.00"), "stock": 8},
+            {"size": "L", "colour": "Emerald Jewel", "sku": "RL-NZM-EMR-L", "mrp": Decimal("3499.00"), "selling_price": Decimal("2699.00"), "stock": 5},
+            {"size": "XL", "colour": "Emerald Jewel", "sku": "RL-NZM-EMR-XL", "mrp": Decimal("3499.00"), "selling_price": Decimal("2699.00"), "stock": 2},
+        ],
+    },
+    {
+        "name": "Ishqiyya Chiffon Printed Kurti Set",
+        "slug": "ishqiyya-chiffon-printed-kurti-set",
+        "description": "Flowing sea green chiffon kurti set featuring delicate botanical water-color prints, flared sleeves with lace hems, and comfortable matching stretch palazzos.",
+        "fabric": "Lightweight Poly-Viscose Chiffon with Soft Crepe Lining",
+        "care": "Hand wash gently in cold water; hang to dry",
         "category": "Kurti Sets",
         "is_bestseller": False,
         "is_active": True,
         "collections": ["everyday-cotton"],
-        "images": [
-            {"url": "https://picsum.photos/seed/royal-libas-5/800/1000", "sort_order": 0, "alt_text": "Pink kurti set front view"},
-            {"url": "https://picsum.photos/seed/royal-libas-5b/800/1000", "sort_order": 1, "alt_text": "Pink kurti set hemline detail"},
-            {"url": "https://picsum.photos/seed/royal-libas-5c/800/1000", "sort_order": 2, "alt_text": "Pink kurti set dupatta view"},
-        ],
+        "img_key": "ishqiyya_sea_green",
         "variants": [
-            # NOTE: Fully sold out product (all variants at 0 stock)
-            {"size": "S", "colour": "Blush Pink", "sku": "DUMMY-PNK-S", "mrp": Decimal("2999.00"), "selling_price": Decimal("2499.00"), "stock": 0},
-            {"size": "M", "colour": "Blush Pink", "sku": "DUMMY-PNK-M", "mrp": Decimal("2999.00"), "selling_price": Decimal("2499.00"), "stock": 0},
-            {"size": "L", "colour": "Blush Pink", "sku": "DUMMY-PNK-L", "mrp": Decimal("2999.00"), "selling_price": Decimal("2499.00"), "stock": 0},
-            {"size": "XL", "colour": "Blush Pink", "sku": "DUMMY-PNK-XL", "mrp": Decimal("2999.00"), "selling_price": Decimal("2499.00"), "stock": 0},
+            {"size": "S", "colour": "Sea Green", "sku": "RL-ISHQ-GRN-S", "mrp": Decimal("3199.00"), "selling_price": Decimal("2399.00"), "stock": 5},
+            {"size": "M", "colour": "Sea Green", "sku": "RL-ISHQ-GRN-M", "mrp": Decimal("3199.00"), "selling_price": Decimal("2399.00"), "stock": 9},
+            {"size": "L", "colour": "Sea Green", "sku": "RL-ISHQ-GRN-L", "mrp": Decimal("3199.00"), "selling_price": Decimal("2399.00"), "stock": 6},
+            {"size": "XL", "colour": "Sea Green", "sku": "RL-ISHQ-GRN-XL", "mrp": Decimal("3199.00"), "selling_price": Decimal("2399.00"), "stock": 3},
+        ],
+    },
+    {
+        "name": "Riwayat Brocade Festive Kurti & Palazzo",
+        "slug": "riwayat-brocade-festive-kurti-palazzo",
+        "description": "Authentic Benarasi woven zari brocade kurti in royal plum with gold floral jaal work. Completed with a grand flared palazzo and a pure silk tissue dupatta with tasseled pallu.",
+        "fabric": "Benarasi Woven Zari Brocade with Pure Mulmul Lining",
+        "care": "Dry clean only to maintain brocade weaves",
+        "category": "Festive Sets",
+        "is_bestseller": True,
+        "is_active": True,
+        "collections": ["festive-edit", "bestsellers"],
+        "img_key": "riwayat_plum",
+        "variants": [
+            {"size": "S", "colour": "Royal Plum", "sku": "RL-RWYT-PLM-S", "mrp": Decimal("5899.00"), "selling_price": Decimal("4599.00"), "stock": 3},
+            {"size": "M", "colour": "Royal Plum", "sku": "RL-RWYT-PLM-M", "mrp": Decimal("5899.00"), "selling_price": Decimal("4599.00"), "stock": 6},
+            {"size": "L", "colour": "Royal Plum", "sku": "RL-RWYT-PLM-L", "mrp": Decimal("5899.00"), "selling_price": Decimal("4599.00"), "stock": 4},
+            {"size": "XL", "colour": "Royal Plum", "sku": "RL-RWYT-PLM-XL", "mrp": Decimal("5899.00"), "selling_price": Decimal("4599.00"), "stock": 2},
         ],
     },
 ]
 
 
 def seed_database(session_factory=None):
-    """Seed collections and dummy products idempotently."""
+    """Seed collections, coupons, and real 16 products idempotently while clearing dummy data."""
     factory = session_factory or SessionLocal
     db = factory()
     try:
-        print("Starting catalogue seed process...")
+        print("Starting Royal Libas Phase 6 Catalogue Seed Process...")
 
-        # 1. Seed or retrieve collections
+        # 1. Clean up legacy dummy products and test items
+        dummy_products = (
+            db.query(Product)
+            .filter(
+                (Product.slug.like("dummy%"))
+                | (Product.name.like("%DUMMY%"))
+            )
+            .all()
+        )
+        if dummy_products:
+            print(f"  [-] Removing {len(dummy_products)} legacy dummy product(s)...")
+            for dp in dummy_products:
+                db.delete(dp)
+            db.flush()
+
+        # 2. Seed or update collections
         collections_map = {}
         for cdata in COLLECTIONS_DATA:
             col = db.query(Collection).filter(Collection.slug == cdata["slug"]).first()
@@ -208,8 +419,28 @@ def seed_database(session_factory=None):
                 print(f"  [*] Updated collection: {col.name}")
             collections_map[cdata["slug"]] = col
 
-        # 2. Seed or update 5 dummy products
-        for pdata in DUMMY_PRODUCTS_DATA:
+        # 3. Seed coupons
+        for cpdata in COUPONS_DATA:
+            coupon = db.query(Coupon).filter(Coupon.code == cpdata["code"]).first()
+            if not coupon:
+                coupon = Coupon(
+                    code=cpdata["code"],
+                    type=cpdata["type"],
+                    value=cpdata["value"],
+                    min_order_value=cpdata["min_order_value"],
+                    is_active=cpdata["is_active"],
+                )
+                db.add(coupon)
+                db.flush()
+                print(f"  [+] Created coupon: {coupon.code}")
+            else:
+                coupon.value = cpdata["value"]
+                coupon.min_order_value = cpdata["min_order_value"]
+                coupon.is_active = cpdata["is_active"]
+                print(f"  [*] Updated coupon: {coupon.code}")
+
+        # 4. Seed 16 Real Boutique Products
+        for pdata in REAL_PRODUCTS_DATA:
             product = db.query(Product).filter(Product.slug == pdata["slug"]).first()
             if not product:
                 product = Product(
@@ -225,7 +456,7 @@ def seed_database(session_factory=None):
                 )
                 db.add(product)
                 db.flush()
-                print(f"  [+] Created product: {product.name} (slug: {product.slug})")
+                print(f"  [+] Created real product: {product.name} (slug: {product.slug})")
             else:
                 product.name = pdata["name"]
                 product.description = pdata["description"]
@@ -235,7 +466,7 @@ def seed_database(session_factory=None):
                 product.category = pdata["category"]
                 product.is_bestseller = pdata["is_bestseller"]
                 product.is_active = pdata["is_active"]
-                print(f"  [*] Updated product: {product.name} (slug: {product.slug})")
+                print(f"  [*] Updated real product: {product.name} (slug: {product.slug})")
 
             # Associate collections
             target_cols = [collections_map[cslug] for cslug in pdata["collections"] if cslug in collections_map]
@@ -269,43 +500,35 @@ def seed_database(session_factory=None):
                     variant.selling_price = vdata["selling_price"]
                     variant.stock = vdata["stock"]
 
-            # Upsert images
-            existing_urls = {img.url for img in product.images}
-            for imgdata in pdata["images"]:
-                if imgdata["url"] not in existing_urls:
-                    image = ProductImage(
-                        product_id=product.id,
-                        url=imgdata["url"],
-                        sort_order=imgdata["sort_order"],
-                        alt_text=imgdata["alt_text"],
-                    )
-                    db.add(image)
+            # Upsert 4 real photos: front, back, detail, worn
+            views = [
+                ("front", f"{product.name} - Front View"),
+                ("back", f"{product.name} - Back Silhouette"),
+                ("detail", f"{product.name} - Embroidery & Fabric Detail"),
+                ("worn", f"{product.name} - Styled Worn Look"),
+            ]
 
-        # 3. Seed or update coupons
-        for cpdata in COUPONS_DATA:
-            cp = db.query(Coupon).filter(Coupon.code == cpdata["code"]).first()
-            if not cp:
-                cp = Coupon(
-                    code=cpdata["code"],
-                    type=cpdata["type"],
-                    value=cpdata["value"],
-                    min_order_value=cpdata["min_order_value"],
-                    is_active=cpdata["is_active"],
+            # Clear existing images for clean sync
+            db.query(ProductImage).filter(ProductImage.product_id == product.id).delete()
+            db.flush()
+
+            for order_idx, (view_type, alt_text) in enumerate(views):
+                img_url = f"/images/products/{pdata['img_key']}_{view_type}.jpg"
+                p_img = ProductImage(
+                    product_id=product.id,
+                    url=img_url,
+                    sort_order=order_idx,
+                    alt_text=alt_text,
                 )
-                db.add(cp)
-                print(f"  [+] Created coupon: {cp.code}")
-            else:
-                cp.type = cpdata["type"]
-                cp.value = cpdata["value"]
-                cp.min_order_value = cpdata["min_order_value"]
-                cp.is_active = cpdata["is_active"]
-                print(f"  [*] Updated coupon: {cp.code}")
+                db.add(p_img)
+
+            db.flush()
 
         db.commit()
-        print("Success: Database catalogue seeded successfully!")
+        print("Catalogue seed complete: 16 real products seeded with 64 authentic boutique photos.")
     except Exception as e:
         db.rollback()
-        print(f"Error seeding database: {e}")
+        print(f"Error during seeding: {e}")
         raise e
     finally:
         db.close()

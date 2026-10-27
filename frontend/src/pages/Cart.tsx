@@ -11,6 +11,10 @@ export const Cart: React.FC = () => {
   const [validationResult, setValidationResult] = useState<CartValidateResponse | null>(null);
   const [isValidating, setIsValidating] = useState(false);
 
+  useEffect(() => {
+    document.title = 'Shopping Bag | Royal Libas by Tanya';
+  }, []);
+
   // Validate cart line items against live database stock
   useEffect(() => {
     if (items.length === 0) {
