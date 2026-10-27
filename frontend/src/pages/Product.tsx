@@ -19,10 +19,12 @@ import type { Product, ProductVariant } from '../types/product';
 import { fetchProductBySlug, formatPrice, fetchProducts } from '../lib/api';
 import { useCart } from '../context/CartContext';
 import { ProductCard } from '../components/ProductCard';
+import { useStoreSettings } from '../lib/settings';
 
 export const ProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { settings } = useStoreSettings();
   const { addToCart } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -445,7 +447,7 @@ export const ProductPage: React.FC = () => {
             <div className="grid grid-cols-4 gap-2 pt-4 border-t border-gray-100 text-center">
               <div className="flex flex-col items-center space-y-1">
                 <Truck className="w-4 h-4 text-[#C59B27]" />
-                <span className="text-[10px] text-gray-700 font-medium">Free Shipping above ₹1999</span>
+                <span className="text-[10px] text-gray-700 font-medium">Free Shipping above ₹{settings.freeShippingThreshold}</span>
               </div>
               <div className="flex flex-col items-center space-y-1">
                 <CreditCard className="w-4 h-4 text-[#C59B27]" />
@@ -506,9 +508,9 @@ export const ProductPage: React.FC = () => {
                 )}
                 {activeTab === 'shipping' && (
                   <div className="space-y-1.5">
-                    <p>• Dispatches within 24 hours from our Jaipur boutique.</p>
-                    <p>• Standard Delivery: 3–5 business days across India.</p>
-                    <p>• Free shipping on orders above ₹1999.</p>
+                    <p>• Dispatches within 24 hours from our boutique.</p>
+                    <p>• Standard Delivery: 5–7 business days across India.</p>
+                    <p>• Free shipping on orders above ₹{settings.freeShippingThreshold}.</p>
                   </div>
                 )}
                 {activeTab === 'exchange' && (

@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { X, Minus, Plus, Trash2, ShoppingBag, ArrowRight, Tag, Check, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { formatPrice, validateCoupon } from '../lib/api';
+import { useStoreSettings } from '../lib/settings';
 
 export const CartDrawer: React.FC = () => {
   const navigate = useNavigate();
   const { items, totalItems, subtotal, isDrawerOpen, closeDrawer, updateQuantity, removeFromCart } = useCart();
+  const { settings } = useStoreSettings();
   const [couponCode, setCouponCode] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   const [couponApplied, setCouponApplied] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export const CartDrawer: React.FC = () => {
   };
 
   const finalTotal = Math.max(0, subtotal - discountAmount);
-  const isFreeShipping = subtotal >= 1999 || subtotal === 0;
+  const isFreeShipping = subtotal >= settings.freeShippingThreshold || subtotal === 0;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">

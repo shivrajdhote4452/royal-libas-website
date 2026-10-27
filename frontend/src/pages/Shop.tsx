@@ -112,12 +112,12 @@ export const Shop: React.FC = () => {
     ? collections.find((c) => c.slug === currentCollection)?.name || 'Collection'
     : currentCategory || 'Kurti Sets';
 
-  // Category counts
+  // Category counts (real product counts from backend, zero mock fallbacks)
   const categoryCounts = {
-    'Kurti Sets': products.filter((p) => p.category === 'Kurti Sets').length || 8,
-    'Co-ord Sets': products.filter((p) => p.category === 'Co-ord Sets').length || 4,
-    'Festive Wear': products.filter((p) => p.category === 'Festive Wear' || p.category === 'Festive Sets').length || 4,
-    'Everyday Cotton': products.filter((p) => p.category === 'Everyday Cotton').length || 4,
+    'Kurti Sets': products.filter((p) => p.category === 'Kurti Sets').length,
+    'Co-ord Sets': products.filter((p) => p.category === 'Co-ord Sets' || p.category === 'Coord Sets').length,
+    'Festive Wear': products.filter((p) => p.category === 'Festive Wear' || p.category === 'Festive Sets').length,
+    'Everyday Cotton': products.filter((p) => p.category === 'Everyday Cotton').length,
   };
 
   const colors = [

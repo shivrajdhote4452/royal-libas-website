@@ -10,6 +10,8 @@ import {
   Settings,
   LogOut,
   ExternalLink,
+  Layers,
+  BarChart3,
 } from 'lucide-react';
 import { BrandLogo } from '../../components/BrandLogo';
 
@@ -32,9 +34,11 @@ export const AdminLayout: React.FC = () => {
     { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/admin/orders', label: 'Orders', icon: Package },
     { to: '/admin/products', label: 'Products', icon: ShoppingBag },
+    { to: '/admin/collections', label: 'Collections', icon: Layers },
     { to: '/admin/inventory', label: 'Inventory', icon: Boxes },
     { to: '/admin/customers', label: 'Customers', icon: Users },
     { to: '/admin/coupons', label: 'Coupons', icon: Tag },
+    { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
     { to: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -130,21 +134,21 @@ export const AdminLayout: React.FC = () => {
       {/* ========================================================
           MOBILE BOTTOM NAVIGATION (PDF Page 13)
           ======================================================== */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#3A080F] border-t border-[#5B111A] z-40 px-2 py-1.5 shadow-2xl">
-        <div className="flex justify-around items-center">
-          {navItems.slice(0, 5).map((item) => {
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#3A080F] border-t border-[#5B111A] z-40 px-2 py-1.5 shadow-2xl overflow-x-auto no-scrollbar">
+        <div className="flex items-center min-w-max mx-auto px-1 gap-1">
+          {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex flex-col items-center py-1 px-2 rounded text-[10px] transition-colors ${
-                    isActive ? 'text-[#EAD186] font-bold' : 'text-white/70 hover:text-white'
+                  `flex flex-col items-center py-1 px-2.5 rounded text-[10px] transition-colors shrink-0 ${
+                    isActive ? 'text-[#EAD186] font-bold bg-white/10' : 'text-white/70 hover:text-white'
                   }`
                 }
               >
-                <Icon className="w-4 h-4 mb-0.5" />
+                <Icon className="w-4 h-4 mb-0.5 text-[#C59B27]" />
                 <span>{item.label}</span>
               </NavLink>
             );

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Package,
   Phone,
@@ -217,6 +218,16 @@ export const AdminOrders: React.FC = () => {
                     >
                       {order.status}
                     </span>
+
+                    <Link
+                      to={`/admin/orders/${order.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#5B111A]/5 hover:bg-[#5B111A]/10 text-[#5B111A] text-xs font-semibold transition-colors"
+                      title="Open dedicated order page"
+                    >
+                      <span>Full Page</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </Link>
 
                     <span className="text-gray-400">
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}

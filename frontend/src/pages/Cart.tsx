@@ -4,10 +4,12 @@ import { Trash2, ShoppingBag, Plus, Minus, ArrowRight, AlertTriangle, ShieldChec
 import { useCart } from '../context/CartContext';
 import { formatPrice, validateCart } from '../lib/api';
 import { CartValidateResponse } from '../types/order';
+import { useStoreSettings } from '../lib/settings';
 
 export const Cart: React.FC = () => {
   const navigate = useNavigate();
   const { items, totalItems, subtotal, updateQuantity, removeFromCart } = useCart();
+  const { settings } = useStoreSettings();
   const [validationResult, setValidationResult] = useState<CartValidateResponse | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
@@ -219,7 +221,9 @@ export const Cart: React.FC = () => {
               <div className="flex justify-between">
                 <span>Shipping</span>
                 <span className="text-emerald-700 font-semibold">
-                  {subtotal >= 1999 ? 'Free' : '₹99 (Free above ₹1999)'}
+                  {subtotal >= settings.freeShippingThreshold
+                    ? 'Free'
+                    : `₹${settings.standardShippingFee} (Free above ₹${settings.freeShippingThreshold})`}
                 </span>
               </div>
             </div>

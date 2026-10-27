@@ -27,6 +27,9 @@ import { AdminCustomers } from './pages/admin/AdminCustomers';
 import { AdminInventory } from './pages/admin/AdminInventory';
 import { AdminCoupons } from './pages/admin/AdminCoupons';
 import { AdminSettings } from './pages/admin/AdminSettings';
+import { AdminCollections } from './pages/admin/AdminCollections';
+import { AdminReports } from './pages/admin/AdminReports';
+import { AdminOrderDetail } from './pages/admin/AdminOrderDetail';
 import { CartDrawer } from './components/CartDrawer';
 
 const StorefrontLayout: React.FC = () => {
@@ -53,10 +56,13 @@ export const App: React.FC = () => {
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
+            <Route path="orders/:id" element={<AdminOrderDetail />} />
             <Route path="products" element={<AdminProducts />} />
+            <Route path="collections" element={<AdminCollections />} />
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="customers" element={<AdminCustomers />} />
             <Route path="coupons" element={<AdminCoupons />} />
+            <Route path="reports" element={<AdminReports />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 

@@ -33,21 +33,31 @@ export const TrackOrder: React.FC = () => {
   useEffect(() => {
     const codeParam = searchParams.get('order_code');
     const phoneParam = searchParams.get('phone');
-    if (codeParam && phoneParam) {
-      handleSearch(codeParam, phoneParam);
+    if (codeParam) {
+      handleSearch(codeParam, phoneParam || '');
     }
   }, [searchParams]);
 
-  const handleSearch = async (code: string, phoneNumber: string) => {
-    const cleanCode = code.trim().toUpperCase();
-    const cleanPhone = phoneNumber.trim().replace(/\D/g, '');
+  const handleSearch = async (code: string, phoneNumber?: string) => {
+    const cleanCode = (code || '').trim().toUpperCase();
+    const cleanPhone = (phoneNumber || '').trim().replace(/\D/g, '');
+
+    // Phone-alone lookup must NOT return order details (privacy protection)
+    if (!cleanCode && cleanPhone) {
+      setError('Please enter your order reference (e.g. RL-2026-1001) to track your order.');
+      setOrder(null);
+      return;
+    }
 
     if (!cleanCode) {
       setError('Please enter your order reference (e.g. RL-2026-1001).');
+      setOrder(null);
       return;
     }
-    if (cleanPhone.length < 10) {
-      setError('Please enter the 10-digit mobile number used at checkout.');
+
+    if (cleanPhone && cleanPhone.length < 10) {
+      setError('Please enter a valid 10-digit mobile number, or leave it blank to look up by order reference.');
+      setOrder(null);
       return;
     }
 
@@ -55,12 +65,12 @@ export const TrackOrder: React.FC = () => {
     setError(null);
 
     try {
-      const data = await trackOrder(cleanCode, cleanPhone);
+      const data = await trackOrder(cleanCode, cleanPhone ? cleanPhone : undefined);
       setOrder(data);
     } catch (err: any) {
       setOrder(null);
       setError(
-        err.message || 'Order not found. Please check your order code and the phone number used at checkout.'
+        err.message || 'Order not found. Please check your order reference code.'
       );
     } finally {
       setLoading(false);
@@ -91,7 +101,7 @@ export const TrackOrder: React.FC = () => {
           Track Your Boutique Order
         </h1>
         <p className="text-xs sm:text-sm text-gray-600 mt-2 max-w-md mx-auto">
-          Enter your order reference code and the 10-digit mobile number provided at checkout.
+          Enter your order reference code to track your delivery progress. Mobile number is optional.
         </p>
       </div>
 
@@ -114,7 +124,7 @@ export const TrackOrder: React.FC = () => {
 
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold text-gray-700 mb-1">
-              10-Digit Mobile Number <span className="text-red-500">*</span>
+              Mobile Number <span className="text-gray-400 font-normal">(Optional)</span>
             </label>
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-xs sm:text-sm text-gray-400 font-medium">
@@ -122,7 +132,6 @@ export const TrackOrder: React.FC = () => {
               </span>
               <input
                 type="tel"
-                required
                 maxLength={10}
                 placeholder="9876543210"
                 value={phone}

@@ -44,6 +44,7 @@ export interface OrderCreatePayload {
   customer_name: string;
   phone: string;
   payment_method: 'PREPAID' | 'COD';
+  shipping_method?: 'STANDARD' | 'EXPRESS';
   coupon_code?: string;
   items: OrderItemCreate[];
   address: OrderAddress;

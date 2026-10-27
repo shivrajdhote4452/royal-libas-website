@@ -227,6 +227,16 @@ def admin_update_product(
         )
         product.collections = collections
 
+    if payload.images is not None:
+        product.images = [
+            ProductImage(
+                url=img.url,
+                sort_order=img.sort_order if img.sort_order is not None else idx + 1,
+                alt_text=img.alt_text,
+            )
+            for idx, img in enumerate(payload.images)
+        ]
+
     db.commit()
     db.refresh(product)
 

@@ -21,10 +21,12 @@ import {
   fetchPaymentGatewayConfig,
 } from '../lib/api';
 import { CouponValidateResponse, OrderCreatePayload, PaymentGatewayConfigResponse } from '../types/order';
+import { useStoreSettings } from '../lib/settings';
 
 export const Checkout: React.FC = () => {
   const navigate = useNavigate();
   const { items, subtotal, clearCart } = useCart();
+  const { settings } = useStoreSettings();
 
   // Form state
   const [customerName, setCustomerName] = useState('');
@@ -35,6 +37,7 @@ export const Checkout: React.FC = () => {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'PREPAID' | 'COD'>('PREPAID');
+  const [shippingMethod, setShippingMethod] = useState<'STANDARD' | 'EXPRESS'>('STANDARD');
   const [gatewayConfig, setGatewayConfig] = useState<PaymentGatewayConfigResponse | null>(null);
 
   // Coupon state
@@ -70,7 +73,13 @@ export const Checkout: React.FC = () => {
   // Dynamic server-aligned fee calculations
   const discountAmount = appliedCoupon?.valid ? appliedCoupon.discount : 0;
   const shippingCharge =
-    paymentMethod === 'PREPAID' ? 0 : subtotal >= 1500 ? 0 : 99;
+    shippingMethod === 'EXPRESS'
+      ? 99
+      : paymentMethod === 'PREPAID'
+      ? 0
+      : subtotal >= settings.freeShippingThreshold
+      ? 0
+      : 99;
   const estimatedTotal = Math.max(0, subtotal - discountAmount + shippingCharge);
 
   // Apply Coupon Handler
@@ -154,6 +163,7 @@ export const Checkout: React.FC = () => {
         customer_name: customerName.trim(),
         phone: cleanPhone,
         payment_method: paymentMethod,
+        shipping_method: shippingMethod,
         coupon_code: appliedCoupon?.valid ? appliedCoupon.code : undefined,
         items: cartItemsPayload,
         address: {
@@ -444,23 +454,52 @@ export const Checkout: React.FC = () => {
               Shipping Method
             </h2>
             <div className="space-y-2">
-              <label className="flex items-center justify-between p-3 rounded-lg border border-[#5B111A] bg-[#FAF7F2] cursor-pointer">
+              <label
+                onClick={() => setShippingMethod('STANDARD')}
+                className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                  shippingMethod === 'STANDARD'
+                    ? 'border-[#5B111A] bg-[#FAF7F2]'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+              >
                 <div className="flex items-center gap-2.5">
-                  <input type="radio" checked readOnly className="text-[#5B111A]" />
+                  <input
+                    type="radio"
+                    name="shipping_method"
+                    value="STANDARD"
+                    checked={shippingMethod === 'STANDARD'}
+                    onChange={() => setShippingMethod('STANDARD')}
+                    className="text-[#5B111A] focus:ring-[#5B111A]"
+                  />
                   <span className="text-xs sm:text-sm font-semibold text-gray-800">
-                    Standard Delivery (3–5 days)
+                    Standard Delivery (5–7 days)
                   </span>
                 </div>
                 <span className="text-xs font-bold text-emerald-700">Free</span>
               </label>
-              <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white cursor-pointer opacity-80">
+
+              <label
+                onClick={() => setShippingMethod('EXPRESS')}
+                className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                  shippingMethod === 'EXPRESS'
+                    ? 'border-[#5B111A] bg-[#FAF7F2]'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+              >
                 <div className="flex items-center gap-2.5">
-                  <input type="radio" disabled className="text-gray-400" />
-                  <span className="text-xs sm:text-sm font-medium text-gray-600">
-                    Express Delivery (1–2 days)
+                  <input
+                    type="radio"
+                    name="shipping_method"
+                    value="EXPRESS"
+                    checked={shippingMethod === 'EXPRESS'}
+                    onChange={() => setShippingMethod('EXPRESS')}
+                    className="text-[#5B111A] focus:ring-[#5B111A]"
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-800">
+                    Express Delivery (2–3 days)
                   </span>
                 </div>
-                <span className="text-xs font-semibold text-gray-600">₹99</span>
+                <span className="text-xs font-semibold text-gray-800">₹99</span>
               </label>
             </div>
           </div>
@@ -542,10 +581,10 @@ export const Checkout: React.FC = () => {
                       <span>Cash on Delivery (COD)</span>
                     </span>
                     <span className="text-[11px] font-semibold text-gray-600">
-                      {subtotal >= 1500 ? (
+                      {subtotal >= settings.freeShippingThreshold ? (
                         <span className="text-emerald-700 font-bold">FREE SHIPPING</span>
                       ) : (
-                        '+ Rs. 99 shipping'
+                        `+ Rs. ${settings.standardShippingFee} shipping`
                       )}
                     </span>
                   </div>

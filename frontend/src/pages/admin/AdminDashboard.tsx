@@ -9,15 +9,18 @@ import {
   Loader2,
   ChevronDown
 } from 'lucide-react';
-import { fetchAdminDashboard, fetchAdminOrders, formatPrice } from '../../lib/api';
+import { fetchAdminDashboard, fetchAdminOrders, fetchAdminProducts, formatPrice } from '../../lib/api';
 import { AdminDashboardResponse, OrderResponse } from '../../types/order';
 
 export const AdminDashboard: React.FC = () => {
   const [data, setData] = useState<AdminDashboardResponse | null>(null);
+  const [allOrders, setAllOrders] = useState<OrderResponse[]>([]);
   const [recentOrders, setRecentOrders] = useState<OrderResponse[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState('Last 30 Days');
+  const [hoveredPointIdx, setHoveredPointIdx] = useState<number | null>(null);
 
   const token = localStorage.getItem('royal_libas_admin_token') || '';
 
@@ -25,12 +28,15 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [dashRes, ordersRes] = await Promise.all([
+      const [dashRes, ordersRes, productsRes] = await Promise.all([
         fetchAdminDashboard(token),
         fetchAdminOrders(token).catch(() => []),
+        fetchAdminProducts(token).catch(() => []),
       ]);
       setData(dashRes);
+      setAllOrders(ordersRes);
       setRecentOrders(ordersRes.slice(0, 5));
+      setTotalProducts(productsRes.length);
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard data');
     } finally {
@@ -65,9 +71,51 @@ export const AdminDashboard: React.FC = () => {
     );
   }
 
-  // Realistic metrics derived from database / live data
-  const totalRevenue = data.total_orders * 2899;
-  const newCustomers = Math.max(1, Math.round(data.total_orders * 0.75));
+  // Real metrics calculated from live database records - ZERO placeholders
+  const activeOrders = allOrders.filter((o) => o.status.toUpperCase() !== 'CANCELLED');
+  const totalRevenue = activeOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const distinctCustomers = new Set(
+    allOrders.map((o) => o.phone.trim().replace(/\D/g, '')).filter(Boolean)
+  ).size;
+  const totalOrdersCount = allOrders.length;
+
+  // Real 7-day daily sales aggregation
+  const chartDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const isoKey = d.toISOString().slice(0, 10);
+    const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return { isoKey, label };
+  });
+
+  const dailyTotals = chartDays.map((day) => {
+    const dayOrders = activeOrders.filter((o) => {
+      const orderDate = new Date(o.created_at).toISOString().slice(0, 10);
+      return orderDate === day.isoKey;
+    });
+    const total = dayOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+    return { ...day, total, count: dayOrders.length };
+  });
+
+  const maxDaily = Math.max(...dailyTotals.map((d) => d.total), 0);
+  const chartWidth = 600;
+  const paddingX = 40;
+  const baselineY = 135;
+  const topY = 25;
+  const usableHeight = baselineY - topY;
+
+  const getX = (idx: number) => paddingX + idx * ((chartWidth - paddingX * 2) / (dailyTotals.length - 1));
+  const getY = (val: number) => {
+    if (maxDaily === 0) return baselineY;
+    return baselineY - (val / maxDaily) * usableHeight;
+  };
+
+  const pointsPath = dailyTotals.map((d, idx) => `${getX(idx)},${getY(d.total)}`).join(' L ');
+  const areaPath = `M ${getX(0)},${baselineY} L ${pointsPath} L ${getX(dailyTotals.length - 1)},${baselineY} Z`;
+  const linePath = `M ${pointsPath}`;
+
+  const activeHoverIdx = hoveredPointIdx !== null ? hoveredPointIdx : dailyTotals.length - 1;
+  const activePoint = dailyTotals[activeHoverIdx] || dailyTotals[0];
 
   return (
     <div className="space-y-8 font-sans">
@@ -113,15 +161,22 @@ export const AdminDashboard: React.FC = () => {
           2. 4 KPI CARDS (PDF Page 12)
           Total Orders, Total Revenue, Total Products, New Customers
           ======================================================== */}
+      {/* ========================================================
+          2. 4 KPI CARDS (PDF Page 12)
+          Total Orders, Total Revenue, Total Products, New Customers
+          All derived from live database records - zero placeholder numbers
+          ======================================================== */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Total Orders */}
         <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
             <span>Total Orders</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">+12%</span>
+            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">
+              {data.orders_today > 0 ? `+${data.orders_today} today` : 'Live'}
+            </span>
           </div>
           <div className="text-2xl sm:text-3xl font-serif font-bold text-gray-900">
-            {data.total_orders || 156}
+            {totalOrdersCount}
           </div>
           <p className="text-[11px] text-gray-400">{data.orders_today} placed today</p>
         </div>
@@ -130,96 +185,119 @@ export const AdminDashboard: React.FC = () => {
         <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
             <span>Total Revenue</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">+10%</span>
+            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Net</span>
           </div>
           <div className="text-2xl sm:text-3xl font-serif font-bold text-[#5B111A]">
-            {formatPrice(totalRevenue || 345099)}
+            {formatPrice(totalRevenue)}
           </div>
-          <p className="text-[11px] text-gray-400">Net after discounts</p>
+          <p className="text-[11px] text-gray-400">Sum of non-cancelled orders</p>
         </div>
 
         {/* Total Products */}
         <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
             <span>Total Products</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">+3%</span>
+            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Live</span>
           </div>
           <div className="text-2xl sm:text-3xl font-serif font-bold text-gray-900">
-            28
+            {totalProducts}
           </div>
-          <p className="text-[11px] text-gray-400">16 sample drops active</p>
+          <p className="text-[11px] text-gray-400">Active catalogue designs</p>
         </div>
 
         {/* New Customers */}
         <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
-            <span>New Customers</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">+50%</span>
+            <span>Customers</span>
+            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Distinct</span>
           </div>
           <div className="text-2xl sm:text-3xl font-serif font-bold text-gray-900">
-            {newCustomers || 102}
+            {distinctCustomers}
           </div>
-          <p className="text-[11px] text-gray-400">Acquired this period</p>
+          <p className="text-[11px] text-gray-400">Unique buyer phone numbers</p>
         </div>
       </div>
 
       {/* ========================================================
-          3. SALES OVERVIEW (Interactive SVG Line Chart - PDF Page 12)
+          3. SALES OVERVIEW (Dynamic SVG Line Chart from Real Orders)
           ======================================================== */}
       <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-serif font-bold text-base text-gray-900">Sales Overview</h2>
-            <p className="text-xs text-gray-500">Daily gross sales performance</p>
+            <p className="text-xs text-gray-500">Real daily gross sales (Last 7 Days)</p>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-[#5B111A] font-semibold bg-[#5B111A]/5 px-2.5 py-1 rounded-md">
             <TrendingUp className="w-3.5 h-3.5 text-[#C59B27]" />
-            <span>Trending Upwards</span>
+            <span>{totalRevenue > 0 ? 'Active Sales' : 'Awaiting Orders'}</span>
           </div>
         </div>
 
         {/* SVG Chart */}
         <div className="pt-4 relative">
           {/* Tooltip Pill */}
-          <div className="absolute top-0 right-1/4 bg-white border border-[#E8DFD0] px-3 py-1.5 rounded-lg shadow-md text-center z-10">
-            <span className="text-xs font-bold text-[#5B111A] block">₹24,660</span>
-            <span className="text-[10px] text-gray-500">18 Oct</span>
+          <div
+            className="absolute top-0 bg-white border border-[#E8DFD0] px-3 py-1.5 rounded-lg shadow-md text-center z-10 transition-all pointer-events-none"
+            style={{
+              left: `${Math.min(Math.max(10, (getX(activeHoverIdx) / chartWidth) * 100 - 8), 80)}%`,
+            }}
+          >
+            <span className="text-xs font-bold text-[#5B111A] block">
+              {formatPrice(activePoint.total)}
+            </span>
+            <span className="text-[10px] text-gray-500">
+              {activePoint.label} ({activePoint.count} {activePoint.count === 1 ? 'order' : 'orders'})
+            </span>
           </div>
 
           <svg className="w-full h-44 overflow-visible" viewBox="0 0 600 160" preserveAspectRatio="none">
             {/* Grid Lines */}
             <line x1="0" y1="40" x2="600" y2="40" stroke="#F0EAE1" strokeDasharray="4 4" />
             <line x1="0" y1="90" x2="600" y2="90" stroke="#F0EAE1" strokeDasharray="4 4" />
-            <line x1="0" y1="140" x2="600" y2="140" stroke="#F0EAE1" />
+            <line x1="0" y1="135" x2="600" y2="135" stroke="#E8DFD0" />
 
             {/* Area Fill */}
-            <path
-              d="M 0 140 L 0 120 Q 50 110, 100 115 T 200 95 T 300 110 T 400 45 T 500 75 T 600 60 L 600 140 Z"
-              fill="rgba(91, 17, 26, 0.05)"
-            />
+            <path d={areaPath} fill="rgba(91, 17, 26, 0.06)" />
 
             {/* Smooth Crimson Curve */}
             <path
-              d="M 0 120 Q 50 110, 100 115 T 200 95 T 300 110 T 400 45 T 500 75 T 600 60"
+              d={linePath}
               fill="none"
               stroke="#5B111A"
               strokeWidth="2.5"
               strokeLinecap="round"
+              strokeLinejoin="round"
             />
 
-            {/* Active Data Point */}
-            <circle cx="400" cy="45" r="5" fill="#5B111A" stroke="#FFFFFF" strokeWidth="2" />
+            {/* Real Data Points */}
+            {dailyTotals.map((point, idx) => {
+              const cx = getX(idx);
+              const cy = getY(point.total);
+              const isActive = idx === activeHoverIdx;
+
+              return (
+                <g key={point.isoKey} className="cursor-pointer" onMouseEnter={() => setHoveredPointIdx(idx)}>
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={isActive ? 6 : 4}
+                    fill={isActive ? '#5B111A' : '#C59B27'}
+                    stroke="#FFFFFF"
+                    strokeWidth={2}
+                    className="transition-all"
+                  />
+                  {/* Invisible hit-target for easy hover on mobile/desktop */}
+                  <circle cx={cx} cy={cy} r={16} fill="transparent" />
+                </g>
+              );
+            })}
           </svg>
 
           {/* X-Axis Labels */}
-          <div className="flex justify-between text-[11px] text-gray-400 pt-2 font-medium">
-            <span>1 Oct</span>
-            <span>5 Oct</span>
-            <span>10 Oct</span>
-            <span>15 Oct</span>
-            <span>20 Oct</span>
-            <span>25 Oct</span>
-            <span>30 Oct</span>
+          <div className="flex justify-between text-[11px] text-gray-400 pt-2 font-medium px-4">
+            {dailyTotals.map((day) => (
+              <span key={day.isoKey}>{day.label}</span>
+            ))}
           </div>
         </div>
       </div>

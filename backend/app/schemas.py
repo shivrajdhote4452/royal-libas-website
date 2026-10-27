@@ -154,6 +154,7 @@ class ProductUpdate(BaseModel):
     is_bestseller: Optional[bool] = None
     is_active: Optional[bool] = None
     collection_ids: Optional[List[int]] = None
+    images: Optional[List[ProductImageCreate]] = None
 
 
 class ProductListResponse(BaseModel):
@@ -326,6 +327,7 @@ class OrderCreateRequest(BaseModel):
     customer_name: str
     phone: str
     payment_method: str  # PREPAID or COD
+    shipping_method: Optional[str] = "STANDARD"  # STANDARD or EXPRESS
     address: AddressCreate
     items: List[OrderItemRequest]
     coupon_code: Optional[str] = None
@@ -344,6 +346,16 @@ class OrderCreateRequest(BaseModel):
         method = v.upper().strip()
         if method not in ("PREPAID", "COD"):
             raise ValueError("Payment method must be either 'PREPAID' or 'COD'")
+        return method
+
+    @field_validator("shipping_method")
+    @classmethod
+    def validate_shipping_method(cls, v: Optional[str]) -> str:
+        if not v:
+            return "STANDARD"
+        method = v.upper().strip()
+        if method not in ("STANDARD", "EXPRESS"):
+            return "STANDARD"
         return method
 
     @field_validator("phone")

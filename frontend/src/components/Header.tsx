@@ -3,17 +3,19 @@ import { Link, useLocation } from 'react-router-dom';
 import { ShoppingBag, Menu, X, Search, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { BrandLogo } from './BrandLogo';
+import { useStoreSettings } from '../lib/settings';
 
 export const Header: React.FC = () => {
   const location = useLocation();
   const { totalItems, openDrawer } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { settings } = useStoreSettings();
 
   return (
     <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#E8DFD0]">
       {/* Top Boutique Announcement Bar - Option C Exact Text */}
       <div className="bg-[#5B111A] text-[#FAF7F2] text-[11px] sm:text-xs py-2 px-4 text-center tracking-wider font-medium flex items-center justify-center gap-2">
-        <span>Free shipping on orders above ₹1999 | COD Available | 3-5 Days Delivery</span>
+        <span>Free shipping on orders above ₹{settings.freeShippingThreshold} | COD Available | 3-5 Days Delivery</span>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

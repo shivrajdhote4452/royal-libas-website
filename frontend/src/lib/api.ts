@@ -143,13 +143,16 @@ import {
   AdminCustomerResponse,
 } from '../types/order';
 
-export async function trackOrder(orderCode: string, phone: string): Promise<OrderTrackResponse> {
+export async function trackOrder(orderCode: string, phone?: string): Promise<OrderTrackResponse> {
   const cleanCode = encodeURIComponent(orderCode.trim());
-  const cleanPhone = encodeURIComponent(phone.trim());
-  const response = await fetch(`${API_BASE_URL}/orders/track?order_code=${cleanCode}&phone=${cleanPhone}`);
+  let url = `${API_BASE_URL}/orders/track?order_code=${cleanCode}`;
+  if (phone && phone.trim()) {
+    url += `&phone=${encodeURIComponent(phone.trim())}`;
+  }
+  const response = await fetch(url);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Order not found. Please check your order code and mobile number.');
+    throw new Error(errorData.detail || 'Order not found. Please check your order reference code.');
   }
   return response.json();
 }

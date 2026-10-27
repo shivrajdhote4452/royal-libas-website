@@ -15,8 +15,10 @@ import {
 import { Product } from '../types/product';
 import { fetchProducts } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
+import { useStoreSettings } from '../lib/settings';
 
 export const Home: React.FC = () => {
+  const { settings } = useStoreSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export const Home: React.FC = () => {
           <div className="flex flex-col items-center justify-center p-2 space-y-1">
             <Truck className="w-5 h-5 text-[#C59B27]" />
             <h4 className="font-serif font-bold text-xs sm:text-sm text-gray-900">Free Shipping</h4>
-            <p className="text-[11px] text-gray-500">Above ₹1999</p>
+            <p className="text-[11px] text-gray-500">Above ₹{settings.freeShippingThreshold}</p>
           </div>
           <div className="flex flex-col items-center justify-center p-2 space-y-1">
             <CreditCard className="w-5 h-5 text-[#C59B27]" />
@@ -296,7 +298,7 @@ export const Home: React.FC = () => {
               <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
                 Shop the Reel
               </h2>
-              <p className="text-xs text-gray-500 mt-1">Curated styling reels from our Jaipur boutique</p>
+              <p className="text-xs text-gray-500 mt-1">Curated styling reels from Royal Libas</p>
             </div>
             <Link
               to="/shop"

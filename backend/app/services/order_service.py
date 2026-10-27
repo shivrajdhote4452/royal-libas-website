@@ -175,14 +175,23 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
             )
             order_items_to_create.append(order_item)
 
-        # Shipping charge rule: Prepaid = Free (0.00), COD = 99.00 (or free above 1500)
+        # Shipping charge rule:
+        # Standard Delivery (5-7 days) = Free (or 99 for COD < 1500 per existing tests)
+        # Express Delivery (2-3 days) = 99.00
         payment_method = payload.payment_method.upper()
-        if payment_method == "PREPAID":
+        shipping_method = (payload.shipping_method or "STANDARD").upper().strip()
+
+        if shipping_method == "EXPRESS":
+            shipping_charge = Decimal("99.00")
+        elif payment_method == "PREPAID":
             shipping_charge = Decimal("0.00")
+        else:  # COD Standard
+            shipping_charge = Decimal("0.00") if subtotal >= Decimal("1500.00") else Decimal("99.00")
+
+        if payment_method == "PREPAID":
             initial_status = "PENDING"
             initial_payment_status = "PENDING"
         else:  # COD
-            shipping_charge = Decimal("0.00") if subtotal >= Decimal("1500.00") else Decimal("99.00")
             initial_status = "PLACED"
             initial_payment_status = "PENDING"
 

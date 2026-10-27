@@ -6,6 +6,12 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Upload,
+  Trash2,
+  ArrowLeft,
+  ArrowRight,
+  Image as ImageIcon,
+  Check,
 } from 'lucide-react';
 import {
   fetchAdminProducts,
@@ -30,7 +36,6 @@ export const AdminProducts: React.FC = () => {
   const [newCategory, setNewCategory] = useState('Festive Sets');
   const [newFabric, setNewFabric] = useState('Pure Chanderi Silk');
   const [newCare, setNewCare] = useState('Dry clean only');
-  const [newImageUrl, setNewImageUrl] = useState('');
   const [initialPrice, setInitialPrice] = useState('2999');
 
   // Variant Add State
@@ -44,6 +49,15 @@ export const AdminProducts: React.FC = () => {
   const [editPrice, setEditPrice] = useState('');
   const [editStock, setEditStock] = useState('');
 
+  // Image Gallery State for Existing Products
+  const [photosMap, setPhotosMap] = useState<Record<number, string[]>>({});
+  const [photoUrlInput, setPhotoUrlInput] = useState<Record<number, string>>({});
+  const [isSavingGallery, setIsSavingGallery] = useState<number | null>(null);
+
+  // Image State for New Product Modal
+  const [newImages, setNewImages] = useState<string[]>([]);
+  const [newImageUrlInput, setNewImageUrlInput] = useState('');
+
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -55,6 +69,11 @@ export const AdminProducts: React.FC = () => {
     try {
       const res = await fetchAdminProducts(token);
       setProducts(res);
+      const initialMap: Record<number, string[]> = {};
+      res.forEach((p) => {
+        initialMap[p.id] = (p.images || []).map((img) => img.url);
+      });
+      setPhotosMap(initialMap);
       if (res.length > 0 && expandedProductId === null) {
         setExpandedProductId(res[0].id);
       }
@@ -68,6 +87,94 @@ export const AdminProducts: React.FC = () => {
   useEffect(() => {
     loadProducts();
   }, [token]);
+
+  // Image Handlers: Upload, Add URL, Reorder, Remove
+  const handleUploadFiles = (files: FileList | null, target: 'new' | number) => {
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (dataUrl) {
+          if (target === 'new') {
+            setNewImages((prev) => [...prev, dataUrl]);
+          } else {
+            setPhotosMap((prev) => ({
+              ...prev,
+              [target]: [...(prev[target] || []), dataUrl],
+            }));
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddUrl = (target: 'new' | number) => {
+    if (target === 'new') {
+      if (newImageUrlInput.trim()) {
+        setNewImages((prev) => [...prev, newImageUrlInput.trim()]);
+        setNewImageUrlInput('');
+      }
+    } else {
+      const url = (photoUrlInput[target] || '').trim();
+      if (url) {
+        setPhotosMap((prev) => ({
+          ...prev,
+          [target]: [...(prev[target] || []), url],
+        }));
+        setPhotoUrlInput((prev) => ({ ...prev, [target]: '' }));
+      }
+    }
+  };
+
+  const handleReorder = (target: 'new' | number, fromIdx: number, toIdx: number) => {
+    if (target === 'new') {
+      setNewImages((prev) => {
+        const copy = [...prev];
+        const [moved] = copy.splice(fromIdx, 1);
+        copy.splice(toIdx, 0, moved);
+        return copy;
+      });
+    } else {
+      setPhotosMap((prev) => {
+        const current = prev[target] || [];
+        const copy = [...current];
+        const [moved] = copy.splice(fromIdx, 1);
+        copy.splice(toIdx, 0, moved);
+        return { ...prev, [target]: copy };
+      });
+    }
+  };
+
+  const handleRemoveImage = (target: 'new' | number, index: number) => {
+    if (target === 'new') {
+      setNewImages((prev) => prev.filter((_, idx) => idx !== index));
+    } else {
+      setPhotosMap((prev) => ({
+        ...prev,
+        [target]: (prev[target] || []).filter((_, idx) => idx !== index),
+      }));
+    }
+  };
+
+  const handleSaveGallery = async (productId: number) => {
+    setIsSavingGallery(productId);
+    setActionError(null);
+    try {
+      const urls = photosMap[productId] || [];
+      const imagePayload = urls.map((url, idx) => ({
+        url,
+        sort_order: idx + 1,
+      }));
+      await adminUpdateProduct(token, productId, { images: imagePayload });
+      await loadProducts();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to save product photos');
+    } finally {
+      setIsSavingGallery(null);
+    }
+  };
 
   // Handle Create Product
   const handleCreateProduct = async (e: React.FormEvent) => {
@@ -97,7 +204,7 @@ export const AdminProducts: React.FC = () => {
         { size: 'M', selling_price: priceNum, mrp: priceNum + 1000, stock: 12 },
         { size: 'L', selling_price: priceNum, mrp: priceNum + 1000, stock: 6 },
       ],
-      images: newImageUrl.trim() ? [{ url: newImageUrl.trim(), sort_order: 1 }] : [],
+      images: newImages.map((url, idx) => ({ url, sort_order: idx + 1 })),
     };
 
     try {
@@ -105,7 +212,8 @@ export const AdminProducts: React.FC = () => {
       setShowAddModal(false);
       setNewProductName('');
       setNewProductSlug('');
-      setNewImageUrl('');
+      setNewImages([]);
+      setNewImageUrlInput('');
       await loadProducts();
     } catch (err: any) {
       setActionError(err.message || 'Failed to create product');
@@ -507,6 +615,122 @@ export const AdminProducts: React.FC = () => {
                         </button>
                       </div>
                     )}
+
+                    {/* Photos & Image Gallery Management (FIX 6) */}
+                    <div className="p-4 bg-white rounded-lg border border-[#E8DFD0] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4 text-[#C59B27]" />
+                          <span className="font-bold text-xs text-gray-800 uppercase tracking-wider">
+                            Product Images ({photosMap[product.id]?.length || 0})
+                          </span>
+                        </div>
+
+                        {photosMap[product.id] && (
+                          <button
+                            type="button"
+                            disabled={isSavingGallery === product.id}
+                            onClick={() => handleSaveGallery(product.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5B111A] hover:bg-[#3A080F] text-white text-xs font-semibold rounded shadow transition-colors disabled:opacity-50"
+                          >
+                            {isSavingGallery === product.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Check className="w-3.5 h-3.5" />
+                            )}
+                            <span>Save Image Order</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Photo Thumbnails with Reorder & Remove */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                        {(photosMap[product.id] || []).map((imgUrl, idx) => (
+                          <div
+                            key={idx}
+                            className="relative group bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm flex flex-col"
+                          >
+                            <div className="aspect-[3/4] bg-gray-100 overflow-hidden relative">
+                              <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                              {idx === 0 && (
+                                <span className="absolute top-1.5 left-1.5 bg-[#5B111A] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                                  Cover
+                                </span>
+                              )}
+                              <span className="absolute bottom-1.5 right-1.5 bg-black/60 text-white text-[9px] px-1 rounded">
+                                #{idx + 1}
+                              </span>
+                            </div>
+
+                            <div className="p-1 bg-[#FAF7F2] border-t border-gray-200 flex items-center justify-between">
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => handleReorder(product.id, idx, idx - 1)}
+                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded text-xs"
+                                  title="Move earlier"
+                                >
+                                  <ArrowLeft className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === (photosMap[product.id]?.length || 0) - 1}
+                                  onClick={() => handleReorder(product.id, idx, idx + 1)}
+                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded text-xs"
+                                  title="Move later"
+                                >
+                                  <ArrowRight className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(product.id, idx)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                title="Remove image"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Image Inputs */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
+                        <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8DFD0] hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-sm transition-colors">
+                          <Upload className="w-3.5 h-3.5 text-[#C59B27]" />
+                          <span>Upload Photos</span>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={(e) => handleUploadFiles(e.target.files, product.id)}
+                            className="hidden"
+                          />
+                        </label>
+
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="url"
+                            placeholder="Or paste photo URL (Cloudinary, Unsplash)"
+                            value={photoUrlInput[product.id] || ''}
+                            onChange={(e) =>
+                              setPhotoUrlInput((prev) => ({ ...prev, [product.id]: e.target.value }))
+                            }
+                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5B111A] bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddUrl(product.id)}
+                            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-900 text-white rounded text-xs font-semibold"
+                          >
+                            Add URL
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -608,18 +832,82 @@ export const AdminProducts: React.FC = () => {
 
               <div>
                 <label className="block font-semibold text-gray-700 mb-1">
-                  Photo URL
+                  Product Photos ({newImages.length})
                 </label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/... or Cloudinary URL"
-                  value={newImageUrl}
-                  onChange={(e) => setNewImageUrl(e.target.value)}
-                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A]"
-                />
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Leave empty to use elegant Royal Libas placeholder monogram.
-                </p>
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FAF7F2] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors">
+                    <Upload className="w-3.5 h-3.5 text-[#C59B27]" />
+                    <span>Upload Photos</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleUploadFiles(e.target.files, 'new')}
+                      className="hidden"
+                    />
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="Or paste photo URL"
+                    value={newImageUrlInput}
+                    onChange={(e) => setNewImageUrlInput(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddUrl('new')}
+                    className="px-3 py-2 bg-gray-800 text-white rounded text-xs font-semibold"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {newImages.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-gray-100">
+                    {newImages.map((url, idx) => (
+                      <div
+                        key={idx}
+                        className="relative bg-white rounded border border-gray-200 overflow-hidden flex flex-col"
+                      >
+                        <div className="aspect-[3/4] bg-gray-100 relative">
+                          <img src={url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                          {idx === 0 && (
+                            <span className="absolute top-1 left-1 bg-[#5B111A] text-white text-[8px] font-bold px-1 rounded">
+                              Cover
+                            </span>
+                          )}
+                        </div>
+                        <div className="p-1 bg-gray-50 flex items-center justify-between">
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleReorder('new', idx, idx - 1)}
+                              className="p-0.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded"
+                            >
+                              <ArrowLeft className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === newImages.length - 1}
+                              onClick={() => handleReorder('new', idx, idx + 1)}
+                              className="p-0.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded"
+                            >
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage('new', idx)}
+                            className="p-0.5 text-red-600 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <p className="text-[11px] text-gray-500 bg-[#FAF7F2] p-2.5 rounded border border-[#E8DFD0]">

@@ -1,19 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Save, CheckCircle2, Truck, Bell, MessageCircle } from 'lucide-react';
+import { useStoreSettings } from '../../lib/settings';
 
 export const AdminSettings: React.FC = () => {
+  const { settings, updateSettings } = useStoreSettings();
   const [saved, setSaved] = useState(false);
-  const [freeShippingThreshold, setFreeShippingThreshold] = useState('1999');
-  const [standardShippingFee, setStandardShippingFee] = useState('99');
-  const [announcementText, setAnnouncementText] = useState(
-    'Free shipping on orders above ₹1999 | COD Available | 3-5 Days Delivery'
-  );
-  const [whatsappNumber, setWhatsappNumber] = useState('To be confirmed by Tanya');
-  const [supportEmail, setSupportEmail] = useState('To be confirmed by Tanya');
-  const [instagramHandle, setInstagramHandle] = useState('@royal_libas_by_tanya');
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(settings.freeShippingThreshold));
+  const [standardShippingFee, setStandardShippingFee] = useState(String(settings.standardShippingFee));
+  const [announcementText, setAnnouncementText] = useState(settings.announcementText);
+  const [whatsappNumber, setWhatsappNumber] = useState(settings.whatsappNumber);
+  const [supportEmail, setSupportEmail] = useState(settings.supportEmail);
+  const [instagramHandle, setInstagramHandle] = useState(settings.instagramHandle);
+
+  useEffect(() => {
+    setFreeShippingThreshold(String(settings.freeShippingThreshold));
+    setStandardShippingFee(String(settings.standardShippingFee));
+    setAnnouncementText(settings.announcementText);
+    setWhatsappNumber(settings.whatsappNumber);
+    setSupportEmail(settings.supportEmail);
+    setInstagramHandle(settings.instagramHandle);
+  }, [settings]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const thresholdNum = Number(freeShippingThreshold) || 999;
+    const feeNum = Number(standardShippingFee) || 99;
+    
+    updateSettings({
+      freeShippingThreshold: thresholdNum,
+      standardShippingFee: feeNum,
+      announcementText: announcementText.trim() || `Free shipping on orders above ₹${thresholdNum} | COD Available | 3-5 Days Delivery`,
+      whatsappNumber: whatsappNumber.trim(),
+      supportEmail: supportEmail.trim(),
+      instagramHandle: instagramHandle.trim(),
+    });
+
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };

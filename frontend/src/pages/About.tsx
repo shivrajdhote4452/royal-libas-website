@@ -68,8 +68,9 @@ export const About: React.FC = () => {
               Growing up surrounded by the rich heritage textiles of Rajasthan, I was captivated by the sheer poetry of Chanderi weaves, Sanganeri handblocks, and delicate zari craftsmanship. Yet, shopping for festive wear as a modern woman often meant choosing between overpriced designer couture or ill-fitting fast fashion made of synthetic polyesters.
             </p>
 
+            {/* TODO: Tanya must confirm her founding story, founding year, city, and studio team background */}
             <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
-              In 2022, I set up a small studio in Jaipur with three master tailors and one simple principle: <strong>honesty in fabric, precision in silhouette</strong>. Royal Libas was born out of that conviction.
+              Every design is guided by one simple principle: <strong>honesty in fabric, precision in silhouette</strong>. Royal Libas was born out of that conviction.
             </p>
 
             <p className="text-sm sm:text-base text-gray-700 leading-relaxed italic border-l-2 border-[#C59B27] pl-4 text-gray-600">
