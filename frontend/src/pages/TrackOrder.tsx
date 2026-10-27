@@ -198,46 +198,37 @@ export const TrackOrder: React.FC = () => {
               </div>
             </div>
 
-            {/* Stepper Progress Bar (if not cancelled) */}
+            {/* Vertical Status Timeline matching PDF Page 8 */}
             {!isCancelled ? (
-              <div className="py-2">
-                <div className="relative flex justify-between items-center max-w-lg mx-auto">
-                  {/* Connecting Line */}
-                  <div className="absolute top-4 left-4 right-4 h-0.5 bg-gray-200 -z-0">
-                    <div
-                      className="h-full bg-[#5B111A] transition-all duration-500"
-                      style={{
-                        width: `${Math.max(0, (Math.max(0, currentStepIndex) / (steps.length - 1)) * 100)}%`,
-                      }}
-                    />
-                  </div>
-
-                  {steps.map((st, idx) => {
-                    const isDone = currentStepIndex >= idx;
-                    const isCurrent = currentStepIndex === idx;
-
+              <div className="py-4 max-w-md mx-auto">
+                <div className="space-y-6 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-gray-200">
+                  {[
+                    { key: 'PLACED', title: 'Order Placed', subtitle: new Date(order.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) },
+                    { key: 'PACKED', title: 'Packed', subtitle: currentStepIndex >= 1 ? 'Packed & quality checked at atelier' : 'Processing in boutique' },
+                    { key: 'SHIPPED', title: 'Shipped', subtitle: order.tracking_url ? `Delivery AWB: ${order.tracking_url}` : currentStepIndex >= 2 ? 'In transit with courier partner' : 'Awaiting courier pickup' },
+                    { key: 'OUT_FOR_DELIVERY', title: 'Out for Delivery', subtitle: currentStepIndex >= 3 ? 'Courier out for doorstep delivery' : 'Expected soon' },
+                    { key: 'DELIVERED', title: 'Delivered', subtitle: currentStepIndex >= 4 ? 'Delivered successfully' : 'Delivery in 3–5 business days' },
+                  ].map((step, idx) => {
+                    const isPassed = currentStepIndex >= Math.min(idx, 3);
                     return (
-                      <div key={st} className="flex flex-col items-center relative z-10">
+                      <div key={step.key} className="relative flex items-start gap-4">
                         <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                            isDone
-                              ? 'bg-[#5B111A] text-white ring-4 ring-[#FAF7F2]'
+                          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 transition-colors shadow-sm ${
+                            isPassed
+                              ? 'bg-[#1A4D2E] text-white ring-4 ring-white'
                               : 'bg-white border-2 border-gray-300 text-gray-400'
                           }`}
                         >
-                          {isDone ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
+                          {isPassed ? <CheckCircle2 className="w-4 h-4 text-[#EAD186]" /> : <span className="w-2 h-2 rounded-full bg-gray-300" />}
                         </div>
-                        <span
-                          className={`text-[11px] mt-2 font-medium capitalize ${
-                            isCurrent
-                              ? 'text-[#5B111A] font-bold'
-                              : isDone
-                              ? 'text-gray-900'
-                              : 'text-gray-400'
-                          }`}
-                        >
-                          {st.toLowerCase()}
-                        </span>
+                        <div className="pt-0.5">
+                          <h4 className={`text-xs sm:text-sm font-bold ${isPassed ? 'text-gray-900' : 'text-gray-400'}`}>
+                            {step.title}
+                          </h4>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            {step.subtitle}
+                          </p>
+                        </div>
                       </div>
                     );
                   })}

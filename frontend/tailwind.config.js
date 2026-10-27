@@ -22,11 +22,16 @@ export default {
             DEFAULT: '#FAF7F2',
             dark: '#F0E9DF',
           },
+          ink: {
+            DEFAULT: '#1F1A1C',
+            muted: '#6B5E62',
+          },
         },
       },
       fontFamily: {
         serif: ['Playfair Display', 'Georgia', 'serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        ui: ['DM Sans', 'sans-serif'],
       },
     },
   },

@@ -15,6 +15,10 @@ interface CartContextType {
   items: CartItem[];
   totalItems: number;
   subtotal: number;
+  isDrawerOpen: boolean;
+  setIsDrawerOpen: (open: boolean) => void;
+  openDrawer: () => void;
+  closeDrawer: () => void;
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
   updateQuantity: (variantId: number, quantity: number) => void;
   removeFromCart: (variantId: number) => void;
@@ -25,6 +29,10 @@ const CartContext = createContext<CartContextType>({
   items: [],
   totalItems: 0,
   subtotal: 0,
+  isDrawerOpen: false,
+  setIsDrawerOpen: () => {},
+  openDrawer: () => {},
+  closeDrawer: () => {},
   addToCart: () => {},
   updateQuantity: () => {},
   removeFromCart: () => {},
@@ -42,6 +50,10 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return [];
     }
   });
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const openDrawer = () => setIsDrawerOpen(true);
+  const closeDrawer = () => setIsDrawerOpen(false);
 
   useEffect(() => {
     try {
@@ -64,6 +76,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       return [...prevItems, { ...newItem, quantity }];
     });
+    setIsDrawerOpen(true);
   };
 
   const updateQuantity = (variantId: number, quantity: number) => {
@@ -92,6 +105,10 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         items,
         totalItems,
         subtotal,
+        isDrawerOpen,
+        setIsDrawerOpen,
+        openDrawer,
+        closeDrawer,
         addToCart,
         updateQuantity,
         removeFromCart,

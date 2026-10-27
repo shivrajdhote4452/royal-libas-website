@@ -203,3 +203,15 @@ button:active:not(:disabled),
     animation: none !important;
   }
 }
+
+/* Option C Editorial Fashion Utilities */
+.arch-card {
+  border-top-left-radius: 9999px;
+  border-top-right-radius: 9999px;
+  overflow: hidden;
+}
+
+.gold-line {
+  background: linear-gradient(90deg, transparent 0%, #C59B27 50%, transparent 100%);
+}
+

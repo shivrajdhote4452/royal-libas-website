@@ -49,12 +49,16 @@ export const About: React.FC = () => {
           <div className="space-y-5">
             <div className="inline-block">
               <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
-                A Personal Journey
+                Founder's Voice
               </span>
-              <h2 className="font-serif text-2xl sm:text-4xl font-bold text-[#5B111A] mt-1">
-                "Ethnic wear should feel like a celebration, not a compromise."
+              <h2 className="font-serif text-3xl sm:text-5xl font-bold text-[#5B111A] mt-1">
+                Hi, I'm Tanya
               </h2>
             </div>
+
+            <p className="font-serif text-base sm:text-lg text-gray-800 leading-relaxed italic border-l-2 border-[#C59B27] pl-4">
+              "Royal Libas is my way of sharing pieces that feel like home - timeless, elegant and made for your everyday special moments."
+            </p>
 
             <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
               Growing up surrounded by the rich heritage textiles of Rajasthan, I was captivated by the sheer poetry of Chanderi weaves, Sanganeri handblocks, and delicate zari craftsmanship. Yet, shopping for festive wear as a modern woman often meant choosing between overpriced designer couture or ill-fitting fast fashion made of synthetic polyesters.

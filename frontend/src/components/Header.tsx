@@ -1,21 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, Menu, X, Sparkles } from 'lucide-react';
+import { ShoppingBag, Menu, X, Search, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export const Header: React.FC = () => {
   const location = useLocation();
-  const { totalItems } = useCart();
+  const { totalItems, openDrawer } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#E8DFD0]">
-      {/* Top Boutique Announcement Bar */}
-      <div className="bg-[#5B111A] text-[#FAF7F2] text-xs py-2 px-4 text-center tracking-wider font-medium flex items-center justify-center gap-2">
-        <Sparkles className="w-3.5 h-3.5 text-[#C59B27] shrink-0" />
-        <span>
-          Festive Collection Live • Free Express Delivery on Prepaid Orders • Handcrafted by Tanya
-        </span>
+      {/* Top Boutique Announcement Bar - Option C Exact Text */}
+      <div className="bg-[#5B111A] text-[#FAF7F2] text-[11px] sm:text-xs py-2 px-4 text-center tracking-wider font-medium flex items-center justify-center gap-2">
+        <span>Free shipping on orders above ₹1999 | COD Available | 3-5 Days Delivery</span>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -32,18 +29,18 @@ export const Header: React.FC = () => {
             </button>
           </div>
 
-          {/* Logo / Brand Name */}
+          {/* Logo / Brand Name - Option C Playfair Display */}
           <Link to="/" className="group flex flex-col items-center md:items-start focus:outline-none">
             <span className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-[#5B111A] group-hover:text-[#3A080F] transition-colors">
-              Royal Libas
+              ROYAL LIBAS
             </span>
             <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.25em] text-[#C59B27] -mt-1 font-medium">
               by Tanya
             </span>
           </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-7 text-sm font-medium">
+          {/* Desktop Navigation Links - Option C */}
+          <nav className="hidden md:flex items-center space-x-8 text-sm font-medium font-ui">
             <Link
               to="/"
               className={`transition-colors py-1 border-b-2 ${
@@ -57,24 +54,22 @@ export const Header: React.FC = () => {
             <Link
               to="/shop"
               className={`transition-colors py-1 border-b-2 ${
-                location.pathname === '/shop'
+                location.pathname === '/shop' && !location.search
                   ? 'text-[#5B111A] border-[#C59B27] font-semibold'
                   : 'text-gray-700 hover:text-[#5B111A] border-transparent'
               }`}
             >
-              Shop All
+              Shop
             </Link>
             <Link
               to="/shop?collection=festive-edit"
-              className="text-gray-700 hover:text-[#5B111A] transition-colors py-1 border-b-2 border-transparent"
+              className={`transition-colors py-1 border-b-2 ${
+                location.search.includes('collection')
+                  ? 'text-[#5B111A] border-[#C59B27] font-semibold'
+                  : 'text-gray-700 hover:text-[#5B111A] border-transparent'
+              }`}
             >
-              Festive Edit
-            </Link>
-            <Link
-              to="/shop?collection=everyday-cotton"
-              className="text-gray-700 hover:text-[#5B111A] transition-colors py-1 border-b-2 border-transparent"
-            >
-              Everyday Cotton
+              Collections
             </Link>
             <Link
               to="/about"
@@ -86,48 +81,42 @@ export const Header: React.FC = () => {
             >
               About
             </Link>
-            <Link
-              to="/contact"
-              className={`transition-colors py-1 border-b-2 ${
-                location.pathname === '/contact'
-                  ? 'text-[#5B111A] border-[#C59B27] font-semibold'
-                  : 'text-gray-700 hover:text-[#5B111A] border-transparent'
-              }`}
-            >
-              Contact
-            </Link>
-            <Link
-              to="/track-order"
-              className={`transition-colors py-1 border-b-2 ${
-                location.pathname === '/track-order'
-                  ? 'text-[#5B111A] border-[#C59B27] font-semibold'
-                  : 'text-gray-700 hover:text-[#5B111A] border-transparent'
-              }`}
-            >
-              Track Order
-            </Link>
           </nav>
 
-          {/* Right Header Action: Cart with Badge */}
-          <div className="flex items-center space-x-4">
+          {/* Right Header Icons - Option C (Search, Wishlist, Cart) */}
+          <div className="flex items-center space-x-3 sm:space-x-4">
             <Link
-              to="/cart"
+              to="/shop"
+              className="p-2 text-gray-700 hover:text-[#5B111A] transition-colors focus:outline-none"
+              title="Search catalogue"
+              aria-label="Search catalogue"
+            >
+              <Search className="w-5 h-5" />
+            </Link>
+            <Link
+              to="/shop"
+              className="hidden sm:inline-flex p-2 text-gray-700 hover:text-[#5B111A] transition-colors focus:outline-none"
+              title="Wishlist"
+              aria-label="Wishlist"
+            >
+              <Heart className="w-5 h-5" />
+            </Link>
+            <button
+              type="button"
+              onClick={openDrawer}
               className="relative p-2 text-gray-800 hover:text-[#5B111A] transition-colors focus:outline-none flex items-center gap-1.5"
-              aria-label="Shopping Cart"
+              aria-label="Open Shopping Bag"
             >
               <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
-              <span className="hidden sm:inline text-xs font-semibold uppercase tracking-wider text-gray-700">
-                Cart
-              </span>
               {totalItems > 0 && (
                 <span
                   key={totalItems}
-                  className="absolute -top-1 -right-1 bg-[#5B111A] text-white text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#FAF7F2] animate-cart-bounce shadow-sm"
+                  className="absolute -top-1 -right-1 bg-[#5B111A] text-white text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#FAF7F2] animate-cart-bounce shadow-sm font-ui"
                 >
                   {totalItems}
                 </span>
               )}
-            </Link>
+            </button>
           </div>
         </div>
       </div>

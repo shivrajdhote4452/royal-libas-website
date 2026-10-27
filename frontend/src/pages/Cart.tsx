@@ -214,17 +214,32 @@ export const Cart: React.FC = () => {
             <div className="space-y-2.5 text-xs sm:text-sm text-gray-600">
               <div className="flex justify-between">
                 <span>Items Subtotal</span>
-                <span className="font-semibold text-gray-900">{formatPrice(subtotal)}</span>
+                <span className="font-semibold text-gray-900 price-display">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Shipping</span>
                 <span className="text-emerald-700 font-semibold">
-                  {subtotal >= 1500 ? 'FREE' : 'FREE on Prepaid / Rs. 99 COD'}
+                  {subtotal >= 1999 ? 'Free' : '₹99 (Free above ₹1999)'}
                 </span>
               </div>
-              <p className="text-[11px] text-gray-400 italic">
-                Taxes included. Coupons and exact delivery fees applied at checkout.
-              </p>
+            </div>
+
+            {/* Coupon Code Input matching PDF Page 5 */}
+            <div className="pt-2 border-t border-gray-100">
+              <span className="text-xs font-semibold text-gray-800 block mb-1.5">Apply Coupon Code</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter coupon code"
+                  className="flex-1 px-3 py-2 text-xs rounded border border-[#E8DFD0] uppercase font-mono bg-[#FAF7F2] focus:outline-none focus:border-[#5B111A]"
+                />
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-[#5B111A] text-white text-xs font-ui font-semibold rounded hover:bg-[#3A080F]"
+                >
+                  Apply
+                </button>
+              </div>
             </div>
 
             <div className="border-t border-gray-100 pt-3.5 flex justify-between items-baseline">

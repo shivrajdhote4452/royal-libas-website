@@ -5,6 +5,9 @@ import {
   ShoppingBag,
   Package,
   Users,
+  Boxes,
+  Tag,
+  Settings,
   LogOut,
   ExternalLink,
 } from 'lucide-react';
@@ -28,25 +31,33 @@ export const AdminLayout: React.FC = () => {
     { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/admin/orders', label: 'Orders', icon: Package },
     { to: '/admin/products', label: 'Products', icon: ShoppingBag },
+    { to: '/admin/inventory', label: 'Inventory', icon: Boxes },
     { to: '/admin/customers', label: 'Customers', icon: Users },
+    { to: '/admin/coupons', label: 'Coupons', icon: Tag },
+    { to: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-gray-900 pb-20 sm:pb-10">
-      {/* Top Header */}
-      <header className="bg-white border-b border-[#E8DFD0] sticky top-0 z-30 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-serif text-lg sm:text-xl font-bold text-[#5B111A]">
-              Royal Libas
-            </span>
-            <span className="text-[10px] sm:text-xs bg-[#5B111A]/10 text-[#5B111A] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-              Admin
-            </span>
+    <div className="min-h-screen bg-[#FAF7F2] text-gray-900 flex font-sans">
+      {/* ========================================================
+          DESKTOP DARK MAROON SIDEBAR (PDF Page 12 & 13)
+          ======================================================== */}
+      <aside className="hidden lg:flex w-64 bg-[#3A080F] text-white flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-30 shadow-xl border-r border-[#5B111A]">
+        <div>
+          {/* Brand Header */}
+          <div className="p-6 border-b border-[#5B111A]">
+            <Link to="/admin/dashboard" className="block">
+              <span className="font-serif text-xl font-bold tracking-tight text-white block">
+                ROYAL LIBAS
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.25em] text-[#C59B27] font-medium block">
+                by Tanya • Admin
+              </span>
+            </Link>
           </div>
 
-          {/* Desktop Nav Links */}
-          <nav className="hidden sm:flex items-center gap-1">
+          {/* Navigation Items */}
+          <nav className="p-4 space-y-1.5 font-ui">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -54,73 +65,93 @@ export const AdminLayout: React.FC = () => {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    `flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
                       isActive
-                        ? 'bg-[#5B111A] text-white shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                        ? 'bg-[#5B111A] text-[#EAD186] font-bold shadow-inner border-l-4 border-[#C59B27]'
+                        : 'text-white/80 hover:text-white hover:bg-white/10'
                     }`
                   }
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-4 h-4 text-[#C59B27]" />
                   <span>{item.label}</span>
                 </NavLink>
               );
             })}
           </nav>
+        </div>
 
-          {/* Right Actions */}
-          <div className="flex items-center gap-2">
-            <Link
-              to="/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-gray-600 hover:text-[#5B111A] font-medium hidden md:flex items-center gap-1 px-2.5 py-1 rounded border border-gray-200 bg-gray-50 transition-colors"
-              title="Open customer storefront in new tab"
-            >
-              <span>View Shop</span>
-              <ExternalLink className="w-3 h-3" />
+        {/* Bottom Sidebar Actions */}
+        <div className="p-4 border-t border-[#5B111A] space-y-2">
+          <Link
+            to="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4 text-[#C59B27]" />
+            <span>View Storefront</span>
+          </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-xs text-red-300 hover:text-red-100 hover:bg-red-950/40 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ========================================================
+          MAIN CONTENT AREA
+          ======================================================== */}
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
+        {/* Mobile Header */}
+        <header className="lg:hidden bg-[#3A080F] text-white p-4 sticky top-0 z-30 flex items-center justify-between border-b border-[#5B111A]">
+          <div>
+            <span className="font-serif text-lg font-bold">Royal Libas</span>
+            <span className="text-[10px] text-[#C59B27] block -mt-1 uppercase tracking-wider">Admin</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link to="/" target="_blank" className="text-xs text-[#EAD186]">
+              View Store
             </Link>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-              title="Logout from admin session"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Logout</span>
+            <button onClick={handleLogout} className="text-xs text-red-300">
+              Logout
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Page Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <Outlet />
-      </main>
+        {/* Page Container */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-12">
+          <Outlet />
+        </main>
+      </div>
 
-      {/* Mobile Sticky Bottom Navigation (Ergonomic for 1-hand phone use) */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#E8DFD0] z-40 px-2 py-1 shadow-lg">
+      {/* ========================================================
+          MOBILE BOTTOM NAVIGATION (PDF Page 13)
+          ======================================================== */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#3A080F] border-t border-[#5B111A] z-40 px-2 py-1.5 shadow-2xl">
         <div className="flex justify-around items-center">
-          {navItems.map((item) => {
+          {navItems.slice(0, 5).map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex flex-col items-center py-1.5 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
-                    isActive ? 'text-[#5B111A] font-bold' : 'text-gray-500 hover:text-gray-900'
+                  `flex flex-col items-center py-1 px-2 rounded text-[10px] transition-colors ${
+                    isActive ? 'text-[#EAD186] font-bold' : 'text-white/70 hover:text-white'
                   }`
                 }
               >
-                <Icon className="w-5 h-5 mb-0.5" />
+                <Icon className="w-4 h-4 mb-0.5" />
                 <span>{item.label}</span>
               </NavLink>
             );
           })}
         </div>
-      </div>
+      </nav>
     </div>
   );
 };

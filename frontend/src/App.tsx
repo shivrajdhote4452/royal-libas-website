@@ -24,11 +24,16 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminOrders } from './pages/admin/AdminOrders';
 import { AdminProducts } from './pages/admin/AdminProducts';
 import { AdminCustomers } from './pages/admin/AdminCustomers';
+import { AdminInventory } from './pages/admin/AdminInventory';
+import { AdminCoupons } from './pages/admin/AdminCoupons';
+import { AdminSettings } from './pages/admin/AdminSettings';
+import { CartDrawer } from './components/CartDrawer';
 
 const StorefrontLayout: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF7F2] text-gray-900 selection:bg-[#C59B27] selection:text-white">
       <Header />
+      <CartDrawer />
       <main className="flex-1">
         <Outlet />
       </main>
@@ -49,7 +54,10 @@ export const App: React.FC = () => {
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="products" element={<AdminProducts />} />
+            <Route path="inventory" element={<AdminInventory />} />
             <Route path="customers" element={<AdminCustomers />} />
+            <Route path="coupons" element={<AdminCoupons />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           {/* Customer Storefront Routes */}

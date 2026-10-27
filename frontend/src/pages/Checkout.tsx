@@ -250,9 +250,29 @@ export const Checkout: React.FC = () => {
         </div>
       </div>
 
-      <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A] mb-8 pb-3 border-b border-[#E8DFD0]">
-        1-Page Express Guest Checkout
-      </h1>
+      {/* Stepper Progress Bar matching PDF Page 6 */}
+      <div className="mb-8 bg-white p-4 rounded-xl border border-[#E8DFD0] shadow-sm">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          {[
+            { num: 1, label: 'Information' },
+            { num: 2, label: 'Shipping' },
+            { num: 3, label: 'Payment' },
+            { num: 4, label: 'Review' },
+          ].map((s, idx, arr) => (
+            <React.Fragment key={s.num}>
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-[#5B111A] text-white flex items-center justify-center text-xs font-bold font-serif shadow-sm">
+                  {s.num}
+                </div>
+                <span className="text-[11px] font-semibold text-gray-800 mt-1">{s.label}</span>
+              </div>
+              {idx < arr.length - 1 && (
+                <div className="flex-1 h-0.5 bg-[#C59B27]/40 mx-2 -mt-4" />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
 
       {stockError && (
         <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs sm:text-sm flex items-start gap-3">
@@ -414,12 +434,36 @@ export const Checkout: React.FC = () => {
             </div>
           </div>
 
-          {/* STEP 3: Payment Options */}
+          {/* STEP 3: Shipping Method (PDF Page 6) */}
+          <div className="bg-white p-5 sm:p-6 rounded-lg border border-[#E8DFD0] shadow-sm space-y-3">
+            <h2 className="font-serif font-bold text-base text-gray-900 border-b border-gray-100 pb-2.5">
+              Shipping Method
+            </h2>
+            <div className="space-y-2">
+              <label className="flex items-center justify-between p-3 rounded-lg border border-[#5B111A] bg-[#FAF7F2] cursor-pointer">
+                <div className="flex items-center gap-2.5">
+                  <input type="radio" checked readOnly className="text-[#5B111A]" />
+                  <span className="text-xs sm:text-sm font-semibold text-gray-800">
+                    Standard Delivery (3–5 days)
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-emerald-700">Free</span>
+              </label>
+              <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white cursor-pointer opacity-80">
+                <div className="flex items-center gap-2.5">
+                  <input type="radio" disabled className="text-gray-400" />
+                  <span className="text-xs sm:text-sm font-medium text-gray-600">
+                    Express Delivery (1–2 days)
+                  </span>
+                </div>
+                <span className="text-xs font-semibold text-gray-600">₹99</span>
+              </label>
+            </div>
+          </div>
+
+          {/* STEP 4: Payment Options (PDF Page 6) */}
           <div className="bg-white p-5 sm:p-6 rounded-lg border border-[#E8DFD0] shadow-sm space-y-4">
             <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
-              <span className="w-7 h-7 rounded-full bg-[#5B111A] text-white flex items-center justify-center text-xs font-bold font-serif">
-                3
-              </span>
               <h2 className="font-serif font-bold text-lg text-gray-900">
                 Payment Method
               </h2>
@@ -634,22 +678,31 @@ export const Checkout: React.FC = () => {
               </span>
             </div>
 
+            {/* Payment Logos (PDF Page 6) */}
+            <div className="pt-2 flex items-center justify-center gap-4 text-xs font-bold text-gray-500 uppercase tracking-widest border-t border-gray-100">
+              <span className="text-[#1A1F71] font-black italic text-sm">VISA</span>
+              <span className="text-[#EB001B] font-bold text-xs">Mastercard</span>
+              <span className="text-[#097939] font-black text-xs">UPI</span>
+              <span className="text-gray-600 font-bold text-xs">RuPay</span>
+            </div>
+
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-3.5 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-400 text-white text-xs sm:text-sm font-semibold uppercase tracking-wider rounded transition-colors shadow-md flex items-center justify-center gap-2 mt-4"
+              className="w-full py-3.5 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-400 text-white text-xs sm:text-sm font-ui font-semibold uppercase tracking-wider rounded transition-colors shadow-md flex items-center justify-center gap-2 mt-4"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Processing Order...</span>
                 </>
-              ) : paymentMethod === 'PREPAID' ? (
-                `Pay ${formatPrice(estimatedTotal)} Online`
               ) : (
-                `Confirm Order (${formatPrice(estimatedTotal)} COD)`
+                <span>Place Order →</span>
               )}
             </button>
+            <p className="text-[10px] text-center text-gray-400 mt-2">
+              By placing this order, you agree to our Terms & Conditions.
+            </p>
           </div>
 
           {/* Security Badge */}

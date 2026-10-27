@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Truck, RefreshCw, ShieldCheck, Instagram, Sparkles, AlertCircle } from 'lucide-react';
+import {
+  ArrowRight,
+  Truck,
+  RefreshCw,
+  ShieldCheck,
+  CreditCard,
+  Play,
+  Heart,
+  Sparkles,
+  AlertCircle,
+  HelpCircle
+} from 'lucide-react';
 import { Product } from '../types/product';
 import { fetchProducts } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
@@ -21,7 +32,7 @@ export const Home: React.FC = () => {
           setProducts(data);
           setError(null);
         }
-      } catch (err: any) {
+      } catch {
         if (isMounted) {
           setError('Could not connect to the boutique catalogue. Please refresh.');
         }
@@ -35,79 +46,92 @@ export const Home: React.FC = () => {
     };
   }, []);
 
-  const bestsellers = products.filter((p) => p.is_bestseller || p.badges.includes('Bestseller')).slice(0, 4);
-  const newInProducts = products.slice(0, 4);
+  const newArrivals = products.slice(0, 4);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF7F2] page-enter">
+    <div className="min-h-screen flex flex-col bg-[#FAF7F2] page-enter font-sans">
       {/* ========================================================
-          BLOCK 1: Hero — One current drop only, one clear CTA, gold shimmer
+          1. EDITORIAL HERO SECTION (PDF Page 2)
+          "Tradition Meets Today"
           ======================================================== */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#5B111A] via-[#480B13] to-[#3A080F] text-[#FAF7F2] py-16 sm:py-24 lg:py-28 px-4 sm:px-6 lg:px-8 border-b border-[#C59B27]/30">
-        <div className="absolute inset-0 gold-shimmer pointer-events-none opacity-30 z-0" />
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#C59B27_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
-        <div className="max-w-4xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FAF7F2]/10 backdrop-blur-sm border border-[#C59B27]/40 text-[#EAD186] text-xs font-semibold uppercase tracking-widest mb-6">
-            <Sparkles className="w-3.5 h-3.5 text-[#C59B27]" />
-            Jaipur Boutique Atelier
-          </div>
-          <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-tight">
-            Royal Libas by Tanya
-          </h1>
-          <p className="mt-4 sm:mt-6 text-base sm:text-xl text-[#FAF7F2]/90 max-w-2xl mx-auto font-light leading-relaxed">
-            Curated festive silhouettes and effortless cotton co-ord sets. Pure fabrics, honest tailoring, and timeless grace.
-          </p>
-          <div className="mt-8 flex justify-center">
-            <Link
-              to="/shop"
-              className="inline-flex items-center justify-center px-8 py-3.5 rounded bg-[#C59B27] hover:bg-[#B38A1E] text-[#3A080F] font-semibold text-sm sm:text-base uppercase tracking-wider shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
-            >
-              Shop the Drop
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Link>
+      <section className="relative overflow-hidden bg-[#FAF7F2] py-8 sm:py-12 lg:py-16 px-4 sm:px-6 lg:px-8 border-b border-[#E8DFD0]">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Left Column: Deep Maroon Editorial Card */}
+            <div className="lg:col-span-5 z-10 flex flex-col justify-center">
+              <div className="bg-[#5B111A] text-white p-8 sm:p-12 lg:p-14 rounded-2xl shadow-xl relative overflow-hidden border border-[#C59B27]/40">
+                <div className="absolute inset-0 gold-shimmer pointer-events-none opacity-20" />
+                <div className="relative z-10 space-y-4">
+                  <span className="text-[11px] uppercase tracking-[0.25em] text-[#EAD186] font-semibold block">
+                    Festive Edit 2026
+                  </span>
+                  <h1 className="font-serif text-3xl sm:text-5xl lg:text-5xl font-bold tracking-tight text-white leading-[1.15]">
+                    Tradition Meets Today
+                  </h1>
+                  <p className="text-sm sm:text-base text-[#FAF7F2]/90 font-light leading-relaxed pt-1">
+                    Elegant ethnic wear for every version of you.
+                  </p>
+                  <div className="pt-4">
+                    <Link
+                      to="/shop"
+                      className="inline-flex items-center justify-center px-7 py-3 rounded bg-transparent border-2 border-[#C59B27] text-[#EAD186] hover:bg-[#C59B27] hover:text-[#3A080F] font-ui font-semibold text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 shadow-md group"
+                    >
+                      <span>SHOP THE DROP</span>
+                      <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Hero Fashion Photography */}
+            <div className="lg:col-span-7">
+              <div className="relative aspect-[4/3] sm:aspect-[16/10] lg:aspect-[16/11] rounded-2xl overflow-hidden shadow-2xl border border-[#E8DFD0] bg-gray-100">
+                <img
+                  src="/images/products/maroon_front.jpg"
+                  alt="Royal Libas Festive Maroon Silhouette"
+                  className="w-full h-full object-cover object-center"
+                />
+                {/* Sample Photo Badge */}
+                <div className="absolute top-4 right-4 z-10">
+                  <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-bold tracking-wider uppercase bg-black/75 text-amber-200 border border-amber-400/40 shadow-sm backdrop-blur-[2px]">
+                    SAMPLE PHOTO
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Gentle Marquee Trust Strip */}
-      <div className="bg-[#5B111A] border-y border-[#C59B27]/30 text-[#FAF7F2] py-3 overflow-hidden select-none">
-        <div className="animate-marquee-track flex items-center">
-          <div className="flex items-center justify-around w-1/2 shrink-0 px-4 gap-8 text-xs sm:text-sm font-medium tracking-wide">
-            <span className="flex items-center gap-2">
-              <Truck className="w-4 h-4 text-[#C59B27]" /> Free Delivery Across India on Prepaid
-            </span>
-            <span className="text-[#C59B27]/60">•</span>
-            <span className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 text-[#C59B27]" /> 7-Day Doorstep Size Exchange
-            </span>
-            <span className="text-[#C59B27]/60">•</span>
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-[#C59B27]" /> 100% Handcrafted Jaipur Tailoring
-            </span>
-            <span className="text-[#C59B27]/60">•</span>
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#C59B27]" /> Cash on Delivery Available
-            </span>
+      {/* ========================================================
+          2. TRUST STRIP (PDF Page 2)
+          4 Pillars: Free Shipping, COD, Easy Exchange, Secure Payments
+          ======================================================== */}
+      <section className="bg-white border-b border-[#E8DFD0] py-5 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 text-center">
+          <div className="flex flex-col items-center justify-center p-2 space-y-1">
+            <Truck className="w-5 h-5 text-[#C59B27]" />
+            <h4 className="font-serif font-bold text-xs sm:text-sm text-gray-900">Free Shipping</h4>
+            <p className="text-[11px] text-gray-500">Above ₹1999</p>
           </div>
-          <div className="flex items-center justify-around w-1/2 shrink-0 px-4 gap-8 text-xs sm:text-sm font-medium tracking-wide" aria-hidden="true">
-            <span className="flex items-center gap-2">
-              <Truck className="w-4 h-4 text-[#C59B27]" /> Free Delivery Across India on Prepaid
-            </span>
-            <span className="text-[#C59B27]/60">•</span>
-            <span className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 text-[#C59B27]" /> 7-Day Doorstep Size Exchange
-            </span>
-            <span className="text-[#C59B27]/60">•</span>
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-[#C59B27]" /> 100% Handcrafted Jaipur Tailoring
-            </span>
-            <span className="text-[#C59B27]/60">•</span>
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#C59B27]" /> Cash on Delivery Available
-            </span>
+          <div className="flex flex-col items-center justify-center p-2 space-y-1">
+            <CreditCard className="w-5 h-5 text-[#C59B27]" />
+            <h4 className="font-serif font-bold text-xs sm:text-sm text-gray-900">COD Available</h4>
+            <p className="text-[11px] text-gray-500">Pan-India doorstep delivery</p>
+          </div>
+          <div className="flex flex-col items-center justify-center p-2 space-y-1">
+            <RefreshCw className="w-5 h-5 text-[#C59B27]" />
+            <h4 className="font-serif font-bold text-xs sm:text-sm text-gray-900">Easy Exchange</h4>
+            <p className="text-[11px] text-gray-500">7-Day doorstep support</p>
+          </div>
+          <div className="flex flex-col items-center justify-center p-2 space-y-1">
+            <ShieldCheck className="w-5 h-5 text-[#C59B27]" />
+            <h4 className="font-serif font-bold text-xs sm:text-sm text-gray-900">Secure Payments</h4>
+            <p className="text-[11px] text-gray-500">100% Protected Checkout</p>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Connection Warning if API is offline */}
       {error && (
@@ -118,139 +142,141 @@ export const Home: React.FC = () => {
       )}
 
       {/* ========================================================
-          BLOCK 2: Shop by Category with hover zoom
+          3. SHOP BY CATEGORY (PDF Page 2 Arched Cards)
           ======================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full">
-        <div className="text-center mb-8 sm:mb-10">
-          <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
-            Curated Edits
-          </span>
-          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
+        <div className="text-center mb-10">
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
             Shop by Category
           </h2>
+          <div className="w-12 h-0.5 bg-[#C59B27] mx-auto mt-2" />
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {[
             {
               title: 'Kurti Sets',
-              subtitle: 'Classic festive silhouettes',
+              image: '/images/products/noorani_maroon_front.jpg',
               href: '/shop?category=Kurti+Sets',
-              bgClass: 'from-[#5B111A]/90 to-[#3A080F]',
             },
             {
               title: 'Co-ord Sets',
-              subtitle: 'Modern chic ensembles',
+              image: '/images/products/chandni_ivory_front.jpg',
               href: '/shop?category=Co-ord+Sets',
-              bgClass: 'from-[#8E3E63]/90 to-[#5B111A]',
             },
             {
-              title: 'Festive Edit',
-              subtitle: 'Rich zaris & silks',
+              title: 'Festive Wear',
+              image: '/images/products/zari_mahal_emerald_front.jpg',
               href: '/shop?collection=festive-edit',
-              bgClass: 'from-[#C59B27]/90 to-[#8A6A12]',
             },
             {
               title: 'Everyday Cotton',
-              subtitle: 'Breathable daytime luxury',
+              image: '/images/products/gulabi_rooh_rose_front.jpg',
               href: '/shop?collection=everyday-cotton',
-              bgClass: 'from-[#1A4D2E]/90 to-[#0F2F1C]',
             },
           ].map((cat, idx) => (
             <Link
               key={idx}
               to={cat.href}
-              className={`group relative aspect-[4/5] rounded-lg overflow-hidden bg-gradient-to-t ${cat.bgClass} p-5 flex flex-col justify-end text-white shadow-sm hover:shadow-md transition-all`}
+              className="group flex flex-col items-center text-center focus:outline-none"
             >
-              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 group-hover:scale-105 transition-all duration-350 ease-out" />
-              <div className="relative z-10">
-                <h3 className="font-serif text-lg sm:text-xl font-bold leading-tight group-hover:text-[#EAD186] transition-colors">
-                  {cat.title}
-                </h3>
-                <p className="text-[11px] sm:text-xs text-white/80 mt-1">
-                  {cat.subtitle}
-                </p>
-                <span className="inline-flex items-center text-[11px] font-semibold text-[#EAD186] mt-2 group-hover:translate-x-1 transition-transform">
-                  Explore →
-                </span>
+              {/* Arched Photo Card matching PDF Page 2 */}
+              <div className="w-full aspect-[3/4] rounded-t-full rounded-b-lg overflow-hidden border border-[#E8DFD0] shadow-sm bg-gray-100 relative group-hover:shadow-md transition-all duration-300">
+                <img
+                  src={cat.image}
+                  alt={cat.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
               </div>
+              <h3 className="font-serif font-bold text-sm sm:text-base text-gray-900 mt-3 group-hover:text-[#5B111A] transition-colors">
+                {cat.title}
+              </h3>
             </Link>
           ))}
         </div>
       </section>
 
       {/* ========================================================
-          BLOCK 3: Bestsellers (Smooth scroll-snap row, no autoplay)
+          4. THE FESTIVE EDIT BANNER (PDF Page 2)
+          Split Editorial Composition
           ======================================================== */}
-      <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 pb-4 border-b border-gray-100">
-            <div>
-              <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
-                Customer Favorites
-              </span>
-              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
-                Bestsellers
-              </h2>
+      <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-[#FAF7F2] rounded-2xl border border-[#E8DFD0] overflow-hidden shadow-sm grid grid-cols-1 lg:grid-cols-12 items-center">
+            {/* Left: Dual Photography Grid */}
+            <div className="lg:col-span-7 grid grid-cols-2 gap-2 p-2 sm:p-4">
+              <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-200">
+                <img
+                  src="/images/products/maroon_worn.jpg"
+                  alt="Festive Editorial"
+                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                />
+              </div>
+              <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-200">
+                <img
+                  src="/images/products/chandni_ivory_worn.jpg"
+                  alt="Festive Detail"
+                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                />
+              </div>
             </div>
-            <Link
-              to="/shop?collection=bestsellers"
-              className="text-xs sm:text-sm font-semibold text-[#5B111A] hover:text-[#C59B27] transition-colors mt-2 sm:mt-0 flex items-center gap-1"
-            >
-              View All Bestsellers →
-            </Link>
-          </div>
 
-          {loading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="aspect-[3/4] bg-gray-100 animate-pulse rounded-lg" />
-              ))}
+            {/* Right: Editorial Narrative */}
+            <div className="lg:col-span-5 p-6 sm:p-10 lg:p-12 space-y-4 text-center lg:text-left">
+              <span className="text-[11px] uppercase tracking-[0.2em] font-bold text-[#C59B27] block">
+                Heritage Silhouettes
+              </span>
+              <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#5B111A] leading-tight">
+                The Festive Edit
+              </h2>
+              <p className="text-sm text-gray-600 leading-relaxed font-light">
+                Made for celebrations. Designed to stay with you. Handwoven chanderis, pure mulmuls, and intricate zari embroideries created for your special milestones.
+              </p>
+              <div className="pt-2">
+                <Link
+                  to="/shop?collection=festive-edit"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded bg-[#5B111A] hover:bg-[#3A080F] text-white font-ui font-semibold text-xs tracking-wider uppercase transition-colors shadow"
+                >
+                  <span>EXPLORE COLLECTION</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
             </div>
-          ) : bestsellers.length > 0 ? (
-            <div className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              {bestsellers.map((product, idx) => (
-                <div key={product.id} className="min-w-[240px] sm:min-w-0 snap-start card-stagger" style={{ animationDelay: `${idx * 40}ms` }}>
-                  <ProductCard product={product} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 py-6 text-center">Loading boutique favorites...</p>
-          )}
+          </div>
         </div>
       </section>
 
       {/* ========================================================
-          BLOCK 4: New In (Most recent API products)
+          5. NEW ARRIVALS (PDF Page 2)
           ======================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 pb-4 border-b border-[#E8DFD0]">
+        <div className="flex items-end justify-between mb-8 pb-3 border-b border-[#E8DFD0]">
           <div>
-            <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
-              Fresh Arrivals
-            </span>
-            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
-              New In
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
+              New Arrivals
             </h2>
+            <p className="text-xs text-gray-500 mt-1">Freshly tailored sample drops</p>
           </div>
           <Link
-            to="/shop?sort=newest"
-            className="text-xs sm:text-sm font-semibold text-[#5B111A] hover:text-[#C59B27] transition-colors mt-2 sm:mt-0 flex items-center gap-1"
+            to="/shop"
+            className="text-xs sm:text-sm font-ui font-semibold text-[#5B111A] hover:text-[#C59B27] transition-colors flex items-center gap-1"
           >
-            See All New Pieces →
+            <span>View All</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="aspect-[4/5] bg-gray-100 animate-pulse rounded-lg" />
+              <div key={i} className="aspect-[3/4] bg-gray-200/60 animate-pulse rounded-lg" />
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {newInProducts.map((product, idx) => (
+            {newArrivals.map((product, idx) => (
               <div key={product.id} className="card-stagger" style={{ animationDelay: `${idx * 40}ms` }}>
                 <ProductCard product={product} />
               </div>
@@ -260,202 +286,152 @@ export const Home: React.FC = () => {
       </section>
 
       {/* ========================================================
-          BLOCK 5: Tanya's Story (Founder Voice & Portrait)
+          6. SHOP THE REEL (PDF Page 2)
+          4 Instagram-style vertical video cards
           ======================================================== */}
-      <section className="bg-[#FAF7F2] border-t border-[#E8DFD0] py-14 sm:py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-[#E8DFD0] p-6 sm:p-10 shadow-sm flex flex-col md:flex-row items-center gap-8">
-          {/* Founder Portrait */}
-          <div className="w-36 h-36 sm:w-48 sm:h-48 rounded-full overflow-hidden shrink-0 border-4 border-[#C59B27]/40 shadow-lg bg-gray-100">
+      <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-end justify-between mb-8 pb-3 border-b border-gray-100">
+            <div>
+              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
+                Shop the Reel
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">Curated styling reels from our Jaipur boutique</p>
+            </div>
+            <Link
+              to="/shop"
+              className="text-xs font-ui font-bold uppercase tracking-wider text-[#C59B27] hover:text-[#9A7718] transition-colors"
+            >
+              VIEW ALL REELS →
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {[
+              {
+                title: 'Noorani Festive Chanderi',
+                image: '/images/styling_moment_1.jpg',
+                slug: 'noorani-chanderi-kurti-set',
+              },
+              {
+                title: 'Firdaus Peplum & Sharara',
+                image: '/images/products/firdaus_ochre_worn.jpg',
+                slug: 'firdaus-chanderi-peplum-sharara',
+              },
+              {
+                title: 'Everyday Mulmul Co-ord',
+                image: '/images/styling_moment_2.jpg',
+                slug: 'roza-pure-mulmul-everyday-co-ord',
+              },
+              {
+                title: 'Sitara Tissue Silk Set',
+                image: '/images/products/sitara_gold_worn.jpg',
+                slug: 'sitara-tissue-silk-kurti-set',
+              },
+            ].map((reel, idx) => (
+              <Link
+                key={idx}
+                to={`/product/${reel.slug}`}
+                className="group relative aspect-[9/16] rounded-xl overflow-hidden bg-gray-900 border border-[#E8DFD0] shadow-sm block"
+              >
+                <img
+                  src={reel.image}
+                  alt={reel.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
+                />
+                {/* Play Button Indicator */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-11 h-11 rounded-full bg-white/30 backdrop-blur-md flex items-center justify-center text-white border border-white/50 group-hover:scale-110 transition-transform shadow-lg">
+                    <Play className="w-5 h-5 fill-white ml-0.5" />
+                  </div>
+                </div>
+
+                {/* Bottom Overlay Info */}
+                <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/85 via-black/40 to-transparent">
+                  <p className="text-white font-serif text-xs sm:text-sm font-semibold line-clamp-1">
+                    {reel.title}
+                  </p>
+                  <span className="text-[#EAD186] text-[11px] font-medium block mt-0.5">
+                    Tap to view piece →
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================
+          7. WHY CHOOSE ROYAL LIBAS (PDF Page 2 Trust Grid)
+          4 Pillars
+          ======================================================== */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full">
+        <div className="text-center mb-10">
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
+            Why Choose Royal Libas
+          </h2>
+          <div className="w-12 h-0.5 bg-[#C59B27] mx-auto mt-2" />
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 text-center">
+          <div className="bg-white p-6 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
+            <Heart className="w-6 h-6 text-[#C59B27] mx-auto" />
+            <h4 className="font-serif font-bold text-sm sm:text-base text-gray-900">Premium Quality</h4>
+            <p className="text-xs text-gray-500">Pure chanderis, silks, and breathable mulmuls.</p>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
+            <Sparkles className="w-6 h-6 text-[#C59B27] mx-auto" />
+            <h4 className="font-serif font-bold text-sm sm:text-base text-gray-900">Authentic Designs</h4>
+            <p className="text-xs text-gray-500">Handcrafted silhouette cuts tailored for real bodies.</p>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
+            <RefreshCw className="w-6 h-6 text-[#C59B27] mx-auto" />
+            <h4 className="font-serif font-bold text-sm sm:text-base text-gray-900">Easy Exchange</h4>
+            <p className="text-xs text-gray-500">7-day doorstep size replacement without friction.</p>
+          </div>
+          <div className="bg-white p-6 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
+            <HelpCircle className="w-6 h-6 text-[#C59B27] mx-auto" />
+            <h4 className="font-serif font-bold text-sm sm:text-base text-gray-900">Friendly Support</h4>
+            <p className="text-xs text-gray-500">Personal sizing assistance via WhatsApp support.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================
+          8. FOUNDER QUOTE SECTION (PDF Page 2)
+          Split Tanya Portrait & Deep Maroon Card
+          ======================================================== */}
+      <section className="bg-white border-t border-[#E8DFD0] py-14 sm:py-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-md grid grid-cols-1 md:grid-cols-12 bg-[#FAF7F2]">
+          {/* Left: Tanya Portrait */}
+          <div className="md:col-span-5 aspect-[4/5] sm:aspect-auto">
             <img
               src="/images/tanya_founder.jpg"
               alt="Tanya, Founder & Creative Director"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover object-top"
             />
           </div>
 
-          {/* Founder Note */}
-          <div className="space-y-3 text-center md:text-left">
-            <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
-              The Heart of the Brand
-            </span>
-            <h3 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
-              A Note from Tanya
-            </h3>
-            <p className="text-sm sm:text-base text-gray-700 leading-relaxed italic">
-              "I started Royal Libas because I wanted ethnic wear that didn't compromise on fabric quality or fit. Every piece is selected for breathability, effortless drape, and lasting elegance — outfits you look forward to wearing again and again."
+          {/* Right: Deep Maroon Quote Card */}
+          <div className="md:col-span-7 bg-[#5B111A] text-white p-8 sm:p-12 lg:p-14 flex flex-col justify-center space-y-4 relative">
+            <div className="text-4xl sm:text-5xl font-serif text-[#C59B27] select-none leading-none">
+              “
+            </div>
+            <p className="font-serif text-lg sm:text-xl text-[#FAF7F2] leading-relaxed italic -mt-4">
+              Royal Libas is my way of sharing pieces that feel like home - timeless, elegant and made for your everyday special moments.
             </p>
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-xs text-gray-500 font-medium">
-                — Tanya, Founder & Creative Director, Jaipur
-              </p>
+            <div className="pt-2 border-t border-[#C59B27]/40 flex items-center justify-between">
+              <span className="font-serif font-bold text-base text-[#EAD186] tracking-wide">
+                — Tanya
+              </span>
               <Link
                 to="/about"
-                className="text-xs font-semibold text-[#5B111A] hover:text-[#C59B27] transition-colors"
+                className="text-xs font-ui font-semibold text-white/80 hover:text-white underline underline-offset-4 transition-colors"
               >
-                Read Full Story →
+                Read Founder Story →
               </Link>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ========================================================
-          BLOCK 6: Customer Styling Moments Gallery
-          ======================================================== */}
-      <section className="bg-white border-t border-[#E8DFD0] py-14 sm:py-18 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
-              Celebrated Moments
-            </span>
-            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
-              Styled by Real Women
-            </h2>
-            <p className="mt-2 text-xs sm:text-sm text-gray-600 leading-relaxed">
-              Sample snapshots of our silhouettes in celebrations, family soirees, and sunny day outings.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            {/* Moment 1 */}
-            <div className="bg-[#FAF7F2] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row">
-              <div className="sm:w-1/2 aspect-square">
-                <img
-                  src="/images/styling_moment_1.jpg"
-                  alt="Customer Diwali festive styling"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="sm:w-1/2 p-6 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <span className="text-[10px] uppercase font-bold text-[#C59B27] tracking-wider">
-                    Festive Evening
-                  </span>
-                  <h4 className="font-serif font-bold text-base text-[#5B111A]">
-                    Heritage Anarkali Silhouette
-                  </h4>
-                  <p className="text-xs text-gray-600 leading-relaxed italic">
-                    "The gold embroidery work sparkled beautifully under the lights, and the pure lining meant I could wear it all night comfortably."
-                  </p>
-                </div>
-                <p className="text-[11px] text-gray-500 font-medium pt-3">
-                  — Styled for a garden festive gathering in Jaipur
-                </p>
-              </div>
-            </div>
-
-            {/* Moment 2 */}
-            <div className="bg-[#FAF7F2] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row">
-              <div className="sm:w-1/2 aspect-square">
-                <img
-                  src="/images/styling_moment_2.jpg"
-                  alt="Customer daytime cotton co-ord styling"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="sm:w-1/2 p-6 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <span className="text-[10px] uppercase font-bold text-[#C59B27] tracking-wider">
-                    Daytime Brunch
-                  </span>
-                  <h4 className="font-serif font-bold text-base text-[#5B111A]">
-                    Everyday Cotton Co-ord
-                  </h4>
-                  <p className="text-xs text-gray-600 leading-relaxed italic">
-                    "Breathable, featherlight cotton with the most comfortable trousers. Exactly what I wanted for warm mornings."
-                  </p>
-                </div>
-                <p className="text-[11px] text-gray-500 font-medium pt-3">
-                  — Styled for an outdoor terrace brunch
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================
-          BLOCK 7: Trust Strip (COD, 3–5 day delivery, size exchange)
-          ======================================================== */}
-      <section className="bg-[#5B111A] text-[#FAF7F2] py-8 sm:py-10 border-y border-[#C59B27]/40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-            <div className="flex flex-col items-center p-3">
-              <Truck className="w-6 h-6 text-[#C59B27] mb-2" />
-              <h4 className="font-serif font-bold text-base">Cash on Delivery & Free Prepaid</h4>
-              <p className="text-xs text-[#FAF7F2]/80 mt-1">
-                COD available pan-India. Free express delivery on all prepaid orders.
-              </p>
-            </div>
-            <div className="flex flex-col items-center p-3">
-              <ShieldCheck className="w-6 h-6 text-[#C59B27] mb-2" />
-              <h4 className="font-serif font-bold text-base">Fast 3–5 Day Dispatch</h4>
-              <p className="text-xs text-[#FAF7F2]/80 mt-1">
-                Shipped via trusted national air couriers with live tracking updates.
-              </p>
-            </div>
-            <div className="flex flex-col items-center p-3">
-              <RefreshCw className="w-6 h-6 text-[#C59B27] mb-2" />
-              <h4 className="font-serif font-bold text-base">7-Day Size Exchange</h4>
-              <p className="text-xs text-[#FAF7F2]/80 mt-1">
-                Fit not ideal? Simple doorstep size exchange within 7 days, tags intact.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================
-          BLOCK 8: Shop the Reel (Instagram Section)
-          ======================================================== */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-1.5 text-xs uppercase tracking-widest font-bold text-[#5B111A] mb-1">
-            <Instagram className="w-4 h-4 text-[#C59B27]" />
-            @royallibasbytanya
-          </div>
-          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
-            Shop the Reel
-          </h2>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            Seen on our Instagram feed? Tap any piece below to view size details and place your order.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-          {products.slice(0, 3).map((product, idx) => (
-            <Link
-              key={product.id}
-              to={`/product/${product.slug}`}
-              className="group relative aspect-[9/16] rounded-lg overflow-hidden bg-gray-900 border border-[#E8DFD0] shadow-sm block"
-            >
-              {product.primary_image ? (
-                <img
-                  src={product.primary_image}
-                  alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
-                />
-              ) : (
-                <div className="w-full h-full bg-[#5B111A] flex items-center justify-center text-white text-xs p-4 text-center">
-                  {product.name}
-                </div>
-              )}
-              {/* Instagram Reel overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 p-4 flex flex-col justify-between">
-                <span className="self-end px-2 py-1 rounded bg-black/50 text-white text-[10px] font-semibold backdrop-blur-sm">
-                  Drop #{idx + 1}
-                </span>
-                <div>
-                  <p className="text-white font-serif text-sm font-semibold leading-snug line-clamp-1">
-                    {product.name}
-                  </p>
-                  <span className="text-[#EAD186] text-xs font-bold block mt-0.5">
-                    Tap to Shop →
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
         </div>
       </section>
     </div>
