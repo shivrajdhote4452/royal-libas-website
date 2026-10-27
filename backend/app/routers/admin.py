@@ -1,4 +1,4 @@
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -97,14 +97,18 @@ def get_admin_dashboard(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """Retrieve shop operations overview: today's orders, to-pack count, and low-stock variants."""
-    today_start = datetime.combine(date.today(), time.min)
-    today_end = datetime.combine(date.today(), time.max)
+    # Calculate today's bounds in IST (UTC+05:30), converted to UTC
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(ist_tz)
+    today_start_ist = datetime.combine(now_ist.date(), time.min).replace(tzinfo=ist_tz)
+    today_end_ist = datetime.combine(now_ist.date(), time.max).replace(tzinfo=ist_tz)
+    utc_start = today_start_ist.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = today_end_ist.astimezone(timezone.utc).replace(tzinfo=None)
 
-    # Orders placed today
+    # Orders placed today (IST calendar day)
     orders_today = (
         db.query(func.count(Order.id))
-        .filter(Order.created_at >= today_start, Order.created_at <= today_end)
+        .filter(Order.created_at >= utc_start, Order.created_at <= utc_end)
         .scalar()
         or 0
     )
@@ -271,12 +275,15 @@ def admin_update_order_status(
             else:
                 try:
                     shiprocket.cancel_order(order.shiprocket_order_id)
-                except Exception:
-                    pass
+                except Exception as cancel_err:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=f"Shiprocket cancellation failed ({str(cancel_err)}). Please cancel the shipment directly in the Shiprocket dashboard before restocking.",
+                    )
 
         for item in order.items:
             if item.variant_id:
-                variant = db.query(ProductVariant).filter(ProductVariant.id == item.variant_id).first()
+                variant = db.query(ProductVariant).with_for_update().filter(ProductVariant.id == item.variant_id).first()
                 if variant:
                     variant.stock += item.quantity
 
@@ -407,6 +414,13 @@ def admin_ship_order_via_shiprocket(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Prepaid order is not confirmed paid yet. Cannot ship unpaid orders.",
+        )
+
+    # COD orders must follow the business verification process before fulfilment
+    if order.payment_method == "COD" and order.status not in ("CONFIRMED", "PACKED", "READY_FOR_PICKUP", "SHIPPED"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="COD orders must be verified with customer and marked CONFIRMED before fulfilling shipment.",
         )
 
     # Required parcel length, breadth, height, weight

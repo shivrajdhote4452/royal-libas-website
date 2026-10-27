@@ -328,10 +328,12 @@ def test_cancellation_rules():
 
 
 def test_webhook_live_refetch():
+    import uuid
+    unique_awb = f"AWB-{uuid.uuid4().hex[:8].upper()}"
     oid, code = create_test_order(status="SHIPPED")
     db = SessionLocal()
     o = db.query(Order).filter(Order.id == oid).first()
-    o.awb_code = "AWB-LIVE-CHECK"
+    o.awb_code = unique_awb
     db.commit()
     db.close()
 
@@ -344,7 +346,7 @@ def test_webhook_live_refetch():
     with patch("app.services.shiprocket.track", mock_track):
         res = client.post(
             "/shiprocket/webhook",
-            json={"awb": "AWB-LIVE-CHECK", "current_status": "DELIVERED"},
+            json={"awb": unique_awb, "current_status": "DELIVERED"},
         )
         assert res.status_code == 200
         assert res.json()["verified_live"] is True

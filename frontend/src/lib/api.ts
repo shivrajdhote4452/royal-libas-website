@@ -61,6 +61,7 @@ import {
   FulfillmentConfig,
   ServiceabilityResponse,
   ShipmentPayload,
+  CashfreeSyncResult,
 } from '../types/order';
 
 export async function validateCart(items: CartItemValidate[]): Promise<CartValidateResponse> {
@@ -110,8 +111,19 @@ export async function createOrder(payload: OrderCreatePayload): Promise<OrderRes
   return response.json();
 }
 
-export async function fetchOrderByCode(orderCode: string): Promise<OrderResponse> {
-  const response = await fetch(`${API_BASE_URL}/orders/${orderCode}`);
+export async function fetchOrderByCode(
+  orderCode: string,
+  token?: string,
+  phone?: string,
+): Promise<OrderResponse> {
+  let url = `${API_BASE_URL}/orders/${encodeURIComponent(orderCode)}`;
+  const params = new URLSearchParams();
+  if (token) params.append('token', token);
+  if (phone) params.append('phone', phone);
+  const qs = params.toString();
+  if (qs) url += `?${qs}`;
+
+  const response = await fetch(url);
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error(`Order #${orderCode} not found.`);
@@ -144,6 +156,35 @@ export async function createCashfreeOrder(orderCode: string): Promise<CashfreeOr
   return response.json();
 }
 
+export async function syncCashfreePayment(orderCode: string): Promise<CashfreeSyncResult> {
+  const response = await fetch(`${API_BASE_URL}/payments/cashfree/sync/${encodeURIComponent(orderCode)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to verify payment with Cashfree');
+  }
+  return response.json();
+}
+
+export async function cancelOrder(
+  orderCode: string,
+  token?: string,
+  reason?: string,
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderCode)}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, reason }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to cancel order');
+  }
+  return response.json();
+}
+
 // ==========================================
 // Phase 5: Tracking & Admin API Clients
 // ==========================================
@@ -155,11 +196,14 @@ import {
   AdminCustomerResponse,
 } from '../types/order';
 
-export async function trackOrder(orderCode: string, phone?: string): Promise<OrderTrackResponse> {
+export async function trackOrder(orderCode: string, phone?: string, token?: string): Promise<OrderTrackResponse> {
   const cleanCode = encodeURIComponent(orderCode.trim());
   let url = `${API_BASE_URL}/orders/track?order_code=${cleanCode}`;
   if (phone && phone.trim()) {
     url += `&phone=${encodeURIComponent(phone.trim())}`;
+  }
+  if (token && token.trim()) {
+    url += `&token=${encodeURIComponent(token.trim())}`;
   }
   const response = await fetch(url);
   if (!response.ok) {

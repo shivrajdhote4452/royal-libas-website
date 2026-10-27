@@ -90,11 +90,12 @@ def test_public_order_tracking_security():
     assert track_res.status_code == 200
     data = track_res.json()
     assert data["order_code"] == order_code
-    assert data["status"] == "PLACED"
-    assert data["customer_name"] == "Priya Sharma"
+    assert data["customer_name"] == "P**** S*****"
+    assert data["phone_masked"] == "******3210"
+    assert data["address"]["line1"] == "*** Protected Address ***"
     assert len(data["items"]) == 1
-    assert data["address"]["city"] == "Mumbai"
-    print("  [OK] Tracking succeeds with matching order_code and phone")
+    assert data["delivery_city"] == "Mumbai"
+    print("  [OK] Tracking succeeds with matching order_code and phone (customer name and phone safely masked)")
 
     # 2. Tracking with +91 prefix works cleanly
     track_res2 = client.get(f"/orders/track?order_code={order_code}&phone=+919876543210")

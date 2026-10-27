@@ -52,13 +52,23 @@ app.include_router(coupons.router)
 async def shiprocket_webhook(request: Request, db: Session = Depends(get_db)):
     """Webhook for Shiprocket shipment status updates.
     
-    SAFETY RULE:
-    When a webhook arrives, RE-FETCH tracking live from Shiprocket once via track(awb_code)
-    and only then update the order. NEVER trust the webhook payload alone.
-    
-    NOTE: Do NOT register the webhook URL in Shiprocket yet — backend public deployment
-    is deferred, so registration happens after deploy.
+    SAFETY & SECURITY RULES:
+    1. Authenticate webhook using x-api-key if SHIPROCKET_WEBHOOK_TOKEN is configured.
+    2. RE-FETCH tracking live from Shiprocket once via track(awb_code) and only then update the order.
+    3. Never regress terminal statuses: DELIVERED and CANCELLED cannot be overwritten by out-of-order events.
+    4. Idempotent: repeated webhook events do not cause duplicate updates.
     """
+    from app.config import SHIPROCKET_WEBHOOK_TOKEN
+
+    if SHIPROCKET_WEBHOOK_TOKEN:
+        auth_header = request.headers.get("x-api-key") or request.headers.get("HTTP_X_API_KEY") or ""
+        if auth_header != SHIPROCKET_WEBHOOK_TOKEN:
+            from fastapi import HTTPException, status as http_status
+            raise HTTPException(
+                status_code=http_status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Shiprocket webhook authentication token.",
+            )
+
     try:
         body = await request.json()
     except Exception:
@@ -78,8 +88,14 @@ async def shiprocket_webhook(request: Request, db: Session = Depends(get_db)):
         order = db.query(Order).filter(Order.shipment_id == shipment_id).first()
 
     if not order or not order.awb_code:
-        # Acknowledge webhook receipt safely
         return {"status": "ignored", "reason": "Order or active AWB not found."}
+
+    # TERMINAL STATUS PROTECTION: Do not regress delivered or cancelled orders
+    if order.status in ("DELIVERED", "CANCELLED"):
+        return {
+            "status": "ignored",
+            "reason": f"Order #{order.order_code} is already in terminal state '{order.status}'.",
+        }
 
     # CRITICAL SAFETY RULE:
     # RE-FETCH tracking from Shiprocket once live — never trust payload alone!
@@ -90,12 +106,14 @@ async def shiprocket_webhook(request: Request, db: Session = Depends(get_db)):
         if "DELIVERED" in curr_status:
             order.status = "DELIVERED"
         elif any(s in curr_status for s in ("IN TRANSIT", "OUT FOR DELIVERY", "SHIPPED", "PICKED UP")):
-            order.status = "SHIPPED"
+            if order.status != "DELIVERED":
+                order.status = "SHIPPED"
 
         db.commit()
         return {"status": "success", "order_status": order.status, "verified_live": True}
     except Exception as exc:
         return {"status": "error", "detail": f"Failed to verify live tracking: {str(exc)}"}
+
 
 
 @app.get("/health")

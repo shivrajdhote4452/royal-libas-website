@@ -64,6 +64,9 @@ export interface OrderItemResponse {
 export interface OrderResponse {
   id: number;
   order_code: string;
+  order_token?: string | null;
+  reservation_expires_at?: string | null;
+  admin_notes?: string | null;
   customer_name: string;
   phone: string;
   status: string;
@@ -86,6 +89,14 @@ export interface OrderResponse {
   updated_at?: string;
   items: OrderItemResponse[];
   address: OrderAddress & { id: number };
+}
+
+export interface CashfreeSyncResult {
+  order_code: string;
+  payment_status: string;
+  order_status: string;
+  message: string;
+  is_paid: boolean;
 }
 
 export interface CashfreeOrderResponse {
@@ -112,6 +123,7 @@ export interface CouponValidateResponse {
 export interface OrderTrackResponse {
   order_code: string;
   customer_name: string;
+  phone_masked?: string | null;
   status: string;
   payment_method: string;
   payment_status: string;
@@ -122,10 +134,13 @@ export interface OrderTrackResponse {
   courier_name?: string | null;
   tracking_url?: string | null;
   awb_code?: string | null;
+  delivery_city?: string | null;
+  delivery_state?: string | null;
+  delivery_pincode?: string | null;
   created_at: string;
   updated_at?: string;
   items: OrderItemResponse[];
-  address: (OrderAddress & { id: number }) | null;
+  address?: (OrderAddress & { id: number }) | null;
 }
 
 export interface OrderStatusUpdateRequest {

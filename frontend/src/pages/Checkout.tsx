@@ -17,6 +17,7 @@ import {
   validateCart,
   validateCoupon,
   createOrder,
+  cancelOrder,
   createCashfreeOrder,
   fetchPaymentGatewayConfig,
 } from '../lib/api';
@@ -178,18 +179,26 @@ export const Checkout: React.FC = () => {
       };
 
       const orderResponse = await createOrder(orderPayload);
+      const orderToken = orderResponse.order_token || '';
+      if (orderToken) {
+        try {
+          sessionStorage.setItem(`rl_token_${orderResponse.order_code}`, orderToken);
+        } catch {}
+      }
 
       // Handle based on payment method
       if (paymentMethod === 'COD') {
         // Cash on delivery: Order is confirmed immediately!
         clearCart();
-        navigate(`/order-success/${orderResponse.order_code}`);
+        navigate(`/order-success/${orderResponse.order_code}?token=${encodeURIComponent(orderToken)}`);
         return;
       }
 
       // 3. PREPAID Flow with Cashfree
       if (!gatewayConfig || !gatewayConfig.configured) {
-        setFormError('Prepaid payment not available right now, please choose COD');
+        // Cancel the unpayable prepaid reservation immediately so stock is not locked
+        await cancelOrder(orderResponse.order_code, orderToken, 'Payment gateway unconfigured').catch(() => {});
+        setFormError('Online payments are currently unavailable. Please choose Cash on Delivery.');
         setPaymentMethod('COD');
         setIsSubmitting(false);
         return;
@@ -221,7 +230,8 @@ export const Checkout: React.FC = () => {
 
         const isLoaded = await loadCashfreeSDK();
         if (!isLoaded || typeof (window as any).Cashfree !== 'function') {
-          setFormError('Prepaid payment not available right now, please choose COD');
+          await cancelOrder(orderResponse.order_code, orderToken, 'Cashfree SDK failed to load').catch(() => {});
+          setFormError('Unable to load payment gateway. Your cart is preserved. Please choose Cash on Delivery.');
           setPaymentMethod('COD');
           setIsSubmitting(false);
           return;
@@ -232,14 +242,15 @@ export const Checkout: React.FC = () => {
         const cashfree = (window as any).Cashfree({ mode });
 
         // Launch Cashfree checkout with payment_session_id
-        // Note: Do not clear cart as proof of payment; backend webhook is authoritative
+        // Note: Do NOT clear cart yet. Cart is cleared only when order is confirmed paid on success page.
         cashfree.checkout({
           paymentSessionId: cfOrder.payment_session_id,
           redirectTarget: '_self',
         });
-      } catch (_paymentErr: any) {
-        setFormError('Prepaid payment not available right now, please choose COD');
-        setPaymentMethod('COD');
+      } catch (paymentErr: any) {
+        // Safe recovery: cancel reservation so items are immediately returned to stock
+        await cancelOrder(orderResponse.order_code, orderToken, 'Payment session creation failed').catch(() => {});
+        setFormError('Could not launch payment gateway. Your cart has been preserved. Please retry or choose Cash on Delivery.');
         setIsSubmitting(false);
       }
     } catch (err: any) {

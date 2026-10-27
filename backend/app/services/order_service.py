@@ -1,5 +1,7 @@
 import random
+import secrets
 import string
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
@@ -7,6 +9,33 @@ from fastapi import HTTPException, status
 
 from app.models import Product, ProductVariant, Order, OrderItem, Address, Coupon
 from app.schemas import OrderCreateRequest, CartItemValidateRequest, CartValidateResponse, CartValidatedItem
+
+
+def mask_name(name: str) -> str:
+    """Mask customer name for public display, e.g. 'Tanya Sharma' -> 'T**** S****'."""
+    if not name:
+        return "Customer"
+    parts = name.strip().split()
+    masked = []
+    for p in parts:
+        if len(p) <= 2:
+            masked.append(p[0] + "*")
+        else:
+            masked.append(p[0] + "*" * (len(p) - 1))
+    return " ".join(masked)
+
+
+def mask_phone(phone: str) -> str:
+    """Mask phone number, e.g. '9876543210' -> '******3210'."""
+    clean = "".join(filter(str.isdigit, phone or ""))
+    if len(clean) >= 4:
+        return "*" * (len(clean) - 4) + clean[-4:]
+    return "******"
+
+
+def generate_order_token() -> str:
+    """Generate a secure, unguessable 43-character URL-safe crypto token."""
+    return secrets.token_urlsafe(32)
 
 
 def generate_order_code(db: Session) -> str:
@@ -20,6 +49,7 @@ def generate_order_code(db: Session) -> str:
     # Fallback with longer random alphanumeric if collision
     fallback_suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"RL-2026-{fallback_suffix}"
+
 
 
 def calculate_coupon_discount(coupon: Optional[Coupon], subtotal: Decimal) -> Decimal:
@@ -122,6 +152,12 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
             detail="Order must contain at least one item.",
         )
 
+    # Lazy cleanup of expired unpaid reservations to reclaim stock
+    try:
+        expire_unpaid_prepaid_reservations(db)
+    except Exception:
+        pass
+
     # Begin transaction
     try:
         subtotal = Decimal("0.00")
@@ -210,10 +246,18 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
         # Authoritative total calculated by single function
         total = (subtotal - discount + shipping_charge).quantize(Decimal("0.01"))
         order_code = generate_order_code(db)
+        order_token = generate_order_token()
+
+        now_utc = datetime.now(timezone.utc)
+        reservation_expires_at = (
+            now_utc + timedelta(minutes=20) if payment_method == "PREPAID" else None
+        )
 
         # Create Order record
         order = Order(
             order_code=order_code,
+            order_token=order_token,
+            reservation_expires_at=reservation_expires_at,
             customer_name=payload.customer_name.strip(),
             phone=payload.phone.strip(),
             status=initial_status,
@@ -260,3 +304,79 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to place order: {str(e)}",
         )
+
+
+def cancel_order_atomic(
+    db: Session,
+    order: Order,
+    reason: str = "Order cancelled",
+    restock: bool = True,
+) -> Order:
+    """Atomically cancel an order and restock inventory with strict idempotency.
+    
+    Guarantees:
+    - If order is ALREADY cancelled, returns order immediately without duplicate restocking.
+    - Locks product variant rows with with_for_update() to prevent concurrent race conditions.
+    - Appends audit trail to admin_notes.
+    """
+    if order.status == "CANCELLED":
+        return order  # Strictly idempotent: do NOT restock twice!
+
+    if restock:
+        for item in order.items:
+            if item.variant_id:
+                variant = (
+                    db.query(ProductVariant)
+                    .with_for_update()
+                    .filter(ProductVariant.id == item.variant_id)
+                    .first()
+                )
+                if variant:
+                    variant.stock += item.quantity
+
+    order.status = "CANCELLED"
+    if order.payment_status in ("PENDING", "FAILED"):
+        order.payment_status = "CANCELLED"
+
+    timestamp_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    note_entry = f"[{timestamp_str}] Order cancelled. Reason: {reason}"
+    if order.admin_notes:
+        order.admin_notes = f"{order.admin_notes}\n{note_entry}"
+    else:
+        order.admin_notes = note_entry
+
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def expire_unpaid_prepaid_reservations(db: Session) -> int:
+    """Find and safely cancel expired prepaid orders whose payment window passed.
+    
+    Frees up reserved stock for other shoppers without manual intervention.
+    """
+    now_utc = datetime.now(timezone.utc)
+    expired_orders = (
+        db.query(Order)
+        .filter(
+            Order.status == "PENDING",
+            Order.payment_method == "PREPAID",
+            Order.payment_status == "PENDING",
+            Order.reservation_expires_at != None,
+            Order.reservation_expires_at < now_utc,
+        )
+        .all()
+    )
+
+    count = 0
+    for order in expired_orders:
+        cancel_order_atomic(
+            db,
+            order,
+            reason="Unpaid prepaid reservation expired automatically (20-minute timeout)",
+            restock=True,
+        )
+        count += 1
+
+    return count
+

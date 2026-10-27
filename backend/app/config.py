@@ -63,6 +63,8 @@ SHIPROCKET_API_EMAIL = os.getenv("SHIPROCKET_API_EMAIL", "").strip()
 SHIPROCKET_API_PASSWORD = os.getenv("SHIPROCKET_API_PASSWORD", "").strip()
 SHIPROCKET_PICKUP_LOCATION = os.getenv("SHIPROCKET_PICKUP_LOCATION", "Primary").strip() or "Primary"
 SHIPROCKET_PICKUP_PINCODE = os.getenv("SHIPROCKET_PICKUP_PINCODE", "452001").strip() or "452001"
+SHIPROCKET_WEBHOOK_TOKEN = os.getenv("SHIPROCKET_WEBHOOK_TOKEN", "").strip()
+
 
 
 def is_shiprocket_configured() -> bool:

@@ -385,6 +385,9 @@ class OrderItemResponse(BaseModel):
 class OrderResponse(BaseModel):
     id: int
     order_code: str
+    order_token: Optional[str] = None
+    reservation_expires_at: Optional[datetime] = None
+    admin_notes: Optional[str] = None
     customer_name: str
     phone: str
     status: str
@@ -410,6 +413,46 @@ class OrderResponse(BaseModel):
     address: Optional[AddressResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OrderConfirmationResponse(BaseModel):
+    """Customer-facing order confirmation response with masked private details."""
+    order_code: str
+    order_token: Optional[str] = None
+    customer_name_masked: str
+    phone_masked: str
+    status: str
+    payment_method: str
+    payment_status: str
+    subtotal: Decimal
+    shipping_charge: Decimal
+    discount: Decimal
+    total: Decimal
+    courier_name: Optional[str] = None
+    tracking_url: Optional[str] = None
+    awb_code: Optional[str] = None
+    created_at: datetime
+    reservation_expires_at: Optional[datetime] = None
+    items: List[OrderItemResponse] = []
+    delivery_city: Optional[str] = None
+    delivery_state: Optional[str] = None
+    delivery_pincode: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderCancelRequest(BaseModel):
+    reason: Optional[str] = "Customer requested cancellation before payment"
+    token: Optional[str] = None
+
+
+class CashfreeSyncResponse(BaseModel):
+    order_code: str
+    payment_status: str
+    order_status: str
+    message: str
+    is_paid: bool
+
 
 
 # ==========================================
@@ -467,7 +510,8 @@ class CouponPublicResponse(BaseModel):
 
 class OrderTrackResponse(BaseModel):
     order_code: str
-    customer_name: str
+    customer_name: str  # Masked, e.g. S**** D****
+    phone_masked: Optional[str] = None  # e.g. ******4452
     status: str
     payment_method: str
     payment_status: str
@@ -478,6 +522,9 @@ class OrderTrackResponse(BaseModel):
     courier_name: Optional[str] = None
     tracking_url: Optional[str] = None
     awb_code: Optional[str] = None
+    delivery_city: Optional[str] = None
+    delivery_state: Optional[str] = None
+    delivery_pincode: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     items: List[OrderItemResponse] = []

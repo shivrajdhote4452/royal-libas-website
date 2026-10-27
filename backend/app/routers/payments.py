@@ -8,11 +8,13 @@ from app.schemas import (
     CashfreeConfigResponse,
     CashfreeCreateOrderRequest,
     CashfreeCreateOrderResponse,
+    CashfreeSyncResponse,
 )
 from app.services.payment_service import (
     create_cashfree_order,
     verify_cashfree_webhook_signature,
     process_cashfree_webhook,
+    sync_cashfree_payment_status,
 )
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -90,3 +92,24 @@ async def cashfree_webhook(
         )
 
     return {"status": "ok", "detail": message}
+
+
+@router.post("/cashfree/sync/{order_code}", response_model=CashfreeSyncResponse)
+def sync_payment_status(
+    order_code: str,
+    db: Session = Depends(get_db),
+):
+    """Reconcile payment status directly from Cashfree's server-side API.
+    
+    Enables instant verification when webhooks are delayed or when customers return
+    from the Cashfree checkout sheet.
+    """
+    ok, msg, order = sync_cashfree_payment_status(db, order_code.strip().upper())
+    return CashfreeSyncResponse(
+        order_code=order.order_code,
+        payment_status=order.payment_status,
+        order_status=order.status,
+        message=msg,
+        is_paid=order.payment_status == "PAID",
+    )
+

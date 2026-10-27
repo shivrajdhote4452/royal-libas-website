@@ -16,7 +16,8 @@ from app.config import (
     FRONTEND_URL,
     is_cashfree_configured,
 )
-from app.models import Order
+from datetime import datetime, timezone
+from app.models import Order, ProductVariant
 from app.schemas import CashfreeCreateOrderResponse
 
 
@@ -25,6 +26,7 @@ def get_cashfree_base_url() -> str:
     if CASHFREE_ENVIRONMENT == "production":
         return "https://api.cashfree.com/pg"
     return "https://sandbox.cashfree.com/pg"
+
 
 
 def create_cashfree_order(db: Session, order_code: str) -> CashfreeCreateOrderResponse:
@@ -189,6 +191,54 @@ def process_cashfree_webhook(db: Session, event_payload: dict) -> Tuple[bool, st
     event_type = event_payload.get("type", "")
 
     if payment_status == "SUCCESS" or event_type == "PAYMENT_SUCCESS_WEBHOOK":
+        # SPECIAL SCENARIO: Payment received for CANCELLED or EXPIRED order
+        if order.status in ("CANCELLED", "EXPIRED"):
+            # Check if variant stock can be safely re-reserved
+            can_reclaim = True
+            for item in order.items:
+                if item.variant_id:
+                    v = (
+                        db.query(ProductVariant)
+                        .with_for_update()
+                        .filter(ProductVariant.id == item.variant_id)
+                        .first()
+                    )
+                    if not v or v.stock < item.quantity:
+                        can_reclaim = False
+                        break
+
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            if can_reclaim:
+                for item in order.items:
+                    if item.variant_id:
+                        v = (
+                            db.query(ProductVariant)
+                            .with_for_update()
+                            .filter(ProductVariant.id == item.variant_id)
+                            .first()
+                        )
+                        if v:
+                            v.stock -= item.quantity
+                order.status = "PAID"
+                order.payment_status = "PAID"
+                note = f"[{now_str}] Reconciled: Delayed payment arrived after cancellation. Inventory successfully re-reserved."
+                order.admin_notes = f"{order.admin_notes}\n{note}" if order.admin_notes else note
+                db.commit()
+                return True, f"Order '{order.order_code}' reconciled and marked PAID"
+            else:
+                # INVENTORY CONFLICT: Cannot re-reserve because item was sold to another customer!
+                # Do NOT mark status=PAID to prevent physical overselling and duplicate fulfillment!
+                order.payment_status = "PAID_RECONCILIATION_REQUIRED"
+                order.status = "ACTION_REQUIRED_REFUND"
+                note = (
+                    f"[{now_str}] ALERT - INVENTORY CONFLICT: Successful payment of ₹{webhook_amount} received, "
+                    f"but items were already sold out following cancellation. "
+                    f"ACTION REQUIRED: Initiate customer refund via Cashfree Dashboard or customer concierge."
+                )
+                order.admin_notes = f"{order.admin_notes}\n{note}" if order.admin_notes else note
+                db.commit()
+                return True, f"Order '{order.order_code}' flagged for refund due to overselling conflict"
+
         order.status = "PAID"
         order.payment_status = "PAID"
         db.commit()
@@ -199,3 +249,67 @@ def process_cashfree_webhook(db: Session, event_payload: dict) -> Tuple[bool, st
         return True, f"Order '{order.order_code}' payment recorded as FAILED"
 
     return True, f"Unhandled event '{event_type}' ignored safely"
+
+
+def sync_cashfree_payment_status(db: Session, order_code: str) -> Tuple[bool, str, Order]:
+    """Server-to-server query to Cashfree to reconcile delayed or missing webhooks."""
+    order = db.query(Order).filter(Order.order_code == order_code).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Order '{order_code}' not found.",
+        )
+
+    if order.payment_status == "PAID":
+        return True, "Order is already confirmed paid.", order
+
+    if not is_cashfree_configured():
+        return False, "Cashfree gateway not configured in this environment.", order
+
+    headers = {
+        "x-client-id": CASHFREE_CLIENT_ID,
+        "x-client-secret": CASHFREE_CLIENT_SECRET,
+        "x-api-version": CASHFREE_API_VERSION,
+        "Content-Type": "application/json",
+    }
+    url = f"{get_cashfree_base_url()}/orders/{order.order_code}/payments"
+
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.get(url, headers=headers)
+    except Exception as e:
+        return False, f"Error communicating with Cashfree: {str(e)}", order
+
+    if resp.status_code != 200:
+        return False, f"Cashfree returned status {resp.status_code}", order
+
+    payments_list = resp.json()
+    if not isinstance(payments_list, list):
+        return False, "Unexpected Cashfree payments response format", order
+
+    # Look for any successful payment attempt matching order amount
+    for p in payments_list:
+        p_status = p.get("payment_status")
+        p_amount = p.get("payment_amount")
+        if p_status == "SUCCESS" and p_amount is not None:
+            if Decimal(str(p_amount)) == Decimal(str(order.total)):
+                synthetic_payload = {
+                    "type": "PAYMENT_SUCCESS_WEBHOOK",
+                    "data": {
+                        "order": {"order_id": order.order_code, "order_amount": float(order.total)},
+                        "payment": {"payment_status": "SUCCESS", "payment_amount": float(p_amount)},
+                    },
+                }
+                ok, msg = process_cashfree_webhook(db, synthetic_payload)
+                db.refresh(order)
+                return ok, msg, order
+
+    # Check for failed attempts
+    if any(p.get("payment_status") == "FAILED" for p in payments_list):
+        order.payment_status = "FAILED"
+        db.commit()
+        db.refresh(order)
+        return False, "Payment attempt was declined or failed.", order
+
+    return False, "Payment is still awaiting confirmation from Cashfree.", order
+

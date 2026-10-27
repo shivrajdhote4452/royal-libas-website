@@ -179,6 +179,9 @@ class Order(Base):
     label_url = Column(String(500), nullable=True)
     manifest_url = Column(String(500), nullable=True)
     pickup_status = Column(String(50), nullable=True)
+    order_token = Column(String(64), unique=True, index=True, nullable=True)  # Secure unguessable access token
+    reservation_expires_at = Column(DateTime(timezone=True), nullable=True)  # Prepaid reservation expiry
+    admin_notes = Column(Text, nullable=True)  # Audit notes for payment/cancellation reconciliation
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

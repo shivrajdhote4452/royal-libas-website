@@ -23,6 +23,7 @@ export const TrackOrder: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<OrderTrackResponse | null>(null);
+  const tokenParam = searchParams.get('token') || '';
 
   useEffect(() => {
     document.title = 'Track Your Order | Royal Libas by Tanya';
@@ -33,13 +34,14 @@ export const TrackOrder: React.FC = () => {
     const codeParam = searchParams.get('order_code');
     const phoneParam = searchParams.get('phone');
     if (codeParam) {
-      handleSearch(codeParam, phoneParam || '');
+      handleSearch(codeParam, phoneParam || '', tokenParam);
     }
   }, [searchParams]);
 
-  const handleSearch = async (code: string, phoneNumber?: string) => {
+  const handleSearch = async (code: string, phoneNumber?: string, explicitToken?: string) => {
     const cleanCode = (code || '').trim().toUpperCase();
     const cleanPhone = (phoneNumber || '').trim().replace(/\D/g, '');
+    const activeToken = explicitToken || tokenParam || sessionStorage.getItem('rl_order_token') || '';
 
     // Phone-alone lookup must NOT return order details (privacy protection)
     if (!cleanCode && cleanPhone) {
@@ -54,8 +56,15 @@ export const TrackOrder: React.FC = () => {
       return;
     }
 
+    // Require mobile number or secure order token for privacy protection
+    if (!cleanPhone && !activeToken) {
+      setError('To protect your privacy, please enter the 10-digit mobile number used when placing this order.');
+      setOrder(null);
+      return;
+    }
+
     if (cleanPhone && cleanPhone.length < 10) {
-      setError('Please enter a valid 10-digit mobile number, or leave it blank to look up by order reference.');
+      setError('Please enter a valid 10-digit mobile number.');
       setOrder(null);
       return;
     }
@@ -64,12 +73,12 @@ export const TrackOrder: React.FC = () => {
     setError(null);
 
     try {
-      const data = await trackOrder(cleanCode, cleanPhone ? cleanPhone : undefined);
+      const data = await trackOrder(cleanCode, cleanPhone || undefined, activeToken || undefined);
       setOrder(data);
     } catch (err: any) {
       setOrder(null);
       setError(
-        err.message || 'Order not found. Please check your order reference code.'
+        err.message || 'Order not found. Please check your order reference and mobile number.'
       );
     } finally {
       setLoading(false);
@@ -137,7 +146,7 @@ export const TrackOrder: React.FC = () => {
 
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Mobile Number <span className="text-gray-400 font-normal">(Optional)</span>
+                Registered Mobile <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-xs sm:text-sm text-gray-400 font-medium">
@@ -303,23 +312,25 @@ export const TrackOrder: React.FC = () => {
 
           {/* Delivery & Items Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Delivery Address */}
-            {order.address && (
+            {/* Delivery Destination */}
+            {(order.delivery_city || order.address) && (
               <div className="bg-white p-5 rounded-none border border-[#E8DFD0] shadow-sm space-y-2.5">
                 <div className="flex items-center gap-2 border-b border-gray-100 pb-2 text-xs font-bold text-gray-900">
                   <MapPin className="w-4 h-4 text-[#B58A3C]" />
-                  <span>Delivery Address</span>
+                  <span>Delivery Destination</span>
                 </div>
                 <div className="text-xs text-gray-700 space-y-1">
-                  <p className="font-semibold text-gray-900">{order.address.name}</p>
-                  <p className="text-gray-600 leading-relaxed">
-                    {order.address.line1}
-                    {order.address.line2 ? `, ${order.address.line2}` : ''}
-                  </p>
+                  <p className="font-semibold text-gray-900">{order.customer_name || order.address?.name}</p>
                   <p className="text-gray-600">
-                    {order.address.city}, {order.address.state} — {order.address.pincode}
+                    {order.delivery_city || order.address?.city}, {order.delivery_state || order.address?.state} — {order.delivery_pincode || order.address?.pincode}
                   </p>
-                  <p className="text-gray-500 pt-1">Contact: +91 {order.address.phone}</p>
+                  <p className="text-gray-500 pt-1">
+                    Contact: {order.phone_masked || (order.address?.phone ? `+91 ${order.address.phone}` : '')}
+                  </p>
+                  <div className="pt-1.5 flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#B58A3C]" />
+                    <span>Exact street address is masked for customer privacy.</span>
+                  </div>
                 </div>
               </div>
             )}

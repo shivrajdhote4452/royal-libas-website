@@ -234,7 +234,8 @@ def test_sample_product_checkout_cashfree_and_cod():
     assert track_res.status_code == 200
     track_data = track_res.json()
     assert track_data["status"] == "PAID"
-    assert track_data["customer_name"] == "Ananya Singhania"
+    assert track_data["customer_name"] == "A***** S********"
+    assert track_data["phone_masked"] == "******1234"
     assert len(track_data["items"]) == 1
     assert track_data["items"][0]["product_name_snapshot"] == "Noorani Chanderi Kurti Set"
     print("All Phase 6 automated backend tests passed successfully!")
