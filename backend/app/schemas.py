@@ -325,7 +325,10 @@ class OrderResponse(BaseModel):
     shipping_charge: Decimal
     discount: Decimal
     total: Decimal
+    courier_name: Optional[str] = None
+    tracking_url: Optional[str] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
     items: List[OrderItemResponse] = []
     address: Optional[AddressResponse] = None
 
@@ -362,4 +365,71 @@ class CouponValidateResponse(BaseModel):
     code: str
     discount: Decimal
     message: str
+
+
+# ==========================================
+# Phase 5: Tracking & Admin Management Schemas
+# ==========================================
+
+class OrderTrackResponse(BaseModel):
+    order_code: str
+    customer_name: str
+    status: str
+    payment_method: str
+    payment_status: str
+    subtotal: Decimal
+    shipping_charge: Decimal
+    discount: Decimal
+    total: Decimal
+    courier_name: Optional[str] = None
+    tracking_url: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    items: List[OrderItemResponse] = []
+    address: Optional[AddressResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderStatusUpdateRequest(BaseModel):
+    status: str
+    courier_name: Optional[str] = None
+    tracking_url: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        s = v.upper().strip()
+        allowed = ("PENDING", "PLACED", "CONFIRMED", "PACKED", "SHIPPED", "DELIVERED", "CANCELLED")
+        if s not in allowed:
+            raise ValueError(f"Invalid order status. Allowed statuses: {', '.join(allowed)}")
+        return s
+
+
+class AdminLowStockVariant(BaseModel):
+    variant_id: int
+    product_id: int
+    product_name: str
+    product_slug: str
+    size: str
+    colour: Optional[str] = None
+    stock: int
+    selling_price: Decimal
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminDashboardResponse(BaseModel):
+    orders_today: int
+    to_pack_count: int
+    total_orders: int
+    low_stock_variants: List[AdminLowStockVariant] = []
+
+
+class AdminCustomerResponse(BaseModel):
+    phone: str
+    name: str
+    order_count: int
+    total_spent: Decimal
+    last_order_date: datetime
 

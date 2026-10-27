@@ -4,16 +4,14 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 4** — Cart, Guest Checkout, Razorpay Webhook & COD Orders Complete
+- **Status:** **Phase 5** — Orders, Tracking, and Phone-Friendly Admin Panel Complete
 
 ---
 
-## Phase 0 – 4 Notes
+## Phase 0 – 5 Notes
 
 > ⚠️ **SAMPLE / DUMMY PHOTOS ONLY:**
-> All storefront catalogue items and imagery currently shown on the frontend and APIs are development mockups (`DUMMY — ...`). Real product photography and pricing will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
-> 
-> Customer order tracking details page (`/track-order`) will be expanded with shipping logistics partner webhooks in **Phase 5**.
+> All storefront catalogue items and imagery currently shown on the frontend and APIs are development mockups (`DUMMY — ...`). Real product photography, final copy, and legal policies will be integrated in **Phase 6**. See [`SAMPLE_PHOTOS.md`](./SAMPLE_PHOTOS.md) for placeholder details.
 
 ---
 
@@ -23,7 +21,8 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 - **Authoritative Server Calculations:** Totals, line amounts, and discounts are computed strictly from database prices on the backend. Frontend prices and totals are never trusted (verified via automated Tamper Tests).
 - **Atomic Stock Decrements:** Stock decrement occurs in the exact same database transaction as order creation. If variant stock is insufficient or 0, the transaction rolls back cleanly with HTTP 400 (`"That size just sold out!"`).
 - **Cryptographic Webhook Verification:** Online prepaid orders require verified HMAC SHA256 signatures (`X-Razorpay-Signature`) on `POST /payments/razorpay/webhook`. Idempotent processing guarantees duplicate webhooks do not re-modify or error.
-- **Derived Badges:** Products dynamically derive `Sold Out` (when total stock = 0), `Low Stock` (total stock <= 5), `Bestseller`, and `New` (created within 14 days).
+- **Privacy-First Customer Tracking:** `GET /orders/track?order_code=...&phone=...` strictly requires BOTH the order reference and the matching 10-digit mobile number used at checkout. Mismatched phone numbers or missing parameters return HTTP 404/400 without leaking order data.
+- **Phone-Friendly Admin Panel:** Tanya can run daily boutique operations from her phone (`/admin`) without developer intervention: view today's orders & to-pack queue, fulfill shipments with courier tracking links, add new products, adjust stock with single-tap `+` / `-` controls, and contact clients via one-click WhatsApp.
 
 ---
 
@@ -76,7 +75,7 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    python create_admin.py
 
    # Or with arguments:
-   python create_admin.py --email admin@royallibas.com --password YourSecurePassword
+   python create_admin.py --email owner@royallibas.com --password YourSecurePassword
    ```
 
 7. Run the FastAPI development server:
@@ -84,25 +83,29 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    uvicorn app.main:app --reload --port 8000
    ```
 
-8. Verify the backend endpoints:
-   - Health check: `http://localhost:8000/health` -> `{"status": "ok"}`
-   - Catalogue Listing: `GET http://localhost:8000/products` (supports `?category=`, `?collection=`, `?size=`, `?sort=price_asc|price_desc|newest`)
-   - Product Detail: `GET http://localhost:8000/products/{slug}`
-   - Collections: `GET http://localhost:8000/collections`
-   - Admin Login: `POST http://localhost:8000/admin/login` -> returns JWT access token
-   - Admin Profile: `GET http://localhost:8000/admin/me` (requires Bearer token)
-   - Admin Products: `POST /admin/products`, `PATCH /admin/products/{id}`, `POST /admin/products/{id}/variants`, `PATCH /admin/variants/{id}`
-   - Cart Validation: `POST /cart/validate` (live database stock & prices)
-   - Orders: `POST /orders` (authoritative server total calculation, atomic stock decrement), `GET /orders/{order_code}`
-   - Payments: `POST /payments/razorpay/create-order`, `POST /payments/razorpay/webhook` (HMAC SHA256 verified)
-   - Coupons: `POST /coupons/validate` (tested with `WELCOME10`, `FESTIVE100`)
-   - Interactive Swagger API docs: `http://localhost:8000/docs`
+8. Key REST Endpoints:
+   - **Health check:** `GET http://localhost:8000/health` -> `{"status": "ok"}`
+   - **Catalogue Listing:** `GET /products` (supports `?category=`, `?collection=`, `?size=`, `?sort=price_asc|price_desc|newest`)
+   - **Product Detail:** `GET /products/{slug}`
+   - **Collections:** `GET /collections`
+   - **Cart Validation:** `POST /cart/validate` (checks live database stock & prices)
+   - **Orders:** `POST /orders` (authoritative server total calculation, atomic stock decrement), `GET /orders/{order_code}`
+   - **Public Tracking:** `GET /orders/track?order_code=...&phone=...` (requires both order code and matching phone)
+   - **Payments:** `POST /payments/razorpay/create-order`, `POST /payments/razorpay/webhook` (HMAC SHA256 verified)
+   - **Coupons:** `POST /coupons/validate` (tested with `WELCOME10`, `FESTIVE100`)
+   - **Admin Auth:** `POST /admin/login`, `GET /admin/me`
+   - **Admin Dashboard:** `GET /admin/dashboard` (today's orders, to-pack queue, live low-stock alerts)
+   - **Admin Orders & Fulfillment:** `GET /admin/orders`, `GET /admin/orders/{id}`, `PATCH /admin/orders/{id}/status`
+   - **Admin Products & Stock:** `GET /admin/products`, `POST /admin/products`, `PATCH /admin/products/{id}`, `POST /admin/products/{id}/variants`, `PATCH /admin/variants/{id}`
+   - **Admin Clientele Roster:** `GET /admin/customers`
+   - **Interactive Swagger Docs:** `http://localhost:8000/docs`
 
 9. Run Automated Test Suites:
    ```bash
    python tests/test_phase1.py   # Auth, JWT, DB constraints
    python tests/test_phase2.py   # Catalogue, badges, filters, admin APIs
    python tests/test_phase4.py   # Tamper tests, atomic stock, Razorpay HMAC webhook
+   python tests/test_phase5.py   # Order tracking privacy, admin auth guards, dashboard, and fulfillment
    ```
 
 ---
@@ -129,8 +132,10 @@ The frontend is a Vite + React 18 + TypeScript + Tailwind application.
    ```
 
 4. Open your browser:
-   - Local: `http://localhost:5173/`
-   - Network: accessible on local Wi-Fi / LAN for mobile browser testing.
+   - Storefront: `http://localhost:5173/`
+   - Order Tracking: `http://localhost:5173/track-order`
+   - Admin Login: `http://localhost:5173/admin/login`
+   - Admin Panel: `http://localhost:5173/admin/dashboard` (mobile optimized)
 
 ---
 
@@ -149,10 +154,10 @@ royal-libas-website/
 │   │   ├── main.py       # FastAPI application & router registrations
 │   │   ├── config.py     # Application configuration & env vars
 │   │   ├── models.py     # SQLAlchemy models (products, variants, orders, coupons, addresses)
-│   │   ├── schemas.py    # Pydantic schemas
+│   │   ├── schemas.py    # Pydantic schemas (catalog, order, payment, tracking, admin)
 │   │   ├── services/     # Order authoritative math, payment webhook HMAC
 │   │   └── routers/      # API routers (products, collections, cart, orders, payments, coupons, admin)
-│   ├── tests/            # Automated test suites (test_phase1, test_phase2, test_phase4)
+│   ├── tests/            # Automated test suites (test_phase1, test_phase2, test_phase4, test_phase5)
 │   ├── seed.py           # Idempotent seed script
 │   └── requirements.txt  # Python backend dependencies
 └── frontend/
@@ -161,7 +166,7 @@ royal-libas-website/
     ├── tailwind.config.js# Custom brand color palette (maroon, gold, ivory)
     ├── vite.config.ts    # Vite bundler configuration
     └── src/
-        ├── App.tsx       # Main routing layout
+        ├── App.tsx       # Main routing layout (storefront + protected admin routes)
         ├── main.tsx      # React 18 mount point
         ├── index.css     # Tailwind styling directives
         ├── components/
@@ -177,10 +182,17 @@ royal-libas-website/
         │   ├── Cart.tsx        # Shopping bag with live stock validation
         │   ├── Checkout.tsx    # 1-page express guest checkout (COD & Razorpay)
         │   ├── OrderSuccess.tsx# Confirmed order details & timeline
-        │   └── TrackOrder.tsx  # Track order lookup placeholder
+        │   ├── TrackOrder.tsx  # Customer live order tracking with status stepper & courier link
+        │   └── admin/          # Phone-friendly admin panel
+        │       ├── AdminLogin.tsx      # JWT admin sign-in
+        │       ├── AdminLayout.tsx     # Shell with mobile bottom tab navigation
+        │       ├── AdminDashboard.tsx  # Today's orders, to-pack queue, low-stock alerts
+        │       ├── AdminOrders.tsx     # Order fulfillment, courier assignment & WhatsApp
+        │       ├── AdminProducts.tsx   # Add products, add sizes, instant stock +/- editor
+        │       └── AdminCustomers.tsx  # Read-only clientele roster with WhatsApp link
         ├── types/
         │   ├── product.ts      # TypeScript interfaces for products & collections
-        │   └── order.ts        # TypeScript interfaces for checkout & orders
+        │   └── order.ts        # TypeScript interfaces for checkout, tracking & admin
         └── lib/
             └── api.ts          # API client for backend communication
 ```

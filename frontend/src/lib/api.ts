@@ -120,3 +120,177 @@ export async function createRazorpayOrder(orderCode: string): Promise<RazorpayOr
   }
   return response.json();
 }
+
+// ==========================================
+// Phase 5: Tracking & Admin API Clients
+// ==========================================
+
+import {
+  OrderTrackResponse,
+  OrderStatusUpdateRequest,
+  AdminDashboardResponse,
+  AdminCustomerResponse,
+} from '../types/order';
+
+export async function trackOrder(orderCode: string, phone: string): Promise<OrderTrackResponse> {
+  const cleanCode = encodeURIComponent(orderCode.trim());
+  const cleanPhone = encodeURIComponent(phone.trim());
+  const response = await fetch(`${API_BASE_URL}/orders/track?order_code=${cleanCode}&phone=${cleanPhone}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Order not found. Please check your order code and mobile number.');
+  }
+  return response.json();
+}
+
+export async function adminLogin(email: string, password: string): Promise<{ access_token: string; token_type: string }> {
+  const response = await fetch(`${API_BASE_URL}/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Invalid email or password');
+  }
+  return response.json();
+}
+
+export async function fetchAdminDashboard(token: string): Promise<AdminDashboardResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load admin dashboard');
+  }
+  return response.json();
+}
+
+export async function fetchAdminOrders(token: string, status?: string, date?: string): Promise<OrderResponse[]> {
+  const params = new URLSearchParams();
+  if (status && status !== 'ALL') params.append('status', status);
+  if (date) params.append('date', date);
+
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/orders${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load admin orders');
+  }
+  return response.json();
+}
+
+export async function fetchAdminOrder(token: string, id: number): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Order #${id} not found`);
+  }
+  return response.json();
+}
+
+export async function updateAdminOrderStatus(
+  token: string,
+  id: number,
+  payload: OrderStatusUpdateRequest,
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${id}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update order status');
+  }
+  return response.json();
+}
+
+export async function fetchAdminCustomers(token: string): Promise<AdminCustomerResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/customers`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load customers roster');
+  }
+  return response.json();
+}
+
+export async function fetchAdminProducts(token: string): Promise<Product[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/products`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load admin products');
+  }
+  return response.json();
+}
+
+export async function adminCreateProduct(token: string, payload: any): Promise<Product> {
+  const response = await fetch(`${API_BASE_URL}/admin/products`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to create product');
+  }
+  return response.json();
+}
+
+export async function adminUpdateProduct(token: string, id: number, payload: any): Promise<Product> {
+  const response = await fetch(`${API_BASE_URL}/admin/products/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update product');
+  }
+  return response.json();
+}
+
+export async function adminAddVariant(token: string, productId: number, payload: any): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/products/${productId}/variants`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to add variant');
+  }
+  return response.json();
+}
+
+export async function adminUpdateVariant(token: string, variantId: number, payload: any): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/variants/${variantId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update variant');
+  }
+  return response.json();
+}

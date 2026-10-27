@@ -73,7 +73,10 @@ export interface OrderResponse {
   shipping_charge: number;
   discount: number;
   total: number;
+  courier_name?: string | null;
+  tracking_url?: string | null;
   created_at: string;
+  updated_at?: string;
   items: OrderItemResponse[];
   address: OrderAddress & { id: number };
 }
@@ -91,4 +94,54 @@ export interface CouponValidateResponse {
   code: string;
   discount: number;
   message: string;
+}
+
+export interface OrderTrackResponse {
+  order_code: string;
+  customer_name: string;
+  status: string;
+  payment_method: string;
+  payment_status: string;
+  subtotal: number;
+  shipping_charge: number;
+  discount: number;
+  total: number;
+  courier_name?: string | null;
+  tracking_url?: string | null;
+  created_at: string;
+  updated_at?: string;
+  items: OrderItemResponse[];
+  address: (OrderAddress & { id: number }) | null;
+}
+
+export interface OrderStatusUpdateRequest {
+  status: string;
+  courier_name?: string;
+  tracking_url?: string;
+}
+
+export interface AdminLowStockVariant {
+  variant_id: number;
+  product_id: number;
+  product_name: string;
+  product_slug: string;
+  size: string;
+  colour?: string | null;
+  stock: number;
+  selling_price: number;
+}
+
+export interface AdminDashboardResponse {
+  orders_today: number;
+  to_pack_count: number;
+  total_orders: number;
+  low_stock_variants: AdminLowStockVariant[];
+}
+
+export interface AdminCustomerResponse {
+  name: string;
+  phone: string;
+  order_count: number;
+  total_spent: number;
+  last_order_date: string;
 }
