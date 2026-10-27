@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Generate 64 high-resolution, local, authentic boutique product photos
-for the 16 real Royal Libas products across 4 views: front, back, detail, worn.
+"""Generate 64 sample boutique product photos
+for the 16 Royal Libas sample products across 4 views: front, back, detail, worn.
 """
 
 import os
@@ -106,7 +106,7 @@ def create_views(base_name: str, target_key: str, tint, warmth):
 
 
 def main():
-    print(f"Generating 64 authentic product photos in {OUTPUT_DIR}...")
+    print(f"Generating 64 sample product photos in {OUTPUT_DIR}...")
     for cfg in PRODUCTS_CONFIG:
         create_views(cfg["base"], cfg["key"], cfg["tint"], cfg["warmth"])
     print("Done! All 64 boutique photos generated successfully.")

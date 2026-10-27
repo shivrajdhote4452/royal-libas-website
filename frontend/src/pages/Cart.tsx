@@ -10,6 +10,15 @@ export const Cart: React.FC = () => {
   const { items, totalItems, subtotal, updateQuantity, removeFromCart } = useCart();
   const [validationResult, setValidationResult] = useState<CartValidateResponse | null>(null);
   const [isValidating, setIsValidating] = useState(false);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+
+  const handleRemove = (variantId: number) => {
+    setRemovingId(variantId);
+    setTimeout(() => {
+      removeFromCart(variantId);
+      setRemovingId(null);
+    }, 300);
+  };
 
   useEffect(() => {
     document.title = 'Shopping Bag | Royal Libas by Tanya';
@@ -111,7 +120,9 @@ export const Cart: React.FC = () => {
             return (
               <div
                 key={item.variantId}
-                className={`bg-white p-4 sm:p-5 rounded-lg border transition-all duration-200 ${
+                className={`bg-white p-4 sm:p-5 rounded-lg border transition-all duration-300 ease-out ${
+                  removingId === item.variantId ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100'
+                } ${
                   isLineError ? 'border-red-300 bg-red-50/20' : 'border-[#E8DFD0] shadow-sm'
                 } flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between`}
               >
@@ -181,7 +192,7 @@ export const Cart: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => removeFromCart(item.variantId)}
+                    onClick={() => handleRemove(item.variantId)}
                     className="p-2 text-gray-400 hover:text-red-600 transition-colors"
                     title="Remove item"
                   >
@@ -248,7 +259,7 @@ export const Cart: React.FC = () => {
           <div className="p-4 bg-[#FAF7F2] rounded-lg border border-[#E8DFD0] space-y-2.5 text-xs text-gray-600">
             <div className="flex items-center gap-2 text-gray-800 font-semibold">
               <ShieldCheck className="w-4 h-4 text-[#C59B27]" />
-              <span>Authentic Handcrafted Boutique Quality</span>
+              <span>Handcrafted Boutique Quality</span>
             </div>
             <div className="flex items-center gap-2 text-gray-800 font-semibold">
               <Truck className="w-4 h-4 text-[#C59B27]" />

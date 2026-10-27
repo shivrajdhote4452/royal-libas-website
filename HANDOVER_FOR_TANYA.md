@@ -1,6 +1,9 @@
 # Royal Libas by Tanya — Boutique Owner Handover Guide
 **Congratulations Tanya!** Your online store is officially built, tested, hardened, and ready for soft launch.
 
+> [!WARNING]
+> **SAMPLE ONLY — all 16 products are placeholders made by tinting/cropping 3 base images, to be replaced with Tanya's real photos, prices and stock before launch.**
+
 This document is your plain-English daily operating manual. You do not need any coding knowledge to manage your catalogue, fulfill orders, or serve your customers.
 
 ---
@@ -13,7 +16,7 @@ This document is your plain-English daily operating manual. You do not need any 
 | **All Collections** | `https://yourdomain.com/shop` | Searchable product catalogue with size & price filters |
 | **Admin Panel** | `https://yourdomain.com/admin` | Your mobile-friendly boutique command center |
 | **Order Tracking** | `https://yourdomain.com/track-order` | Customer self-serve shipment tracking |
-| **WhatsApp Support** | `https://wa.me/919829012345` | Direct customer concierge |
+| **WhatsApp Support** | To be confirmed by Tanya | Direct customer concierge |
 
 > [!IMPORTANT]
 > **Admin Login Security:**  

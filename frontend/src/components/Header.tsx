@@ -120,7 +120,10 @@ export const Header: React.FC = () => {
                 Cart
               </span>
               {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#5B111A] text-white text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#FAF7F2] animate-in fade-in zoom-in duration-200">
+                <span
+                  key={totalItems}
+                  className="absolute -top-1 -right-1 bg-[#5B111A] text-white text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#FAF7F2] animate-cart-bounce shadow-sm"
+                >
                   {totalItems}
                 </span>
               )}

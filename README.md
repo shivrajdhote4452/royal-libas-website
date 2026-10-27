@@ -9,15 +9,17 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 ---
 
-## Phase 6 Notes & Live Content Architecture
+## Sample Catalogue & Live Content Notice
 
-- **Real Boutique Photography:** 100% of catalogue items feature authentic local Jaipur boutique photography (front view, back view, macro embroidery detail, and styled/worn look) with zero third-party CDN latency or placeholder seeds.
-- **Boutique Policy Pages:** All 5 required customer care and legal policy pages are live and mobile-optimized:
-  1. **About Page** (`/about`): Tanya's founding journey, atelier craftsmanship, and Jaipur handloom heritage.
+> **SAMPLE ONLY — all 16 products are placeholders made by tinting/cropping 3 base images, to be replaced with Tanya's real photos, prices and stock before launch.**
+
+- **Sample Photography:** 100% of catalogue items feature sample photography with a visible "SAMPLE PHOTO" badge across all product cards and product pages until Tanya supplies real photos.
+- **Boutique Policy Pages:** All 5 customer care and legal policy pages are live and mobile-optimized:
+  1. **About Page** (`/about`): Tanya's founding story, tailoring philosophy, and boutique craftsmanship.
   2. **Shipping & Delivery Policy** (`/shipping-policy`): 24–48 hour dispatch, 3–5 day delivery, free prepaid shipping, flat ₹99 COD charge.
   3. **Exchange & Returns Policy** (`/return-policy`): 7-day doorstep size exchange guarantee with WhatsApp concierge.
-  4. **Contact Page** (`/contact`): Boutique phone line, studio address in Civil Lines Jaipur, email, and consultation form.
-  5. **Privacy Policy & Terms** (`/privacy-policy`, `/terms-of-service`): Compliant with DPDP Act 2023, IT Act, and PCI-DSS Level 1 payment protection via Razorpay.
+  4. **Contact Page** (`/contact`): Contact details: To be confirmed by Tanya.
+  5. **Privacy Policy & Terms** (`/privacy-policy`, `/terms-of-service`): Customer data protection and secure payment processing.
 
 ---
 

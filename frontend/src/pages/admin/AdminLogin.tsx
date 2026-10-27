@@ -106,7 +106,7 @@ export const AdminLogin: React.FC = () => {
             </Link>
             <div className="flex items-center gap-1 text-[11px] text-gray-400">
               <ShieldCheck className="w-3.5 h-3.5 text-[#C59B27]" />
-              <span>JWT Authenticated</span>
+              <span>JWT Protected</span>
             </div>
           </div>
         </div>

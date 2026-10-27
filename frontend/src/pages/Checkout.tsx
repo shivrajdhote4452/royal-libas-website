@@ -18,6 +18,7 @@ import {
   validateCoupon,
   createOrder,
   createRazorpayOrder,
+  fetchPaymentGatewayConfig,
 } from '../lib/api';
 import { CouponValidateResponse, OrderCreatePayload } from '../types/order';
 
@@ -34,6 +35,7 @@ export const Checkout: React.FC = () => {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'PREPAID' | 'COD'>('PREPAID');
+  const [gatewayConfig, setGatewayConfig] = useState<{ configured: boolean; key_id: string | null } | null>(null);
 
   // Coupon state
   const [couponInput, setCouponInput] = useState('');
@@ -46,12 +48,23 @@ export const Checkout: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [stockError, setStockError] = useState<string | null>(null);
 
-  // Redirect if cart is empty
+  // Redirect if cart is empty & check gateway status
   useEffect(() => {
     document.title = 'Secure Guest Checkout | Royal Libas by Tanya';
     if (items.length === 0) {
       navigate('/cart');
     }
+    fetchPaymentGatewayConfig()
+      .then((cfg) => {
+        setGatewayConfig(cfg);
+        if (!cfg.configured) {
+          setPaymentMethod('COD');
+        }
+      })
+      .catch(() => {
+        setGatewayConfig({ configured: false, key_id: null });
+        setPaymentMethod('COD');
+      });
   }, [items, navigate]);
 
   // Dynamic server-aligned fee calculations
@@ -165,6 +178,13 @@ export const Checkout: React.FC = () => {
       }
 
       // 3. PREPAID Flow with Razorpay
+      if (gatewayConfig && !gatewayConfig.configured) {
+        setFormError('Prepaid payment not available right now, please choose COD');
+        setPaymentMethod('COD');
+        setIsSubmitting(false);
+        return;
+      }
+
       try {
         const rzpOrder = await createRazorpayOrder(orderResponse.order_code);
 
@@ -198,13 +218,14 @@ export const Checkout: React.FC = () => {
           const razorpayInstance = new rzpWindow(options);
           razorpayInstance.open();
         } else {
-          // In development/sandbox mock mode without external script loaded:
-          // Smoothly proceed to order success screen
-          clearCart();
-          navigate(`/order-success/${orderResponse.order_code}`);
+          // Razorpay Checkout library not loaded
+          setFormError('Prepaid payment not available right now, please choose COD');
+          setPaymentMethod('COD');
+          setIsSubmitting(false);
         }
-      } catch (paymentErr: any) {
-        setFormError(`Payment gateway initiation failed: ${paymentErr.message}`);
+      } catch (_paymentErr: any) {
+        setFormError('Prepaid payment not available right now, please choose COD');
+        setPaymentMethod('COD');
         setIsSubmitting(false);
       }
     } catch (err: any) {
@@ -407,18 +428,25 @@ export const Checkout: React.FC = () => {
             <div className="space-y-3">
               {/* Prepaid Choice */}
               <label
-                className={`p-4 rounded-lg border flex items-start gap-3 cursor-pointer transition-colors ${
-                  paymentMethod === 'PREPAID'
-                    ? 'border-[#5B111A] bg-[#FAF7F2] ring-1 ring-[#5B111A]'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                className={`p-4 rounded-lg border flex items-start gap-3 transition-colors ${
+                  gatewayConfig && !gatewayConfig.configured
+                    ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200'
+                    : paymentMethod === 'PREPAID'
+                    ? 'border-[#5B111A] bg-[#FAF7F2] ring-1 ring-[#5B111A] cursor-pointer'
+                    : 'border-gray-200 hover:border-gray-300 bg-white cursor-pointer'
                 }`}
               >
                 <input
                   type="radio"
                   name="payment_choice"
                   value="PREPAID"
-                  checked={paymentMethod === 'PREPAID'}
-                  onChange={() => setPaymentMethod('PREPAID')}
+                  disabled={gatewayConfig ? !gatewayConfig.configured : false}
+                  checked={paymentMethod === 'PREPAID' && (gatewayConfig ? gatewayConfig.configured : true)}
+                  onChange={() => {
+                    if (gatewayConfig?.configured !== false) {
+                      setPaymentMethod('PREPAID');
+                    }
+                  }}
                   className="mt-1 text-[#5B111A] focus:ring-[#5B111A]"
                 />
                 <div className="flex-1">
@@ -431,9 +459,15 @@ export const Checkout: React.FC = () => {
                       FREE SHIPPING
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    Instant confirmation via Razorpay. Zero transaction convenience fees.
-                  </p>
+                  {gatewayConfig && !gatewayConfig.configured ? (
+                    <p className="text-[11px] text-amber-700 font-semibold mt-1">
+                      Prepaid payment not available right now, please choose COD
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Instant confirmation via Razorpay. Zero transaction convenience fees.
+                    </p>
+                  )}
                 </div>
               </label>
 
@@ -621,7 +655,7 @@ export const Checkout: React.FC = () => {
           {/* Security Badge */}
           <div className="p-3 bg-[#FAF7F2] rounded border border-[#E8DFD0] text-[11px] text-gray-600 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-[#C59B27] shrink-0" />
-            <span>Guaranteed 100% authentic designer attire with secure dispatch tracking.</span>
+            <span>Guaranteed designer quality attire with secure dispatch tracking.</span>
           </div>
         </div>
       </form>

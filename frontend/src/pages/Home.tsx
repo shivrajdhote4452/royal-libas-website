@@ -39,11 +39,12 @@ export const Home: React.FC = () => {
   const newInProducts = products.slice(0, 4);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF7F2]">
+    <div className="min-h-screen flex flex-col bg-[#FAF7F2] page-enter">
       {/* ========================================================
-          BLOCK 1: Hero — One current drop only, one clear CTA
+          BLOCK 1: Hero — One current drop only, one clear CTA, gold shimmer
           ======================================================== */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[#5B111A] via-[#480B13] to-[#3A080F] text-[#FAF7F2] py-16 sm:py-24 lg:py-28 px-4 sm:px-6 lg:px-8 border-b border-[#C59B27]/30">
+        <div className="absolute inset-0 gold-shimmer pointer-events-none opacity-30 z-0" />
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#C59B27_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#FAF7F2]/10 backdrop-blur-sm border border-[#C59B27]/40 text-[#EAD186] text-xs font-semibold uppercase tracking-widest mb-6">
@@ -68,6 +69,46 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
+      {/* Gentle Marquee Trust Strip */}
+      <div className="bg-[#5B111A] border-y border-[#C59B27]/30 text-[#FAF7F2] py-3 overflow-hidden select-none">
+        <div className="animate-marquee-track flex items-center">
+          <div className="flex items-center justify-around w-1/2 shrink-0 px-4 gap-8 text-xs sm:text-sm font-medium tracking-wide">
+            <span className="flex items-center gap-2">
+              <Truck className="w-4 h-4 text-[#C59B27]" /> Free Delivery Across India on Prepaid
+            </span>
+            <span className="text-[#C59B27]/60">•</span>
+            <span className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-[#C59B27]" /> 7-Day Doorstep Size Exchange
+            </span>
+            <span className="text-[#C59B27]/60">•</span>
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#C59B27]" /> 100% Handcrafted Jaipur Tailoring
+            </span>
+            <span className="text-[#C59B27]/60">•</span>
+            <span className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#C59B27]" /> Cash on Delivery Available
+            </span>
+          </div>
+          <div className="flex items-center justify-around w-1/2 shrink-0 px-4 gap-8 text-xs sm:text-sm font-medium tracking-wide" aria-hidden="true">
+            <span className="flex items-center gap-2">
+              <Truck className="w-4 h-4 text-[#C59B27]" /> Free Delivery Across India on Prepaid
+            </span>
+            <span className="text-[#C59B27]/60">•</span>
+            <span className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-[#C59B27]" /> 7-Day Doorstep Size Exchange
+            </span>
+            <span className="text-[#C59B27]/60">•</span>
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[#C59B27]" /> 100% Handcrafted Jaipur Tailoring
+            </span>
+            <span className="text-[#C59B27]/60">•</span>
+            <span className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#C59B27]" /> Cash on Delivery Available
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Connection Warning if API is offline */}
       {error && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 text-center text-xs text-amber-800 flex items-center justify-center gap-2">
@@ -77,7 +118,7 @@ export const Home: React.FC = () => {
       )}
 
       {/* ========================================================
-          BLOCK 2: Shop by Category
+          BLOCK 2: Shop by Category with hover zoom
           ======================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full">
         <div className="text-center mb-8 sm:mb-10">
@@ -121,7 +162,7 @@ export const Home: React.FC = () => {
               to={cat.href}
               className={`group relative aspect-[4/5] rounded-lg overflow-hidden bg-gradient-to-t ${cat.bgClass} p-5 flex flex-col justify-end text-white shadow-sm hover:shadow-md transition-all`}
             >
-              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
+              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 group-hover:scale-105 transition-all duration-350 ease-out" />
               <div className="relative z-10">
                 <h3 className="font-serif text-lg sm:text-xl font-bold leading-tight group-hover:text-[#EAD186] transition-colors">
                   {cat.title}
@@ -139,7 +180,7 @@ export const Home: React.FC = () => {
       </section>
 
       {/* ========================================================
-          BLOCK 3: Bestsellers (Dynamic API products)
+          BLOCK 3: Bestsellers (Smooth scroll-snap row, no autoplay)
           ======================================================== */}
       <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -163,13 +204,15 @@ export const Home: React.FC = () => {
           {loading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="aspect-[4/5] bg-gray-100 animate-pulse rounded-lg" />
+                <div key={i} className="aspect-[3/4] bg-gray-100 animate-pulse rounded-lg" />
               ))}
             </div>
           ) : bestsellers.length > 0 ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              {bestsellers.map((product) => (
-                <ProductCard key={product.id} product={product} />
+            <div className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              {bestsellers.map((product, idx) => (
+                <div key={product.id} className="min-w-[240px] sm:min-w-0 snap-start card-stagger" style={{ animationDelay: `${idx * 40}ms` }}>
+                  <ProductCard product={product} />
+                </div>
               ))}
             </div>
           ) : (
@@ -207,8 +250,10 @@ export const Home: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {newInProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {newInProducts.map((product, idx) => (
+              <div key={product.id} className="card-stagger" style={{ animationDelay: `${idx * 40}ms` }}>
+                <ProductCard product={product} />
+              </div>
             ))}
           </div>
         )}
@@ -267,7 +312,7 @@ export const Home: React.FC = () => {
               Styled by Real Women
             </h2>
             <p className="mt-2 text-xs sm:text-sm text-gray-600 leading-relaxed">
-              Authentic snapshots of our silhouettes in celebrations, family soirees, and sunny day outings.
+              Sample snapshots of our silhouettes in celebrations, family soirees, and sunny day outings.
             </p>
           </div>
 

@@ -1,5 +1,5 @@
 /**
  * Royal Libas by Tanya — Official Boutique Catalogue Registry.
- * Real authentic products seeded via backend/seed.py.
+ * SAMPLE ONLY — all 16 products are placeholders made by tinting/cropping 3 base images, to be replaced with Tanya's real photos, prices and stock before launch.
  */
 export {};

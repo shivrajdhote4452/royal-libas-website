@@ -108,6 +108,16 @@ export async function fetchOrderByCode(orderCode: string): Promise<OrderResponse
   return response.json();
 }
 
+export async function fetchPaymentGatewayConfig(): Promise<{ configured: boolean; key_id: string | null }> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/payments/razorpay/config`);
+    if (!response.ok) return { configured: false, key_id: null };
+    return response.json();
+  } catch {
+    return { configured: false, key_id: null };
+  }
+}
+
 export async function createRazorpayOrder(orderCode: string): Promise<RazorpayOrderResponse> {
   const response = await fetch(`${API_BASE_URL}/payments/razorpay/create-order`, {
     method: 'POST',

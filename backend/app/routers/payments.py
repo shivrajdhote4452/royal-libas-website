@@ -13,6 +13,18 @@ from app.services.payment_service import (
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
+@router.get("/razorpay/config")
+def get_payment_gateway_config():
+    """Return whether Razorpay gateway credentials are configured."""
+    from app.services.payment_service import is_live_razorpay_configured
+    from app.config import RAZORPAY_KEY_ID
+    configured = is_live_razorpay_configured()
+    return {
+        "configured": configured,
+        "key_id": RAZORPAY_KEY_ID if configured else None,
+    }
+
+
 @router.post("/razorpay/create-order", response_model=RazorpayCreateOrderResponse)
 def create_payment_order(
     payload: RazorpayCreateOrderRequest,

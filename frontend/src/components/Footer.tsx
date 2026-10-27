@@ -30,13 +30,14 @@ export const Footer: React.FC = () => {
               >
                 <Instagram className="w-4 h-4" />
               </a>
-              <a
-                href="mailto:care@royallibas.com"
+              <Link
+                to="/contact"
                 className="w-8 h-8 rounded-full bg-[#5B111A]/10 text-[#5B111A] flex items-center justify-center hover:bg-[#5B111A] hover:text-white transition-colors"
-                aria-label="Email"
+                aria-label="Email: To be confirmed by Tanya"
+                title="Email: To be confirmed by Tanya"
               >
                 <Mail className="w-4 h-4" />
-              </a>
+              </Link>
             </div>
           </div>
 

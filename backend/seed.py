@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Seed script for Royal Libas Phase 6 Real Catalogue.
+"""Seed script for Royal Libas Sample Catalogue.
 
-Replaces development dummy products with Tanya's authentic boutique collection:
-- 16 curated boutique designs across Festive Edit, Everyday Cotton, Kurti Sets, and Co-ord Sets
-- Authentic local imagery (front, back, detail, worn shots) for every product
-- Real prices (MRP and Selling Price in INR)
-- True size-wise stock per variant (S, M, L, XL, XXL)
+SAMPLE ONLY — all 16 products are placeholders made by tinting/cropping 3 base images, to be replaced with Tanya's real photos, prices and stock before launch.
+- 16 sample boutique designs across Festive Edit, Everyday Cotton, Kurti Sets, and Co-ord Sets
+- Sample local imagery (front, back, detail, worn shots) for every product
+- Sample prices (MRP and Selling Price in INR)
+- Sample size-wise stock per variant (S, M, L, XL, XXL)
 - One sold-out size demonstration (Chandni Raat Co-ord has size S at 0 stock)
 - One low-stock demonstration (Zari Mahal Anarkali has 5 total units)
-- Authentic fabric, care instructions, and centimeter-accurate size charts
+- Sample fabric, care instructions, and centimeter-accurate size charts
 
 Idempotency:
-Safely updates existing products or creates new ones, removing any legacy dummy products.
+Safely updates existing products or creates new ones.
 """
 
 import json
@@ -143,7 +143,7 @@ REAL_PRODUCTS_DATA = [
     {
         "name": "Gulabi Rooh Handblock Cotton Set",
         "slug": "gulabi-rooh-handblock-cotton-set",
-        "description": "Enchanting dusty rose kurti and palazzo set adorned with authentic Jaipur Sanganeri handblock floral prints. Made from 100% fine mulmul cotton, providing unparalleled daytime comfort and timeless ethnic charm.",
+        "description": "Enchanting dusty rose kurti and palazzo set adorned with traditional Jaipur Sanganeri handblock floral prints. Made from 100% fine mulmul cotton, providing unparalleled daytime comfort and timeless ethnic charm.",
         "fabric": "100% Sanganeri Handblock Printed Mulmul Cotton",
         "care": "Hand wash separately in cold water using mild soap; dry in shade",
         "category": "Kurti Sets",
@@ -180,7 +180,7 @@ REAL_PRODUCTS_DATA = [
     {
         "name": "Bagicha Muslin Tiered Angrakha",
         "slug": "bagicha-muslin-tiered-angrakha",
-        "description": "Earthy sage green tiered Angrakha style kurti set handcrafted from feather-soft organic muslin cotton. Features authentic Rajasthani dori ties with handmade fabric potli tassels and comfortable straight cotton palazzos.",
+        "description": "Earthy sage green tiered Angrakha style kurti set handcrafted from feather-soft organic muslin cotton. Features traditional Rajasthani dori ties with handmade fabric potli tassels and comfortable straight cotton palazzos.",
         "fabric": "Organic Muslin Cotton with Hand Crochet Lace Trims",
         "care": "Gentle hand wash in cold water or mild cycle machine wash",
         "category": "Kurti Sets",
@@ -270,7 +270,7 @@ REAL_PRODUCTS_DATA = [
     {
         "name": "Firdaus Chanderi Peplum & Sharara",
         "slug": "firdaus-chanderi-peplum-sharara",
-        "description": "Festive mustard ochre peplum style short kurti paired with voluminous tiered sharara pants. Woven with authentic Chanderi motifs and finished with delicate gold kiran lace trims.",
+        "description": "Festive mustard ochre peplum style short kurti paired with voluminous tiered sharara pants. Woven with traditional Chanderi motifs and finished with delicate gold kiran lace trims.",
         "fabric": "Chanderi Brocade Silk with Mulmul Lining",
         "care": "Dry clean only",
         "category": "Festive Sets",
@@ -360,7 +360,7 @@ REAL_PRODUCTS_DATA = [
     {
         "name": "Riwayat Brocade Festive Kurti & Palazzo",
         "slug": "riwayat-brocade-festive-kurti-palazzo",
-        "description": "Authentic Benarasi woven zari brocade kurti in royal plum with gold floral jaal work. Completed with a grand flared palazzo and a pure silk tissue dupatta with tasseled pallu.",
+        "description": "Traditional Benarasi woven zari brocade kurti in royal plum with gold floral jaal work. Completed with a grand flared palazzo and a pure silk tissue dupatta with tasseled pallu.",
         "fabric": "Benarasi Woven Zari Brocade with Pure Mulmul Lining",
         "care": "Dry clean only to maintain brocade weaves",
         "category": "Festive Sets",
@@ -439,7 +439,7 @@ def seed_database(session_factory=None):
                 coupon.is_active = cpdata["is_active"]
                 print(f"  [*] Updated coupon: {coupon.code}")
 
-        # 4. Seed 16 Real Boutique Products
+        # 4. Seed 16 Sample Boutique Products
         for pdata in REAL_PRODUCTS_DATA:
             product = db.query(Product).filter(Product.slug == pdata["slug"]).first()
             if not product:
@@ -456,7 +456,7 @@ def seed_database(session_factory=None):
                 )
                 db.add(product)
                 db.flush()
-                print(f"  [+] Created real product: {product.name} (slug: {product.slug})")
+                print(f"  [+] Created sample product: {product.name} (slug: {product.slug})")
             else:
                 product.name = pdata["name"]
                 product.description = pdata["description"]
@@ -466,7 +466,7 @@ def seed_database(session_factory=None):
                 product.category = pdata["category"]
                 product.is_bestseller = pdata["is_bestseller"]
                 product.is_active = pdata["is_active"]
-                print(f"  [*] Updated real product: {product.name} (slug: {product.slug})")
+                print(f"  [*] Updated sample product: {product.name} (slug: {product.slug})")
 
             # Associate collections
             target_cols = [collections_map[cslug] for cslug in pdata["collections"] if cslug in collections_map]
@@ -500,7 +500,7 @@ def seed_database(session_factory=None):
                     variant.selling_price = vdata["selling_price"]
                     variant.stock = vdata["stock"]
 
-            # Upsert 4 real photos: front, back, detail, worn
+            # Upsert 4 sample photos: front, back, detail, worn
             views = [
                 ("front", f"{product.name} - Front View"),
                 ("back", f"{product.name} - Back Silhouette"),
@@ -525,7 +525,7 @@ def seed_database(session_factory=None):
             db.flush()
 
         db.commit()
-        print("Catalogue seed complete: 16 real products seeded with 64 authentic boutique photos.")
+        print("Catalogue seed complete: 16 sample products seeded with 64 sample boutique photos.")
     except Exception as e:
         db.rollback()
         print(f"Error during seeding: {e}")

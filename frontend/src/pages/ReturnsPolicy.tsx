@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { RefreshCw, CheckCircle2, AlertCircle, MessageCircle } from 'lucide-react';
+import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const ReturnsPolicy: React.FC = () => {
   useEffect(() => {
@@ -112,15 +112,9 @@ export const ReturnsPolicy: React.FC = () => {
           <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">
             Our team is available Monday to Saturday, 10:30 AM to 7:30 PM to assist you with quick doorstep exchanges.
           </p>
-          <a
-            href="https://wa.me/919876543210?text=Hi%20Tanya!%20I%20would%20like%20to%20request%20a%20size%20exchange%20for%20my%20order."
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center px-6 py-3 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold uppercase tracking-wider shadow-md transition-all gap-2"
-          >
-            <MessageCircle className="w-4 h-4" />
-            Start Size Exchange on WhatsApp
-          </a>
+          <p className="text-xs font-medium text-gray-500">
+            WhatsApp Concierge: <span className="font-semibold text-gray-700">To be confirmed by Tanya</span>
+          </p>
         </div>
       </div>
     </div>

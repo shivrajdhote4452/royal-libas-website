@@ -5,8 +5,8 @@ from app.routers import admin, products, collections, cart, orders, payments, co
 
 app = FastAPI(
     title="Royal Libas by Tanya API",
-    description="Backend API for Royal Libas custom shop (Phase 7: Hardened & Production Frozen)",
-    version="0.7.0",
+    description="Backend API for Royal Libas custom shop (Launch & Honesty Hardened)",
+    version="0.8.1",
 )
 
 # Secure CORS configuration: allow configured frontend domain and local dev servers
@@ -51,6 +51,7 @@ def root():
     """Root endpoint for Royal Libas API."""
     return {
         "app": "Royal Libas by Tanya API",
-        "phase": 4,
-        "message": "Cart, Checkout, Razorpay & COD orders operational. Health check at /health",
+        "phase": 8,
+        "status": "operational",
+        "message": "Royal Libas API operational. Health check at /health",
     }

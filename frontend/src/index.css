@@ -12,19 +12,194 @@
   h1, h2, h3, h4, .font-serif {
     font-family: 'Playfair Display', Georgia, serif;
   }
+
+  /* Accessible focus-visible gold rings on interactive elements */
+  :focus-visible {
+    outline: 2px solid #C59B27 !important;
+    outline-offset: 2px !important;
+  }
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: #FAF7F2;
 }
 ::-webkit-scrollbar-thumb {
-  background: #D4AF37;
+  background: #C59B27;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #B38F24;
+  background: #9A7718;
+}
+
+/* Button click press scale (0.97) */
+button:active:not(:disabled),
+.btn-press:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Page fade-in on route change (300-400ms ease-out) */
+@keyframes pageFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: pageFadeIn 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Staggered card fade-in */
+@keyframes cardStagger {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card-stagger {
+  opacity: 0;
+  animation: cardStagger 360ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Gold shimmer gradient for hero */
+@keyframes goldShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.gold-shimmer {
+  background: linear-gradient(
+    110deg,
+    rgba(197, 155, 39, 0.03) 0%,
+    rgba(234, 209, 134, 0.28) 45%,
+    rgba(255, 250, 240, 0.4) 50%,
+    rgba(234, 209, 134, 0.28) 55%,
+    rgba(197, 155, 39, 0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: goldShimmer 7s infinite linear;
+}
+
+/* Gentle Marquee for trust strip */
+@keyframes marqueeScroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-track {
+  display: flex;
+  width: 200%;
+  animation: marqueeScroll 32s linear infinite;
+}
+
+.animate-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* Header cart badge bounce once */
+@keyframes cartBounceOnce {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.32) translateY(-2px);
+  }
+  60% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-cart-bounce {
+  animation: cartBounceOnce 380ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Checkmark SVG stroke draw animation */
+@keyframes checkmarkStroke {
+  0% {
+    stroke-dashoffset: 48;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-draw-check {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: checkmarkStroke 450ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Reserved 3/4 aspect ratio */
+.aspect-3-4 {
+  aspect-ratio: 3 / 4;
+}
+
+/* Price, stock, total numbers must never animate or shift */
+.price-display,
+.stock-display,
+.total-display {
+  font-variant-numeric: tabular-nums;
+  transform: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Strict respect for prefers-reduced-motion: turn ALL animations off */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-marquee-track {
+    animation: none !important;
+    width: auto !important;
+    transform: none !important;
+  }
+
+  .gold-shimmer {
+    animation: none !important;
+  }
+
+  .page-enter,
+  .card-stagger {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .animate-cart-bounce,
+  .animate-draw-check {
+    animation: none !important;
+  }
 }

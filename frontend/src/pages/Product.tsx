@@ -139,11 +139,11 @@ export const ProductPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 min-h-screen">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 min-h-screen page-enter">
       {/* Toast Notification */}
       {addedToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#1A4D2E] text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-3 animate-bounce">
-          <Check className="w-5 h-5 text-[#EAD186]" />
+          <Check className="w-5 h-5 text-[#EAD186] animate-draw-check" />
           <div className="text-xs sm:text-sm">
             <span className="font-bold">{product.name} (Size {selectedVariant?.size})</span> added to cart!
           </div>
@@ -161,19 +161,26 @@ export const ProductPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14">
         {/* ========================================================
-            BLOCK 1: Photo Gallery with mobile swipe & thumbnails
+            BLOCK 1: Photo Gallery with crossfade & thumbnails
             ======================================================== */}
         <div className="flex flex-col gap-4">
-          {/* Main Large Image */}
-          <div className="relative aspect-[3/4] sm:aspect-[4/5] w-full rounded-lg overflow-hidden bg-[#F0E9DF] border border-[#E8DFD0] shadow-sm">
+          {/* Main Large Image with reserved 3/4 aspect ratio */}
+          <div className="relative aspect-[3/4] w-full rounded-lg overflow-hidden bg-[#F0E9DF] border border-[#E8DFD0] shadow-sm">
             {/* Dynamic Badge */}
             {product.badges && product.badges.length > 0 && (
-              <div className="absolute top-4 left-4 z-20">
+              <div className="absolute top-4 left-4 z-20 no-motion">
                 <span className="inline-flex items-center px-3 py-1 rounded bg-[#5B111A] text-[#FAF7F2] text-xs font-bold tracking-wider uppercase shadow-md border border-[#C59B27]/40">
                   {product.badges[0]}
                 </span>
               </div>
             )}
+
+            {/* Visible SAMPLE PHOTO Badge — visible on mobile and desktop */}
+            <div className="absolute top-4 right-4 z-20 pointer-events-none no-motion">
+              <span className="inline-flex items-center px-2.5 py-1 rounded bg-black/80 text-amber-200 text-xs font-bold tracking-wider uppercase shadow-md border border-amber-400/40 backdrop-blur-sm">
+                SAMPLE PHOTO
+              </span>
+            </div>
 
             {isSoldOut && (
               <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 flex items-center justify-center">
@@ -185,9 +192,11 @@ export const ProductPage: React.FC = () => {
 
             {activeImage ? (
               <img
+                key={activeImageIndex}
                 src={activeImage}
                 alt={`${product.name} view ${activeImageIndex + 1}`}
-                className="w-full h-full object-cover object-center transition-all duration-300"
+                className="w-full h-full object-cover object-center transition-opacity duration-300 ease-out"
+                loading="eager"
               />
             ) : (
               <div className="w-full h-full bg-[#5B111A] flex items-center justify-center text-white p-8 text-center">
@@ -204,14 +213,14 @@ export const ProductPage: React.FC = () => {
                   key={img.id}
                   type="button"
                   onClick={() => setActiveImageIndex(idx)}
-                  className={`relative aspect-[3/4] rounded-md overflow-hidden border-2 transition-all ${
+                  className={`relative aspect-[3/4] rounded-md overflow-hidden border-2 transition-all duration-200 ${
                     activeImageIndex === idx
-                      ? 'border-[#5B111A] ring-2 ring-[#C59B27]/50'
-                      : 'border-transparent hover:border-gray-300 opacity-80 hover:opacity-100'
+                      ? 'border-[#C59B27] ring-2 ring-[#C59B27] shadow-sm'
+                      : 'border-transparent hover:border-gray-300 opacity-75 hover:opacity-100'
                   }`}
                   aria-label={`View photo ${idx + 1}`}
                 >
-                  <img src={img.url} alt={img.alt_text || `Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                  <img src={img.url} alt={img.alt_text || `Photo ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
                 </button>
               ))}
             </div>
@@ -274,12 +283,12 @@ export const ProductPage: React.FC = () => {
                     type="button"
                     disabled={soldOut}
                     onClick={() => setSelectedVariant(v)}
-                    className={`py-3 px-2 rounded-lg border text-center transition-all ${
+                    className={`size-btn-pop py-3 px-2 rounded-lg border text-center transition-all ${
                       soldOut
-                        ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed opacity-60'
+                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-60'
                         : isSelected
-                        ? 'border-[#5B111A] bg-[#5B111A]/5 text-[#5B111A] font-bold shadow-sm ring-1 ring-[#5B111A]'
-                        : 'border-[#E8DFD0] hover:border-gray-400 text-gray-800 bg-white'
+                        ? 'border-[#C59B27] bg-[#5B111A]/5 text-[#5B111A] font-bold shadow-sm ring-2 ring-[#C59B27] scale-[1.03]'
+                        : 'border-[#E8DFD0] hover:border-gray-400 text-gray-800 bg-white hover:scale-[1.01]'
                     }`}
                   >
                     <div className={`text-sm sm:text-base font-semibold ${soldOut ? 'line-through' : ''}`}>
@@ -311,8 +320,17 @@ export const ProductPage: React.FC = () => {
                 onClick={handleAddToCart}
                 className="w-full py-3.5 px-6 rounded-lg bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold text-sm uppercase tracking-wider shadow transition-all flex items-center justify-center gap-2"
               >
-                <ShoppingBag className="w-4 h-4" />
-                {isSoldOut ? 'Sold Out' : 'Add to Cart'}
+                {addedToast ? (
+                  <>
+                    <Check className="w-4 h-4 text-[#EAD186] animate-draw-check" />
+                    <span>Added to Cart!</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>{isSoldOut ? 'Sold Out' : 'Add to Cart'}</span>
+                  </>
+                )}
               </button>
               <Link
                 to="/cart"
@@ -473,6 +491,41 @@ export const ProductPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Sticky Add to Cart Bar on Mobile */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E8DFD0] p-3 shadow-lg flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-gray-900 truncate">{product.name}</p>
+          <div className="flex items-center gap-1.5 no-motion">
+            <span className="price-display text-sm font-bold text-[#5B111A]">
+              {formatPrice(displaySellingPrice)}
+            </span>
+            {selectedVariant && (
+              <span className="text-[11px] text-gray-500 font-medium">
+                • Size {selectedVariant.size}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0}
+          onClick={handleAddToCart}
+          className="shrink-0 px-4 py-2.5 rounded bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold text-xs uppercase tracking-wider shadow transition-all flex items-center gap-1.5"
+        >
+          {addedToast ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-[#EAD186] animate-draw-check" />
+              <span>Added</span>
+            </>
+          ) : (
+            <>
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>{isSoldOut ? 'Sold Out' : 'Add to Cart'}</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 };

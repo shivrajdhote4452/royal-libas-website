@@ -1,14 +1,14 @@
-"""Phase 6 Automated Test Suite — Real Catalogue, Policies, and Polish.
+"""Phase 6 Automated Test Suite — Sample Catalogue, Policies, and Polish.
 
 Verifies:
-1. Live catalogue contains real boutique products (16 products) and zero dummy items.
+1. Live catalogue contains sample boutique products (16 products) and zero dummy items.
 2. Search across all products for 'DUMMY', 'lorem', 'illustrative', 'picsum' yields 0 hits.
-3. Every real product has multiple photos, valid size-wise variants, fabric, care, and size chart.
+3. Every sample product has multiple photos, valid size-wise variants, fabric, care, and size chart.
 4. Flagship products check:
    - Noorani Chanderi Kurti Set exists and is flagged Bestseller
    - Chandni Raat Modal Silk Co-ord has size S at 0 stock (Sold Out size test)
    - Zari Mahal Velvet Anarkali Suit has exactly 5 total units (Low Stock test)
-5. End-to-end checkout with real products:
+5. End-to-end checkout with sample products:
    - Razorpay test-mode prepaid order creation and signature-verified webhook
    - COD order placement
    - Atomic stock decrement verification
@@ -38,12 +38,12 @@ from app.models import Product, ProductVariant, Order, OrderItem
 client = TestClient(app)
 
 
-def test_catalogue_real_products_count_and_no_dummies():
-    """Verify 16 real products and 0 dummy products in the database."""
+def test_catalogue_sample_products_count_and_no_dummies():
+    """Verify 16 sample products and 0 dummy products in the database."""
     response = client.get("/products")
     assert response.status_code == 200, f"Failed GET /products: {response.text}"
     products = response.json()
-    assert len(products) >= 16, f"Expected at least 16 real products, found {len(products)}"
+    assert len(products) >= 16, f"Expected at least 16 sample products, found {len(products)}"
 
     for p in products:
         # Check no dummy/lorem/illustrative in names or descriptions
@@ -102,8 +102,8 @@ def test_flagship_products_attributes():
     assert "Low Stock" in zari["badges"]
 
 
-def test_real_product_checkout_razorpay_and_cod():
-    """Verify complete checkout journey using real products."""
+def test_sample_product_checkout_razorpay_and_cod():
+    """Verify complete checkout journey using sample products."""
     # Fetch an in-stock variant of Noorani Chanderi Kurti Set
     res = client.get("/products/noorani-chanderi-kurti-set")
     assert res.status_code == 200
@@ -221,7 +221,7 @@ def test_real_product_checkout_razorpay_and_cod():
 
 
 if __name__ == "__main__":
-    test_catalogue_real_products_count_and_no_dummies()
+    test_catalogue_sample_products_count_and_no_dummies()
     test_every_product_has_photos_and_details()
     test_flagship_products_attributes()
-    test_real_product_checkout_razorpay_and_cod()
+    test_sample_product_checkout_razorpay_and_cod()

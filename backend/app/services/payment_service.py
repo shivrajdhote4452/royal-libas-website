@@ -24,7 +24,8 @@ def is_live_razorpay_configured() -> bool:
         and RAZORPAY_KEY_SECRET
         and not RAZORPAY_KEY_ID.startswith("YOUR_")
         and not RAZORPAY_KEY_SECRET.startswith("YOUR_")
-        and not "placeholder" in RAZORPAY_KEY_ID
+        and "placeholder" not in RAZORPAY_KEY_ID.lower()
+        and "placeholder" not in RAZORPAY_KEY_SECRET.lower()
     )
 
 
@@ -43,30 +44,32 @@ def create_razorpay_order(db: Session, order_code: str) -> RazorpayCreateOrderRe
             detail=f"Order '{order_code}' is not awaiting prepaid payment (status: {order.status}).",
         )
 
+    # If Razorpay keys are missing or placeholders, reject with 503 Service Unavailable
+    if not is_live_razorpay_configured() or not razorpay_client:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment gateway not configured",
+        )
+
     # Server-computed total in paise (1 INR = 100 paise)
     amount_in_paise = int(Decimal(str(order.total)) * Decimal("100"))
 
-    # If live keys are present, call Razorpay API; otherwise create valid test mock order ID
-    if is_live_razorpay_configured() and razorpay_client:
-        try:
-            rzp_order = razorpay_client.order.create({
-                "amount": amount_in_paise,
-                "currency": "INR",
-                "receipt": order.order_code,
-                "notes": {
-                    "customer_name": order.customer_name,
-                    "phone": order.phone,
-                },
-            })
-            rzp_order_id = rzp_order["id"]
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Payment gateway error: {str(e)}",
-            )
-    else:
-        # Development / Sandbox mock order
-        rzp_order_id = f"order_test_{uuid.uuid4().hex[:14]}"
+    try:
+        rzp_order = razorpay_client.order.create({
+            "amount": amount_in_paise,
+            "currency": "INR",
+            "receipt": order.order_code,
+            "notes": {
+                "customer_name": order.customer_name,
+                "phone": order.phone,
+            },
+        })
+        rzp_order_id = rzp_order["id"]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Payment gateway error: {str(e)}",
+        )
 
     order.razorpay_order_id = rzp_order_id
     db.commit()

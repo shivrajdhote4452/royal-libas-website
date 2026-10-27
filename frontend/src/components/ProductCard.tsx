@@ -27,15 +27,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   return (
     <Link
       to={`/product/${product.slug}`}
-      className={`group block bg-white rounded-lg overflow-hidden border border-[#E8DFD0] shadow-sm hover:shadow-md transition-all duration-300 ${
+      className={`group block bg-white rounded-lg overflow-hidden border border-[#E8DFD0] shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 ease-out ${
         isSoldOut ? 'opacity-90' : ''
       }`}
     >
-      {/* Image container */}
-      <div className="relative aspect-[3/4] sm:aspect-[4/5] w-full overflow-hidden bg-[#F0E9DF]">
-        {/* Dynamic Badge */}
+      {/* Image container with reserved 3/4 aspect ratio */}
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#F0E9DF]">
+        {/* Dynamic primary badge (Bestseller, Low Stock, etc.) */}
         {primaryBadge && (
-          <div className="absolute top-2.5 left-2.5 z-10">
+          <div className="absolute top-2.5 left-2.5 z-10 no-motion">
             <span
               className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-1 rounded text-[10px] sm:text-xs font-semibold tracking-wider uppercase shadow-sm ${
                 primaryBadge === 'Sold Out'
@@ -52,6 +52,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
         )}
 
+        {/* Visible SAMPLE PHOTO badge on every card — visible on mobile and desktop */}
+        <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none no-motion">
+          <span className="inline-flex items-center px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded text-[9px] sm:text-[10px] font-bold tracking-wider uppercase bg-black/75 text-amber-200 border border-amber-400/40 shadow-sm backdrop-blur-[2px]">
+            SAMPLE PHOTO
+          </span>
+        </div>
+
         {/* Sold out overlay */}
         {isSoldOut && (
           <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] z-[5] pointer-events-none flex items-center justify-center">
@@ -67,7 +74,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             src={imageUrl}
             alt={product.name}
             onError={() => setImageError(true)}
-            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover object-center group-hover:scale-[1.06] transition-transform duration-350 ease-out"
             loading="lazy"
           />
         ) : (
@@ -97,12 +104,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between">
-          <div className="flex items-baseline gap-1.5 flex-wrap">
-            <span className="text-sm sm:text-base font-bold text-[#5B111A]">
+          <div className="flex items-baseline gap-1.5 flex-wrap no-motion">
+            <span className="price-display text-sm sm:text-base font-bold text-[#5B111A]">
               {formatPrice(sellingPrice)}
             </span>
             {mrp && mrp > sellingPrice && (
-              <span className="text-xs text-gray-600 line-through">
+              <span className="price-display text-xs text-gray-600 line-through">
                 {formatPrice(mrp)}
               </span>
             )}
@@ -110,14 +117,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
           {/* Sizes available preview */}
           {product.variants && product.variants.length > 0 && (
-            <div className="hidden sm:flex gap-1">
+            <div className="hidden sm:flex gap-1 no-motion">
               {product.variants.map((v) => (
                 <span
                   key={v.id}
                   className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-medium border ${
                     v.stock > 0
                       ? 'bg-gray-50 text-gray-700 border-gray-200'
-                      : 'bg-gray-100 text-gray-500 line-through border-gray-200'
+                      : 'bg-gray-100 text-gray-400 line-through border-gray-200'
                   }`}
                   title={`${v.size}: ${v.stock > 0 ? `${v.stock} in stock` : 'Sold out'}`}
                 >

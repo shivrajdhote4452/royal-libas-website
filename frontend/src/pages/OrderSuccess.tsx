@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  CheckCircle2,
   Package,
   Truck,
   MapPin,
@@ -85,11 +84,13 @@ export const OrderSuccess: React.FC = () => {
   const isCOD = order.payment_method === 'COD';
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 min-h-screen">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 min-h-screen page-enter">
       {/* Top Success Banner */}
       <div className="bg-white p-6 sm:p-10 rounded-xl border border-[#E8DFD0] shadow-sm text-center space-y-4 mb-8">
         <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
-          <CheckCircle2 className="w-10 h-10" />
+          <svg className="w-9 h-9 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path className="animate-draw-check" d="M20 6L9 17l-5-5" />
+          </svg>
         </div>
         <div>
           <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
@@ -258,7 +259,7 @@ export const OrderSuccess: React.FC = () => {
             <span>Need Assistance with Your Order?</span>
           </h3>
           <p className="text-xs text-gray-600 mt-1">
-            Our Tanya boutique concierge is available on WhatsApp at +91 98765 43210.
+            Our Tanya boutique concierge is available on WhatsApp: To be confirmed by Tanya.
           </p>
         </div>
 

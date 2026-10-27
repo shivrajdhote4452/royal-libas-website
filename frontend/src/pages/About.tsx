@@ -61,7 +61,7 @@ export const About: React.FC = () => {
             </p>
 
             <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
-              In 2022, I set up a small studio in Civil Lines, Jaipur with three master tailors and one simple principle: <strong>honesty in fabric, precision in silhouette</strong>. Royal Libas was born out of that conviction.
+              In 2022, I set up a small studio in Jaipur with three master tailors and one simple principle: <strong>honesty in fabric, precision in silhouette</strong>. Royal Libas was born out of that conviction.
             </p>
 
             <p className="text-sm sm:text-base text-gray-700 leading-relaxed italic border-l-2 border-[#C59B27] pl-4 text-gray-600">
@@ -130,7 +130,7 @@ export const About: React.FC = () => {
               </div>
               <h3 className="font-serif font-bold text-lg text-gray-900">Handcrafted Heirloom Detailing</h3>
               <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-                From authentic Sanganeri hand-blocks and metallic zari zardozi to delicate gotta patti work, our embellishments are crafted by third-generation Jaipur artisans paid fair livable wages.
+                From traditional Sanganeri hand-blocks and metallic zari zardozi to delicate gotta patti work, our embellishments are crafted by third-generation Jaipur artisans paid fair livable wages.
               </p>
             </div>
 
@@ -153,17 +153,12 @@ export const About: React.FC = () => {
           Have a sizing question or need styling advice?
         </h3>
         <p className="text-xs sm:text-sm text-gray-600 max-w-lg mx-auto">
-          Tanya and our boutique styling team are just a message away on WhatsApp. We personally assist you in choosing the ideal size for your measurements.
+          Tanya and our boutique styling team are here to assist you in choosing the ideal size for your measurements.
         </p>
         <div className="pt-2">
-          <a
-            href="https://wa.me/919876543210?text=Hi%20Tanya!%20I%20have%20a%20question%20about%20sizing%20at%20Royal%20Libas."
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center px-6 py-3 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold uppercase tracking-wider shadow-md transition-all"
-          >
-            Chat with Tanya on WhatsApp
-          </a>
+          <p className="text-xs font-medium text-gray-500">
+            WhatsApp Concierge: <span className="font-semibold text-gray-700">To be confirmed by Tanya</span>
+          </p>
         </div>
       </section>
     </div>

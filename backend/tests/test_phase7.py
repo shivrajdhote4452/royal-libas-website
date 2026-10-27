@@ -497,7 +497,7 @@ def test_9_order_cancellation_restores_inventory_stock():
         "address": {
             "name": "Geeta Sharma",
             "phone": "9812345678",
-            "line1": "House 18, Civil Lines",
+            "line1": "House 18, MI Road",
             "city": "Jaipur",
             "state": "Rajasthan",
             "pincode": "302006",

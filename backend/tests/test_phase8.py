@@ -81,7 +81,7 @@ def test_launch_day_morning_test_order_and_fulfillment():
         "address": {
             "name": "Tanya Sharma",
             "phone": "9829012345",
-            "line1": "Royal Libas Studio, 14 Civil Lines",
+            "line1": "Royal Libas Studio, MI Road",
             "city": "Jaipur",
             "state": "Rajasthan",
             "pincode": "302006",

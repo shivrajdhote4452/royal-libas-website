@@ -44,21 +44,21 @@ export const PrivacyPolicy: React.FC = () => {
           <section className="space-y-3">
             <h2 className="font-serif text-lg font-bold text-[#5B111A]">3. Payment Security & Zero Card Storage</h2>
             <p className="text-xs sm:text-sm text-gray-600">
-              All electronic payments are processed directly through <strong>Razorpay</strong>, which is certified under <strong>PCI-DSS Level 1</strong> (the highest global standard in banking payment security). Royal Libas never accesses, transmits, or stores your credit card numbers, debit card PINs, CVV codes, or UPI passwords on our servers.
+              All electronic payments are processed directly through official payment gateway partners. Royal Libas never accesses, transmits, or stores your credit card numbers, debit card PINs, CVV codes, or UPI passwords on our servers.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="font-serif text-lg font-bold text-[#5B111A]">4. Courier Sharing & Order Notifications</h2>
             <p className="text-xs sm:text-sm text-gray-600">
-              Your name, shipping address, and phone number are shared solely with our authorized courier logistics partners (e.g. Delhivery, BlueDart) to facilitate package delivery, doorstep verification, and real-time tracking updates via SMS or WhatsApp.
+              Your name, shipping address, and phone number are shared solely with our courier logistics partners to facilitate package delivery, doorstep verification, and tracking updates.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="font-serif text-lg font-bold text-[#5B111A]">5. Your Rights & Data Inquiries</h2>
             <p className="text-xs sm:text-sm text-gray-600">
-              Under India's Digital Personal Data Protection Act 2023, you have the right to request review or deletion of your historical order contact record once dispatch and statutory accounting retention periods expire. Write to us at <code>care@royallibas.com</code> for any data privacy inquiries.
+              Under applicable Indian privacy regulations, you have the right to request review or deletion of your historical order record once delivery and statutory periods expire. Contact details: To be confirmed by Tanya.
             </p>
           </section>
         </div>

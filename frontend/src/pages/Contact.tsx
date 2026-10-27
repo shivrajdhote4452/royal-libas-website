@@ -73,9 +73,7 @@ export const Contact: React.FC = () => {
                 <Mail className="w-4 h-4 text-[#C59B27] shrink-0 mt-0.5" />
                 <div>
                   <span className="block font-semibold text-gray-900">Email Inquiries</span>
-                  <a href="mailto:care@royallibas.com" className="text-gray-600 hover:text-[#5B111A] transition-colors">
-                    care@royallibas.com
-                  </a>
+                  <span className="text-gray-600">To be confirmed by Tanya</span>
                 </div>
               </div>
 
@@ -83,9 +81,7 @@ export const Contact: React.FC = () => {
                 <Phone className="w-4 h-4 text-[#C59B27] shrink-0 mt-0.5" />
                 <div>
                   <span className="block font-semibold text-gray-900">Telephone / Studio Line</span>
-                  <a href="tel:+919876543210" className="text-gray-600 hover:text-[#5B111A] transition-colors">
-                    +91 98765 43210 (Mon–Sat, 10:30 AM – 7:30 PM)
-                  </a>
+                  <span className="text-gray-600">To be confirmed by Tanya</span>
                 </div>
               </div>
 
@@ -93,9 +89,7 @@ export const Contact: React.FC = () => {
                 <Instagram className="w-4 h-4 text-[#C59B27] shrink-0 mt-0.5" />
                 <div>
                   <span className="block font-semibold text-gray-900">Instagram DM</span>
-                  <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-[#5B111A] transition-colors">
-                    @royallibasbytanya
-                  </a>
+                  <span className="text-gray-600">To be confirmed by Tanya</span>
                 </div>
               </div>
 
@@ -104,9 +98,7 @@ export const Contact: React.FC = () => {
                 <div>
                   <span className="block font-semibold text-gray-900">Design Studio & Workshop</span>
                   <p className="text-gray-600 leading-relaxed text-xs">
-                    Royal Libas Atelier, 42 Heritage Enclave, Civil Lines, Jaipur, Rajasthan — 302006.
-                    <br />
-                    <span className="italic text-[11px] text-gray-500">(Studio visits by prior appointment only)</span>
+                    To be confirmed by Tanya
                   </p>
                 </div>
               </div>
