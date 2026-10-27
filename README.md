@@ -4,7 +4,8 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL (Neon)
-- **Status:** **Phase 7** — Testing, Security Hardening & Launch Freeze Complete
+- **Status:** **Phase 8** — Soft Launch & Handover Complete (Full MVP Delivered)
+- **Boutique Owner Guide:** See [HANDOVER_FOR_TANYA.md](file:///f:/Project%20File/royal-libas-website/royal-libas-website/HANDOVER_FOR_TANYA.md) for Tanya's daily 15-minute phone routine, COD WhatsApp confirmations, and stock management.
 
 ---
 
