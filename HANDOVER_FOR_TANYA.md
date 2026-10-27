@@ -133,7 +133,7 @@ All third-party service costs are paid directly by the Royal Libas business with
 |---|---|---|---|
 | **Custom Domain** (e.g. GoDaddy / Namecheap) | `royallibas.com` address | ~₹800 – ₹1,200 / year | Annual renewal |
 | **Backend Hosting** (Render / Railway) | Keeps API and database warm 24/7 | ~₹450 – ₹600 / month ($5–$7) | Monthly direct card |
-| **Razorpay Payment Gateway** | UPI, Credit/Debit cards, Netbanking | 2% + GST per successful transaction | Deducted automatically per sale (0 setup fee) |
+| **Cashfree Payment Gateway** | UPI, Credit/Debit cards, Netbanking | As per the Cashfree dashboard at go-live | Deducted automatically per sale |
 | **Courier (Shiprocket / Delhivery)** | Pan-India door-to-door delivery | ~₹60 – ₹110 per shipment (weight-based) | Prepaid courier wallet |
 
 ---

@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import {
   Loader2,
   ArrowRight,
-  Check
+  Check,
+  Clock
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { fetchOrderByCode, fetchProducts } from '../lib/api';
@@ -33,7 +34,10 @@ export const OrderSuccess: React.FC = () => {
       .then((data) => {
         if (isMounted) {
           setOrder(data);
-          document.title = `Order Placed Successfully: ${data.order_code} | Royal Libas`;
+          const isPending = data.payment_method === 'PREPAID' && data.payment_status !== 'PAID';
+          document.title = isPending
+            ? `Payment Pending: ${data.order_code} | Royal Libas`
+            : `Order Placed Successfully: ${data.order_code} | Royal Libas`;
           setLoading(false);
         }
       })
@@ -82,27 +86,52 @@ export const OrderSuccess: React.FC = () => {
     );
   }
 
+  const isPrepaidPending = order.payment_method === 'PREPAID' && order.payment_status !== 'PAID';
+
   return (
     <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans py-10 sm:py-16 px-4 sm:px-6 lg:px-8">
       {/* ========================================================
           1. SUCCESS CARD MATCHING PDF PAGE 7
           ======================================================== */}
       <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-[#E8DFD0] shadow-sm p-8 sm:p-12 text-center space-y-6">
-        {/* Gold Medallion Checkmark */}
-        <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#5B111A] to-[#8E1C2B] border-4 border-[#C59B27] flex items-center justify-center mx-auto shadow-lg relative">
-          <div className="absolute inset-0 rounded-full border border-amber-300/40 animate-pulse" />
-          <Check className="w-10 h-10 text-[#EAD186] stroke-[3] animate-draw-check" />
-        </div>
+        {isPrepaidPending ? (
+          <>
+            {/* Pending Verification Icon */}
+            <div className="w-20 h-20 rounded-full bg-amber-50 border-4 border-amber-400 flex items-center justify-center mx-auto shadow-md">
+              <Clock className="w-10 h-10 text-amber-700 stroke-[2.5]" />
+            </div>
 
-        {/* Heading & Subtext */}
-        <div className="space-y-2">
-          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
-            Order Placed Successfully!
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-600">
-            Thank you for shopping with <strong>Royal Libas</strong>.
-          </p>
-        </div>
+            <div className="space-y-2">
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-amber-100 text-amber-900">
+                Payment pending verification
+              </span>
+              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
+                Payment Verification in Progress
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">
+                We have received your order details and are waiting for payment confirmation from Cashfree. Your order will be confirmed once payment is verified.
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Gold Medallion Checkmark */}
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#5B111A] to-[#8E1C2B] border-4 border-[#C59B27] flex items-center justify-center mx-auto shadow-lg relative">
+              <div className="absolute inset-0 rounded-full border border-amber-300/40 animate-pulse" />
+              <Check className="w-10 h-10 text-[#EAD186] stroke-[3] animate-draw-check" />
+            </div>
+
+            {/* Heading & Subtext */}
+            <div className="space-y-2">
+              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
+                Order Placed Successfully!
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600">
+                Thank you for shopping with <strong>Royal Libas</strong>.
+              </p>
+            </div>
+          </>
+        )}
 
         {/* 2-Column Info Pill (PDF Page 7) */}
         <div className="grid grid-cols-2 gap-4 bg-[#FAF7F2] p-4 sm:p-5 rounded-xl border border-[#E8DFD0] max-w-md mx-auto text-center">

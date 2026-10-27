@@ -54,7 +54,8 @@ import {
   CartValidateResponse,
   OrderCreatePayload,
   OrderResponse,
-  RazorpayOrderResponse,
+  CashfreeOrderResponse,
+  PaymentGatewayConfigResponse,
   CouponValidateResponse,
 } from '../types/order';
 
@@ -108,25 +109,25 @@ export async function fetchOrderByCode(orderCode: string): Promise<OrderResponse
   return response.json();
 }
 
-export async function fetchPaymentGatewayConfig(): Promise<{ configured: boolean; key_id: string | null }> {
+export async function fetchPaymentGatewayConfig(): Promise<PaymentGatewayConfigResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/payments/razorpay/config`);
-    if (!response.ok) return { configured: false, key_id: null };
+    const response = await fetch(`${API_BASE_URL}/payments/cashfree/config`);
+    if (!response.ok) return { configured: false, mode: 'sandbox' };
     return response.json();
   } catch {
-    return { configured: false, key_id: null };
+    return { configured: false, mode: 'sandbox' };
   }
 }
 
-export async function createRazorpayOrder(orderCode: string): Promise<RazorpayOrderResponse> {
-  const response = await fetch(`${API_BASE_URL}/payments/razorpay/create-order`, {
+export async function createCashfreeOrder(orderCode: string): Promise<CashfreeOrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/payments/cashfree/create-order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ order_code: orderCode }),
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Failed to initiate Razorpay payment');
+    throw new Error(errorData.detail || 'Failed to initiate Cashfree payment');
   }
   return response.json();
 }

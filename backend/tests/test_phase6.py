@@ -9,7 +9,7 @@ Verifies:
    - Chandni Raat Modal Silk Co-ord has size S at 0 stock (Sold Out size test)
    - Zari Mahal Velvet Anarkali Suit has exactly 5 total units (Low Stock test)
 5. End-to-end checkout with sample products:
-   - Razorpay test-mode prepaid order creation and signature-verified webhook
+   - Cashfree test-mode prepaid order creation and signature-verified webhook
    - COD order placement
    - Atomic stock decrement verification
 """
@@ -18,15 +18,17 @@ import os
 import json
 import hmac
 import hashlib
+import base64
+import unittest.mock
 from decimal import Decimal
 from fastapi.testclient import TestClient
 
 # Ensure test DB / environment
 os.environ["DATABASE_URL"] = "sqlite:///./royal_libas.db"
 os.environ["JWT_SECRET"] = "phase6-test-jwt-secret-key-royal-libas"
-os.environ["RAZORPAY_KEY_ID"] = "rzp_test_placeholder"
-os.environ["RAZORPAY_KEY_SECRET"] = "rzp_secret_placeholder"
-os.environ["RAZORPAY_WEBHOOK_SECRET"] = "rzp_webhook_secret_placeholder"
+os.environ["CASHFREE_CLIENT_ID"] = "cf_test_app_id"
+os.environ["CASHFREE_CLIENT_SECRET"] = "cf_test_secret_key"
+os.environ["CASHFREE_ENVIRONMENT"] = "sandbox"
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -102,7 +104,7 @@ def test_flagship_products_attributes():
     assert "Low Stock" in zari["badges"]
 
 
-def test_sample_product_checkout_razorpay_and_cod():
+def test_sample_product_checkout_cashfree_and_cod():
     """Verify complete checkout journey using sample products."""
     # Fetch an in-stock variant of Noorani Chanderi Kurti Set
     res = client.get("/products/noorani-chanderi-kurti-set")
@@ -164,40 +166,58 @@ def test_sample_product_checkout_razorpay_and_cod():
     prepaid_res = client.post("/orders", json=prepaid_payload)
     assert prepaid_res.status_code in [200, 201], f"Prepaid order failed: {prepaid_res.text}"
     prepaid_order = prepaid_res.json()
-    # 3. Create Razorpay order to attach razorpay_order_id
-    rzp_res = client.post(
-        "/payments/razorpay/create-order",
-        json={"order_code": prepaid_order["order_code"]},
-    )
-    assert rzp_res.status_code == 200, f"create-order failed: {rzp_res.text}"
-    rzp_order_id = rzp_res.json()["razorpay_order_id"]
+    # 3. Create Cashfree order to attach cashfree_order_id
+    with unittest.mock.patch("app.services.payment_service.httpx.Client") as mock_client_cls:
+        mock_client = mock_client_cls.return_value.__enter__.return_value
+        mock_resp = unittest.mock.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "cf_order_id": "cf_test_phase6_123",
+            "payment_session_id": "session_test_phase6_456",
+            "order_status": "ACTIVE",
+        }
+        mock_client.post.return_value = mock_resp
 
-    # 4. Simulate Razorpay webhook payment confirmation
-    from app.config import RAZORPAY_WEBHOOK_SECRET
+        cf_res = client.post(
+            "/payments/cashfree/create-order",
+            json={"order_code": prepaid_order["order_code"]},
+        )
+        assert cf_res.status_code == 200, f"create-order failed: {cf_res.text}"
+        cf_data = cf_res.json()
+        assert cf_data["payment_session_id"] == "session_test_phase6_456"
 
+    # 4. Simulate Cashfree webhook payment confirmation
+    from app.config import CASHFREE_CLIENT_SECRET
+
+    timestamp = "1729000000"
     webhook_payload = {
-        "event": "payment.captured",
-        "payload": {
+        "type": "PAYMENT_SUCCESS_WEBHOOK",
+        "data": {
+            "order": {
+                "order_id": prepaid_order["order_code"],
+                "order_amount": float(prepaid_order["total"]),
+                "order_currency": "INR",
+            },
             "payment": {
-                "entity": {
-                    "id": "pay_test_phase6_123",
-                    "order_id": rzp_order_id,
-                    "notes": {
-                        "order_code": prepaid_order["order_code"],
-                    },
-                }
-            }
+                "cf_payment_id": "pay_test_phase6_123",
+                "payment_status": "SUCCESS",
+                "payment_amount": float(prepaid_order["total"]),
+            },
         },
     }
     body_bytes = json.dumps(webhook_payload).encode("utf-8")
-    signature = hmac.new(RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
+    signed_data = timestamp.encode("utf-8") + body_bytes
+    signature = base64.b64encode(
+        hmac.new(CASHFREE_CLIENT_SECRET.encode("utf-8"), signed_data, hashlib.sha256).digest()
+    ).decode("utf-8")
 
     wh_res = client.post(
-        "/payments/razorpay/webhook",
+        "/payments/cashfree/webhook",
         content=body_bytes,
         headers={
             "Content-Type": "application/json",
-            "X-Razorpay-Signature": signature,
+            "x-webhook-signature": signature,
+            "x-webhook-timestamp": timestamp,
         },
     )
     assert wh_res.status_code == 200, f"Webhook failed ({wh_res.status_code}): {wh_res.text}"
@@ -224,4 +244,4 @@ if __name__ == "__main__":
     test_catalogue_sample_products_count_and_no_dummies()
     test_every_product_has_photos_and_details()
     test_flagship_products_attributes()
-    test_sample_product_checkout_razorpay_and_cod()
+    test_sample_product_checkout_cashfree_and_cod()

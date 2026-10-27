@@ -165,7 +165,8 @@ class Order(Base):
     status = Column(String(50), default="PENDING", nullable=False)  # PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED
     payment_method = Column(String(20), nullable=False)  # PREPAID, COD
     payment_status = Column(String(20), default="PENDING", nullable=False)  # PENDING, PAID, FAILED, REFUNDED
-    razorpay_order_id = Column(String(100), nullable=True)
+    razorpay_order_id = Column(String(100), nullable=True)  # Kept for historical orders
+    cashfree_order_id = Column(String(100), nullable=True)
     subtotal = Column(Numeric(10, 2), nullable=False)
     shipping_charge = Column(Numeric(10, 2), default=0.00, nullable=False)
     discount = Column(Numeric(10, 2), default=0.00, nullable=False)

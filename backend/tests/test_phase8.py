@@ -31,9 +31,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ["DATABASE_URL"] = "sqlite:///./royal_libas.db"
 os.environ["JWT_SECRET"] = "phase8-test-jwt-secret-key-royal-libas"
-os.environ["RAZORPAY_KEY_ID"] = "rzp_test_placeholder"
-os.environ["RAZORPAY_KEY_SECRET"] = "test_phase8_secret_key"
-os.environ["RAZORPAY_WEBHOOK_SECRET"] = "webhook_phase8_secret"
+os.environ["CASHFREE_CLIENT_ID"] = "cf_test_placeholder"
+os.environ["CASHFREE_CLIENT_SECRET"] = "test_phase8_secret_key"
+os.environ["CASHFREE_ENVIRONMENT"] = "sandbox"
 
 from app.main import app
 from app.database import SessionLocal

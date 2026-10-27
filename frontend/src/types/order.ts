@@ -69,6 +69,7 @@ export interface OrderResponse {
   payment_method: string;
   payment_status: string;
   razorpay_order_id: string | null;
+  cashfree_order_id?: string | null;
   subtotal: number;
   shipping_charge: number;
   discount: number;
@@ -81,12 +82,18 @@ export interface OrderResponse {
   address: OrderAddress & { id: number };
 }
 
-export interface RazorpayOrderResponse {
-  razorpay_order_id: string;
+export interface CashfreeOrderResponse {
+  payment_session_id: string;
+  order_id: string;
   order_code: string;
   amount: number;
   currency: string;
-  key_id: string;
+  mode: string;
+}
+
+export interface PaymentGatewayConfigResponse {
+  configured: boolean;
+  mode: string;
 }
 
 export interface CouponValidateResponse {

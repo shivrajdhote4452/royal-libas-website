@@ -1,8 +1,8 @@
 """Phase 7 Automated Test Suite - Hardened Launch Verification & Operations Freeze.
 
 Verifies:
-1. Razorpay prepaid order (UPI/Card) test flow -> PAID via cryptographic HMAC webhook.
-2. Razorpay failed/abandoned payment -> Not marked PAID.
+1. Cashfree prepaid order (UPI/Card) test flow -> PAID via cryptographic HMAC webhook.
+2. Cashfree failed/abandoned payment -> Not marked PAID.
 3. COD order placement, tiered shipping fee (₹99 vs ₹0), and admin visibility.
 4. Sold-out size cannot be selected or checked out (HTTP 400).
 5. Item sells out while sitting in second buyer's cart -> Checkout fails clearly with atomic rollback.
@@ -21,6 +21,8 @@ import sys
 import json
 import hmac
 import hashlib
+import base64
+import unittest.mock
 from decimal import Decimal
 from fastapi.testclient import TestClient
 
@@ -29,9 +31,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ["DATABASE_URL"] = "sqlite:///./royal_libas.db"
 os.environ["JWT_SECRET"] = "phase7-test-jwt-secret-key-royal-libas"
-os.environ["RAZORPAY_KEY_ID"] = "rzp_test_placeholder"
-os.environ["RAZORPAY_KEY_SECRET"] = "test_phase7_secret_key_123456"
-os.environ["RAZORPAY_WEBHOOK_SECRET"] = "webhook_phase7_secret_987654"
+os.environ["CASHFREE_CLIENT_ID"] = "cf_test_app_id"
+os.environ["CASHFREE_CLIENT_SECRET"] = "webhook_phase7_secret_987654"
+os.environ["CASHFREE_ENVIRONMENT"] = "sandbox"
 os.environ["FRONTEND_URL"] = "http://localhost:5173"
 
 from app.main import app
@@ -61,8 +63,8 @@ def get_or_create_test_admin():
         db.close()
 
 
-def test_1_razorpay_prepaid_success_webhook():
-    """Verify Razorpay prepaid order creation and signature-verified webhook marking PAID."""
+def test_1_cashfree_prepaid_success_webhook():
+    """Verify Cashfree prepaid order creation and signature-verified webhook marking PAID."""
     db = SessionLocal()
     try:
         variant = db.query(ProductVariant).filter(ProductVariant.stock >= 2).first()
@@ -96,35 +98,54 @@ def test_1_razorpay_prepaid_success_webhook():
     assert order_data["payment_status"] == "PENDING"
     assert float(order_data["shipping_charge"]) == 0.0  # Prepaid is always free shipping
 
-    # 2. Call Razorpay order initialization
-    rzp_res = client.post("/payments/razorpay/create-order", json={"order_code": order_code})
-    assert rzp_res.status_code == 200, f"Failed initializing Razorpay order: {rzp_res.text}"
-    rzp_data = rzp_res.json()
-    rzp_order_id = rzp_data["razorpay_order_id"]
-    assert rzp_data["amount"] == int(expected_unit_price * 100)
+    # 2. Call Cashfree order initialization
+    with unittest.mock.patch("app.services.payment_service.httpx.Client") as mock_client_cls:
+        mock_client = mock_client_cls.return_value.__enter__.return_value
+        mock_resp = unittest.mock.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "cf_order_id": "cf_test_phase7_001",
+            "payment_session_id": "session_test_phase7_001",
+            "order_status": "ACTIVE",
+        }
+        mock_client.post.return_value = mock_resp
 
-    # 3. Simulate Razorpay payment.captured webhook
+        cf_res = client.post("/payments/cashfree/create-order", json={"order_code": order_code})
+        assert cf_res.status_code == 200, f"Failed initializing Cashfree order: {cf_res.text}"
+        cf_data = cf_res.json()
+        assert Decimal(str(cf_data["amount"])) == expected_unit_price
+
+    # 3. Simulate Cashfree PAYMENT_SUCCESS_WEBHOOK
+    timestamp = "1729000000"
     webhook_event = {
-        "event": "payment.captured",
-        "payload": {
+        "type": "PAYMENT_SUCCESS_WEBHOOK",
+        "data": {
+            "order": {
+                "order_id": order_code,
+                "order_amount": float(expected_unit_price),
+                "order_currency": "INR",
+            },
             "payment": {
-                "entity": {
-                    "id": "pay_test_phase7_001",
-                    "order_id": rzp_order_id,
-                    "amount": int(expected_unit_price * 100),
-                    "status": "captured",
-                    "method": "upi",
-                }
-            }
+                "cf_payment_id": "pay_test_phase7_001",
+                "payment_status": "SUCCESS",
+                "payment_amount": float(expected_unit_price),
+            },
         },
     }
     body_bytes = json.dumps(webhook_event).encode("utf-8")
-    signature = hmac.new(b"webhook_phase7_secret_987654", body_bytes, hashlib.sha256).hexdigest()
+    signed_data = timestamp.encode("utf-8") + body_bytes
+    signature = base64.b64encode(
+        hmac.new(b"webhook_phase7_secret_987654", signed_data, hashlib.sha256).digest()
+    ).decode("utf-8")
 
     wh_res = client.post(
-        "/payments/razorpay/webhook",
+        "/payments/cashfree/webhook",
         content=body_bytes,
-        headers={"Content-Type": "application/json", "X-Razorpay-Signature": signature},
+        headers={
+            "Content-Type": "application/json",
+            "x-webhook-signature": signature,
+            "x-webhook-timestamp": timestamp,
+        },
     )
     assert wh_res.status_code == 200, f"Webhook rejected: {wh_res.text}"
 
@@ -136,15 +157,19 @@ def test_1_razorpay_prepaid_success_webhook():
 
     # Idempotent re-send check
     wh_res_dup = client.post(
-        "/payments/razorpay/webhook",
+        "/payments/cashfree/webhook",
         content=body_bytes,
-        headers={"Content-Type": "application/json", "X-Razorpay-Signature": signature},
+        headers={
+            "Content-Type": "application/json",
+            "x-webhook-signature": signature,
+            "x-webhook-timestamp": timestamp,
+        },
     )
     assert wh_res_dup.status_code == 200
     assert "already marked PAID" in wh_res_dup.json()["detail"]
 
 
-def test_2_razorpay_failed_abandoned_payment_not_marked_paid():
+def test_2_cashfree_failed_abandoned_payment_not_marked_paid():
     """Verify failed or abandoned payment webhook does NOT mark order as PAID."""
     db = SessionLocal()
     try:
@@ -171,29 +196,49 @@ def test_2_razorpay_failed_abandoned_payment_not_marked_paid():
     assert res.status_code == 201
     order_code = res.json()["order_code"]
 
-    rzp_res = client.post("/payments/razorpay/create-order", json={"order_code": order_code})
-    rzp_order_id = rzp_res.json()["razorpay_order_id"]
+    with unittest.mock.patch("app.services.payment_service.httpx.Client") as mock_client_cls:
+        mock_client = mock_client_cls.return_value.__enter__.return_value
+        mock_resp = unittest.mock.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "cf_order_id": "cf_test_phase7_failed",
+            "payment_session_id": "session_test_phase7_failed",
+            "order_status": "ACTIVE",
+        }
+        mock_client.post.return_value = mock_resp
+        cf_res = client.post("/payments/cashfree/create-order", json={"order_code": order_code})
+        assert cf_res.status_code == 200
 
+    timestamp = "1729000000"
     webhook_event = {
-        "event": "payment.failed",
-        "payload": {
+        "type": "PAYMENT_FAILED_WEBHOOK",
+        "data": {
+            "order": {
+                "order_id": order_code,
+                "order_amount": float(res.json()["total"]),
+                "order_currency": "INR",
+            },
             "payment": {
-                "entity": {
-                    "id": "pay_test_phase7_failed_001",
-                    "order_id": rzp_order_id,
-                    "status": "failed",
-                    "error_description": "Payment was abandoned by the user",
-                }
-            }
+                "cf_payment_id": "pay_test_phase7_failed_001",
+                "payment_status": "FAILED",
+                "payment_amount": float(res.json()["total"]),
+            },
         },
     }
     body_bytes = json.dumps(webhook_event).encode("utf-8")
-    signature = hmac.new(b"webhook_phase7_secret_987654", body_bytes, hashlib.sha256).hexdigest()
+    signed_data = timestamp.encode("utf-8") + body_bytes
+    signature = base64.b64encode(
+        hmac.new(b"webhook_phase7_secret_987654", signed_data, hashlib.sha256).digest()
+    ).decode("utf-8")
 
     wh_res = client.post(
-        "/payments/razorpay/webhook",
+        "/payments/cashfree/webhook",
         content=body_bytes,
-        headers={"Content-Type": "application/json", "X-Razorpay-Signature": signature},
+        headers={
+            "Content-Type": "application/json",
+            "x-webhook-signature": signature,
+            "x-webhook-timestamp": timestamp,
+        },
     )
     assert wh_res.status_code == 200
 
@@ -634,11 +679,11 @@ if __name__ == "__main__":
     print(">>> RUNNING PHASE 7 LAUNCH HARDENING SUITE <<<")
     print("===========================================")
 
-    test_1_razorpay_prepaid_success_webhook()
-    print("  [OK] Razorpay prepaid flow: order creation, amount check, and webhook transition to PAID")
+    test_1_cashfree_prepaid_success_webhook()
+    print("  [OK] Cashfree prepaid flow: order creation, amount check, and webhook transition to PAID")
 
-    test_2_razorpay_failed_abandoned_payment_not_marked_paid()
-    print("  [OK] Razorpay payment.failed: records FAILED status, never marks order PAID")
+    test_2_cashfree_failed_abandoned_payment_not_marked_paid()
+    print("  [OK] Cashfree payment.failed: records FAILED status, never marks order PAID")
 
     test_3_cod_order_workflow_and_shipping_charges()
     print("  [OK] COD order calculation: status PLACED, fee calculation verified")

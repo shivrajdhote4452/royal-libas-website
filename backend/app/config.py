@@ -32,9 +32,25 @@ if "YOUR_JWT_SECRET_HERE" in JWT_SECRET:
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
-# Razorpay Configuration
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_placeholder")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "rzp_secret_placeholder")
-RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", os.getenv("RAZORPAY_KEY_SECRET", "rzp_webhook_secret_placeholder"))
+# Cashfree Payment Gateway Configuration
+CASHFREE_CLIENT_ID = os.getenv("CASHFREE_CLIENT_ID", "cf_test_placeholder")
+CASHFREE_CLIENT_SECRET = os.getenv("CASHFREE_CLIENT_SECRET", "cf_secret_placeholder")
+CASHFREE_ENVIRONMENT = os.getenv("CASHFREE_ENVIRONMENT", "sandbox").strip().lower()
+CASHFREE_API_VERSION = os.getenv("CASHFREE_API_VERSION", "2023-08-01").strip()
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "").strip()
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+
+def is_cashfree_configured() -> bool:
+    """Check if valid non-placeholder Cashfree credentials are provided."""
+    client_id = CASHFREE_CLIENT_ID.strip()
+    secret = CASHFREE_CLIENT_SECRET.strip()
+    return bool(
+        client_id
+        and secret
+        and not client_id.startswith("YOUR_")
+        and not secret.startswith("YOUR_")
+        and "placeholder" not in client_id.lower()
+        and "placeholder" not in secret.lower()
+    )

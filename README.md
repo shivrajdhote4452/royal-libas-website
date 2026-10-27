@@ -28,7 +28,7 @@ Custom boutique e-commerce web application for **Royal Libas by Tanya**.
 - **Money Convention:** All monetary amounts (`mrp`, `selling_price`, `subtotal`, `shipping_charge`, `discount`, `total`, `unit_price_snapshot`, `line_total`) are stored and calculated strictly in **Rupees with two decimal places (`Numeric(10, 2)`)** (e.g. `2999.00`).
 - **Authoritative Server Calculations:** Totals, line amounts, and discounts are computed strictly from database prices on the backend. Frontend prices and totals are never trusted (verified via automated Tamper Tests).
 - **Atomic Stock Decrements:** Stock decrement occurs in the exact same database transaction as order creation. If variant stock is insufficient or 0, the transaction rolls back cleanly with HTTP 400 (`"That size just sold out!"`).
-- **Cryptographic Webhook Verification:** Online prepaid orders require verified HMAC SHA256 signatures (`X-Razorpay-Signature`) on `POST /payments/razorpay/webhook`. Idempotent processing guarantees duplicate webhooks do not re-modify or error.
+- **Cryptographic Webhook Verification:** Online prepaid orders require verified HMAC SHA256 signatures (`x-webhook-signature`, `x-webhook-timestamp`) on `POST /payments/cashfree/webhook`. Idempotent processing guarantees duplicate webhooks do not re-modify or error.
 - **Privacy-First Customer Tracking:** `GET /orders/track?order_code=...&phone=...` strictly requires BOTH the order reference and the matching 10-digit mobile number used at checkout. Mismatched phone numbers or missing parameters return HTTP 404/400 without leaking order data.
 - **Phone-Friendly Admin Panel:** Tanya can run daily boutique operations from her phone (`/admin`) without developer intervention: view today's orders & to-pack queue, fulfill shipments with courier tracking links, add new products, adjust stock with single-tap `+` / `-` controls, and contact clients via one-click WhatsApp.
 
@@ -99,7 +99,7 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    - **Cart Validation:** `POST /cart/validate` (checks live database stock & prices)
    - **Orders:** `POST /orders` (authoritative server total calculation, atomic stock decrement), `GET /orders/{order_code}`
    - **Public Tracking:** `GET /orders/track?order_code=...&phone=...` (requires both order code and matching phone)
-   - **Payments:** `POST /payments/razorpay/create-order`, `POST /payments/razorpay/webhook` (HMAC SHA256 verified)
+   - **Payments:** `POST /payments/cashfree/create-order`, `POST /payments/cashfree/webhook` (HMAC SHA256 verified)
    - **Coupons:** `POST /coupons/validate` (tested with `WELCOME10`, `FESTIVE100`)
    - **Admin Auth:** `POST /admin/login`, `GET /admin/me`
    - **Admin Dashboard:** `GET /admin/dashboard` (today's orders, to-pack queue, live low-stock alerts)
@@ -112,7 +112,7 @@ The backend provides the REST API built with FastAPI, SQLAlchemy, and Alembic.
    ```bash
    python tests/test_phase1.py   # Auth, JWT, DB constraints
    python tests/test_phase2.py   # Catalogue, badges, filters, admin APIs
-   python tests/test_phase4.py   # Tamper tests, atomic stock, Razorpay HMAC webhook
+   python tests/test_phase4.py   # Tamper tests, atomic stock, Cashfree HMAC webhook
    python tests/test_phase5.py   # Order tracking privacy, admin auth guards, dashboard, and fulfillment
    ```
 
@@ -188,7 +188,7 @@ royal-libas-website/
         │   ├── Shop.tsx        # API-driven shop catalogue with filter sidebar & sort
         │   ├── Product.tsx     # Product detail page with stock-aware size selector
         │   ├── Cart.tsx        # Shopping bag with live stock validation
-        │   ├── Checkout.tsx    # 1-page express guest checkout (COD & Razorpay)
+        │   ├── Checkout.tsx    # 1-page express guest checkout (COD & Cashfree)
         │   ├── OrderSuccess.tsx# Confirmed order details & timeline
         │   ├── TrackOrder.tsx  # Customer live order tracking with status stepper & courier link
         │   └── admin/          # Phone-friendly admin panel

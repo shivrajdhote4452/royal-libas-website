@@ -379,6 +379,7 @@ class OrderResponse(BaseModel):
     payment_method: str
     payment_status: str
     razorpay_order_id: Optional[str] = None
+    cashfree_order_id: Optional[str] = None
     subtotal: Decimal
     shipping_charge: Decimal
     discount: Decimal
@@ -394,19 +395,25 @@ class OrderResponse(BaseModel):
 
 
 # ==========================================
-# Phase 4: Razorpay Payment Schemas
+# Cashfree Payment Gateway Schemas
 # ==========================================
 
-class RazorpayCreateOrderRequest(BaseModel):
+class CashfreeCreateOrderRequest(BaseModel):
     order_code: str
 
 
-class RazorpayCreateOrderResponse(BaseModel):
-    razorpay_order_id: str
+class CashfreeCreateOrderResponse(BaseModel):
+    payment_session_id: str
+    order_id: str
     order_code: str
-    amount: int  # in paise
+    amount: Decimal
     currency: str = "INR"
-    key_id: str
+    mode: str
+
+
+class CashfreeConfigResponse(BaseModel):
+    configured: bool
+    mode: str
 
 
 # ==========================================

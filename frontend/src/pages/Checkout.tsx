@@ -17,10 +17,10 @@ import {
   validateCart,
   validateCoupon,
   createOrder,
-  createRazorpayOrder,
+  createCashfreeOrder,
   fetchPaymentGatewayConfig,
 } from '../lib/api';
-import { CouponValidateResponse, OrderCreatePayload } from '../types/order';
+import { CouponValidateResponse, OrderCreatePayload, PaymentGatewayConfigResponse } from '../types/order';
 
 export const Checkout: React.FC = () => {
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ export const Checkout: React.FC = () => {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'PREPAID' | 'COD'>('PREPAID');
-  const [gatewayConfig, setGatewayConfig] = useState<{ configured: boolean; key_id: string | null } | null>(null);
+  const [gatewayConfig, setGatewayConfig] = useState<PaymentGatewayConfigResponse | null>(null);
 
   // Coupon state
   const [couponInput, setCouponInput] = useState('');
@@ -62,7 +62,7 @@ export const Checkout: React.FC = () => {
         }
       })
       .catch(() => {
-        setGatewayConfig({ configured: false, key_id: null });
+        setGatewayConfig({ configured: false, mode: 'sandbox' });
         setPaymentMethod('COD');
       });
   }, [items, navigate]);
@@ -177,8 +177,8 @@ export const Checkout: React.FC = () => {
         return;
       }
 
-      // 3. PREPAID Flow with Razorpay
-      if (gatewayConfig && !gatewayConfig.configured) {
+      // 3. PREPAID Flow with Cashfree
+      if (!gatewayConfig || !gatewayConfig.configured) {
         setFormError('Prepaid payment not available right now, please choose COD');
         setPaymentMethod('COD');
         setIsSubmitting(false);
@@ -186,43 +186,47 @@ export const Checkout: React.FC = () => {
       }
 
       try {
-        const rzpOrder = await createRazorpayOrder(orderResponse.order_code);
+        // Dynamically ensure Cashfree JS SDK v3 is loaded
+        const loadCashfreeSDK = (): Promise<boolean> => {
+          return new Promise((resolve) => {
+            if (typeof (window as any).Cashfree === 'function') {
+              resolve(true);
+              return;
+            }
+            const existingScript = document.getElementById('cashfree-js-sdk');
+            if (existingScript) {
+              existingScript.addEventListener('load', () => resolve(true));
+              existingScript.addEventListener('error', () => resolve(false));
+              return;
+            }
+            const script = document.createElement('script');
+            script.id = 'cashfree-js-sdk';
+            script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+            script.async = true;
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+          });
+        };
 
-        // Check if Razorpay standard checkout is available on window
-        const rzpWindow = (window as any).Razorpay;
-        if (typeof rzpWindow === 'function') {
-          const options = {
-            key: rzpOrder.key_id,
-            amount: rzpOrder.amount,
-            currency: rzpOrder.currency,
-            name: 'Royal Libas by Tanya',
-            description: `Order #${orderResponse.order_code}`,
-            order_id: rzpOrder.razorpay_order_id,
-            prefill: {
-              name: customerName.trim(),
-              contact: cleanPhone,
-            },
-            theme: {
-              color: '#5B111A',
-            },
-            handler: function (_response: any) {
-              clearCart();
-              navigate(`/order-success/${orderResponse.order_code}`);
-            },
-            modal: {
-              ondismiss: function () {
-                setIsSubmitting(false);
-              },
-            },
-          };
-          const razorpayInstance = new rzpWindow(options);
-          razorpayInstance.open();
-        } else {
-          // Razorpay Checkout library not loaded
+        const isLoaded = await loadCashfreeSDK();
+        if (!isLoaded || typeof (window as any).Cashfree !== 'function') {
           setFormError('Prepaid payment not available right now, please choose COD');
           setPaymentMethod('COD');
           setIsSubmitting(false);
+          return;
         }
+
+        const cfOrder = await createCashfreeOrder(orderResponse.order_code);
+        const mode = (cfOrder.mode || gatewayConfig.mode || 'sandbox') === 'production' ? 'production' : 'sandbox';
+        const cashfree = (window as any).Cashfree({ mode });
+
+        // Launch Cashfree checkout with payment_session_id
+        // Note: Do not clear cart as proof of payment; backend webhook is authoritative
+        cashfree.checkout({
+          paymentSessionId: cfOrder.payment_session_id,
+          redirectTarget: '_self',
+        });
       } catch (_paymentErr: any) {
         setFormError('Prepaid payment not available right now, please choose COD');
         setPaymentMethod('COD');
@@ -509,7 +513,7 @@ export const Checkout: React.FC = () => {
                     </p>
                   ) : (
                     <p className="text-[11px] text-gray-500 mt-1">
-                      Instant confirmation via Razorpay. Zero transaction convenience fees.
+                      Instant confirmation via Cashfree. Zero transaction convenience fees.
                     </p>
                   )}
                 </div>
