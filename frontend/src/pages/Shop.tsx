@@ -155,12 +155,12 @@ export const Shop: React.FC = () => {
   };
 
   const colors = [
-    { name: 'Maroon', hex: '#5B111A' },
-    { name: 'Mustard', hex: '#C59B27' },
+    { name: 'Maroon', hex: '#5E1224' },
+    { name: 'Antique Gold', hex: '#B58A3C' },
     { name: 'Sage', hex: '#8A9A86' },
     { name: 'Pink', hex: '#D47D97' },
     { name: 'Blue', hex: '#2E5B88' },
-    { name: 'Navy', hex: '#1D2A44' },
+    { name: 'Dark Ink', hex: '#2B1B1E' },
   ];
 
   const sortOptions = [
@@ -170,45 +170,74 @@ export const Shop: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-6 font-medium">
-          <Link to="/" className="hover:text-[#5B111A] transition-colors">Home</Link>
-          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-          <span className="text-gray-900 font-semibold">{activeCategoryName}</span>
-        </nav>
-
-        {/* Hero Header */}
-        <div className="bg-white rounded-2xl border border-[#E8DFD0] overflow-hidden shadow-sm mb-8 grid grid-cols-1 md:grid-cols-12 items-center">
-          <div className="md:col-span-7 p-6 sm:p-10 lg:p-12 space-y-3">
-            <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-[#5B111A] leading-tight">
-              {activeCategoryName}
+    <div className="min-h-screen bg-[#FCF8F0] page-enter font-sans">
+      {/* ========================================================
+          1. COLLECTION EDITORIAL BANNER (PDF Page 4 & 12)
+          "THE ROYAL COLLECTION - Timeless Traditions for a Brighter Tomorrow"
+          ======================================================== */}
+      <section className="relative bg-[#2B1B1E] text-[#FCF8F0] overflow-hidden border-b border-[#B58A3C]/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+          <div className="md:col-span-7 space-y-4 text-center md:text-left z-10">
+            <div className="inline-flex items-center justify-center md:justify-start gap-2">
+              <span className="w-6 h-[1px] bg-[#B58A3C]" />
+              <span className="text-[10px] uppercase tracking-[0.28em] text-[#B58A3C] font-semibold">
+                THE ROYAL COLLECTION
+              </span>
+              <span className="w-6 h-[1px] bg-[#B58A3C]" />
+            </div>
+            <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-[#FCF8F0] leading-tight">
+              Timeless Traditions for a Brighter Tomorrow
             </h1>
-            <p className="text-xs sm:text-sm text-gray-600 font-light max-w-lg leading-relaxed">
-              Explore our handpicked kurti sets, tailored festive co-ords and pure mulmul pieces made for every celebration.
+            <p className="text-xs sm:text-sm text-[#FCF8F0]/85 font-light max-w-lg leading-relaxed mx-auto md:mx-0">
+              Exquisite sarees, kurtas, and artisanal ensembles handcrafted from centuries-old heritage, tailored for your modern story.
             </p>
           </div>
-          <div className="md:col-span-5 h-44 sm:h-56 md:h-full bg-gray-100 relative overflow-hidden">
+          <div className="md:col-span-5 aspect-[16/10] sm:aspect-[4/3] rounded-none overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900">
             <img
-              src="/images/products/maroon_worn.jpg"
-              alt="Collection Showcase"
+              src="/images/editorial/shop_banner.jpg"
+              alt="The Royal Collection"
               className="w-full h-full object-cover object-top"
             />
           </div>
         </div>
+      </section>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-6 font-medium">
+          <Link to="/" className="hover:text-[#5E1224] transition-colors">Home</Link>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-[#2B1B1E] font-semibold">{activeCategoryName}</span>
+        </nav>
+
+        {/* Collection Header Bar matching PDF Page 4 */}
+        <div className="mb-8 pb-4 border-b border-[#E8DFD0] flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold uppercase tracking-wider text-[#5E1224]">
+              {activeCategoryName}
+            </h2>
+            <p className="text-xs sm:text-sm text-gray-600 mt-1 font-light">
+              A celebration of grace, heritage and contemporary elegance.
+            </p>
+          </div>
+          <p className="text-xs text-gray-500 font-medium">
+            Showing <strong className="text-[#2B1B1E] font-bold">{filteredProducts.length}</strong> handcrafted designs
+          </p>
+        </div>
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Desktop Filter Sidebar (Point 12) */}
-          <aside className="hidden lg:block lg:col-span-3 bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-6">
+          {/* Desktop Filter Sidebar (PDF Page 4: SHOP BY) */}
+          <aside className="hidden lg:block lg:col-span-3 bg-white p-6 rounded-none border border-[#E8DFD0] shadow-sm space-y-6">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h3 className="font-serif font-bold text-base text-gray-900">Filters</h3>
+              <h3 className="font-serif font-bold text-sm uppercase tracking-[0.16em] text-[#2B1B1E]">
+                SHOP BY
+              </h3>
               {hasActiveFilters && (
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="text-xs text-[#5B111A] hover:underline font-semibold"
+                  className="text-xs text-[#5E1224] hover:underline font-semibold"
                 >
                   Clear All
                 </button>
@@ -217,19 +246,21 @@ export const Shop: React.FC = () => {
 
             {/* Category Filter */}
             <div className="space-y-2.5">
-              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Category</h4>
+              <h4 className="text-[11px] uppercase tracking-[0.18em] font-bold text-[#5E1224]">
+                CATEGORY
+              </h4>
               <div className="space-y-2">
                 {Object.entries(categoryCounts).map(([catName, count]) => (
                   <label
                     key={catName}
-                    className="flex items-center justify-between text-xs text-gray-700 cursor-pointer hover:text-[#5B111A]"
+                    className="flex items-center justify-between text-xs text-gray-700 cursor-pointer hover:text-[#5E1224]"
                   >
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={currentCategory === catName}
                         onChange={() => updateParam('category', currentCategory === catName ? '' : catName)}
-                        className="rounded border-gray-300 text-[#5B111A] focus:ring-[#C59B27]"
+                        className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
                       />
                       <span>{catName}</span>
                     </div>
@@ -248,10 +279,10 @@ export const Shop: React.FC = () => {
                     key={sz}
                     type="button"
                     onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
-                    className={`h-9 rounded-lg border text-xs font-semibold transition-all ${
+                    className={`h-9 rounded-none border text-xs font-semibold transition-all ${
                       currentSize === sz
-                        ? 'bg-[#5B111A] text-white border-[#5B111A]'
-                        : 'bg-white text-gray-700 border-[#E8DFD0] hover:border-gray-400'
+                        ? 'bg-[#5E1224] text-white border-[#5E1224]'
+                        : 'bg-white text-gray-700 border-[#E8DFD0] hover:border-[#B58A3C]'
                     }`}
                   >
                     {sz}
@@ -272,7 +303,7 @@ export const Shop: React.FC = () => {
                     style={{ backgroundColor: c.hex }}
                     className={`w-7 h-7 rounded-full border transition-all ${
                       currentColor === c.name
-                        ? 'ring-2 ring-[#5B111A] ring-offset-2 scale-110 shadow-sm'
+                        ? 'ring-2 ring-[#5E1224] ring-offset-2 scale-110 shadow-sm'
                         : 'border-black/20 hover:scale-105'
                     }`}
                     title={c.name}
@@ -285,7 +316,7 @@ export const Shop: React.FC = () => {
             <div className="space-y-2.5 pt-4 border-t border-gray-100">
               <div className="flex justify-between items-center text-xs">
                 <span className="uppercase tracking-wider font-bold text-gray-800">Max Price</span>
-                <span className="font-bold text-[#5B111A]">₹{maxPrice.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-[#5E1224]">₹{maxPrice.toLocaleString('en-IN')}</span>
               </div>
               <input
                 type="range"
@@ -298,7 +329,7 @@ export const Shop: React.FC = () => {
                   setMaxPrice(val);
                   updateParam('max_price', val.toString());
                 }}
-                className="w-full accent-[#5B111A] cursor-pointer"
+                className="w-full accent-[#5E1224] cursor-pointer"
               />
             </div>
 
@@ -309,7 +340,7 @@ export const Shop: React.FC = () => {
                   type="checkbox"
                   checked={inStockOnly}
                   onChange={(e) => updateParam('in_stock', e.target.checked ? 'true' : '')}
-                  className="rounded border-gray-300 text-[#5B111A] focus:ring-[#C59B27]"
+                  className="rounded border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
                 />
                 <span className="font-medium">In Stock Items Only</span>
               </label>
@@ -319,25 +350,25 @@ export const Shop: React.FC = () => {
           {/* Product Listing Main Area */}
           <main className="lg:col-span-9 space-y-4">
             {/* Top Toolbar: Filter triggers (mobile) and Sort */}
-            <div className="bg-white p-4 rounded-xl border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="bg-white p-4 rounded-none border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                {/* Mobile Filter Button (Point 12) */}
+                {/* Mobile Filter Button */}
                 <button
                   type="button"
                   onClick={() => setMobileFilterOpen(true)}
-                  className="lg:hidden inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#FAF7F2] border border-[#E8DFD0] text-xs font-semibold text-gray-800 hover:bg-[#E8DFD0]/40 transition-colors"
+                  className="lg:hidden inline-flex items-center gap-2 px-3.5 py-2 bg-[#FCF8F0] border border-[#E8DFD0] text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] transition-colors"
                 >
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-[#5B111A]" />
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-[#5E1224]" />
                   <span>Filters</span>
                 </button>
 
-                {/* Mobile Sort Button (Point 13) */}
+                {/* Mobile Sort Button */}
                 <button
                   type="button"
                   onClick={() => setMobileSortOpen(true)}
-                  className="sm:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FAF7F2] border border-[#E8DFD0] text-xs font-semibold text-gray-800 hover:bg-[#E8DFD0]/40 transition-colors"
+                  className="sm:hidden inline-flex items-center gap-1.5 px-3 py-2 bg-[#FCF8F0] border border-[#E8DFD0] text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] transition-colors"
                 >
-                  <ArrowUpDown className="w-3.5 h-3.5 text-[#5B111A]" />
+                  <ArrowUpDown className="w-3.5 h-3.5 text-[#5E1224]" />
                   <span>Sort</span>
                 </button>
 
@@ -346,13 +377,13 @@ export const Shop: React.FC = () => {
                 </p>
               </div>
 
-              {/* Desktop Sort Dropdown (Point 13) */}
+              {/* Desktop Sort Dropdown */}
               <div className="hidden sm:flex items-center gap-2">
                 <span className="text-xs text-gray-500 font-medium">Sort by:</span>
                 <select
                   value={currentSort}
                   onChange={(e) => updateParam('sort', e.target.value)}
-                  className="text-xs bg-[#FAF7F2] border border-[#E8DFD0] rounded-lg px-3 py-2 text-gray-800 font-medium focus:outline-none focus:ring-1 focus:ring-[#5B111A]"
+                  className="text-xs bg-[#FCF8F0] border border-[#E8DFD0] rounded px-3 py-2 text-gray-800 font-medium focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
                 >
                   {sortOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -363,42 +394,42 @@ export const Shop: React.FC = () => {
               </div>
             </div>
 
-            {/* Active Filter Chips (Point 12: Removable with one click) */}
+            {/* Active Filter Chips */}
             {hasActiveFilters && (
               <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
                 {currentSearch && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#5B111A] text-white shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     Search: &ldquo;{currentSearch}&rdquo;
                     <button onClick={() => updateParam('search', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {wishlistOnly && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#5B111A] text-white shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     <Heart className="w-3 h-3 fill-white" />
                     Wishlist Only
                     <button onClick={() => updateParam('wishlist', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {currentCategory && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#5B111A] text-white shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     Category: {currentCategory}
                     <button onClick={() => updateParam('category', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {currentSize && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#5B111A] text-white shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     Size: {currentSize}
                     <button onClick={() => updateParam('size', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {currentColor && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#5B111A] text-white shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     Color: {currentColor}
                     <button onClick={() => updateParam('color', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {inStockOnly && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#5B111A] text-white shadow-sm">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     In Stock Only
                     <button onClick={() => updateParam('in_stock', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
@@ -406,7 +437,7 @@ export const Shop: React.FC = () => {
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="text-xs text-[#5B111A] hover:underline font-semibold ml-1"
+                  className="text-xs text-[#5E1224] hover:underline font-semibold ml-1"
                 >
                   Reset all
                 </button>
@@ -441,8 +472,8 @@ export const Shop: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-[#E8DFD0] py-16 px-4 text-center space-y-3">
-                <div className="w-14 h-14 rounded-full bg-[#FAF7F2] border border-[#E8DFD0] flex items-center justify-center mx-auto text-[#C59B27]">
+              <div className="bg-white rounded-none border border-[#E8DFD0] py-16 px-4 text-center space-y-3">
+                <div className="w-14 h-14 rounded-full bg-[#FCF8F0] border border-[#E8DFD0] flex items-center justify-center mx-auto text-[#B58A3C]">
                   <Filter className="w-6 h-6" />
                 </div>
                 <h3 className="font-serif text-lg font-bold text-gray-900">No pieces found</h3>
@@ -452,7 +483,7 @@ export const Shop: React.FC = () => {
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="inline-flex items-center px-6 py-2.5 rounded-lg bg-[#5B111A] text-white text-xs font-ui font-semibold uppercase tracking-wider hover:bg-[#460C13]"
+                  className="inline-flex items-center px-6 py-2.5 rounded-none bg-[#5E1224] text-[#FCF8F0] text-xs font-ui font-semibold uppercase tracking-wider hover:bg-[#3A080F]"
                 >
                   Reset All Filters
                 </button>
@@ -472,7 +503,7 @@ export const Shop: React.FC = () => {
             onClick={() => setMobileFilterOpen(false)}
           />
           <div
-            className="fixed inset-x-0 bottom-0 bg-[#FAF7F2] rounded-t-2xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out"
+            className="fixed inset-x-0 bottom-0 bg-[#FCF8F0] rounded-t-xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out"
             style={{
               transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
             }}
@@ -498,7 +529,7 @@ export const Shop: React.FC = () => {
                       type="checkbox"
                       checked={currentCategory === catName}
                       onChange={() => updateParam('category', currentCategory === catName ? '' : catName)}
-                      className="rounded border-gray-300 text-[#5B111A] focus:ring-[#5B111A]"
+                      className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
                     />
                     <span>{catName}</span>
                   </div>
@@ -516,10 +547,10 @@ export const Shop: React.FC = () => {
                     key={sz}
                     type="button"
                     onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
-                    className={`h-10 rounded-lg border text-xs font-semibold ${
+                    className={`h-10 rounded-none border text-xs font-semibold ${
                       currentSize === sz
-                        ? 'bg-[#5B111A] text-white border-[#5B111A]'
-                        : 'bg-white text-gray-700 border-gray-200'
+                        ? 'bg-[#5E1224] text-white border-[#5E1224]'
+                        : 'bg-white text-gray-700 border-[#E8DFD0]'
                     }`}
                   >
                     {sz}
@@ -539,7 +570,7 @@ export const Shop: React.FC = () => {
                     onClick={() => updateParam('color', currentColor === c.name ? '' : c.name)}
                     style={{ backgroundColor: c.hex }}
                     className={`w-8 h-8 rounded-full border ${
-                      currentColor === c.name ? 'ring-2 ring-[#5B111A] ring-offset-2' : 'border-black/20'
+                      currentColor === c.name ? 'ring-2 ring-[#5E1224] ring-offset-2' : 'border-black/20'
                     }`}
                   />
                 ))}
@@ -551,14 +582,14 @@ export const Shop: React.FC = () => {
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="flex-1 py-3 bg-white border border-[#E8DFD0] rounded-xl text-xs font-semibold text-gray-800 hover:bg-gray-100"
+                className="flex-1 py-3 bg-white border border-[#E8DFD0] rounded-none text-xs font-semibold text-gray-800 hover:bg-gray-100"
               >
                 Clear All
               </button>
               <button
                 type="button"
                 onClick={() => setMobileFilterOpen(false)}
-                className="flex-1 py-3 bg-[#5B111A] text-white rounded-xl text-xs font-semibold uppercase tracking-wider shadow"
+                className="flex-1 py-3 bg-[#5E1224] text-white rounded-none text-xs font-semibold uppercase tracking-wider shadow"
               >
                 Apply Filters
               </button>
@@ -577,7 +608,7 @@ export const Shop: React.FC = () => {
             onClick={() => setMobileSortOpen(false)}
           />
           <div
-            className="fixed inset-x-0 bottom-0 bg-[#FAF7F2] rounded-t-2xl p-6 space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out"
+            className="fixed inset-x-0 bottom-0 bg-[#FCF8F0] rounded-t-xl p-6 space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out"
             style={{
               transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
             }}
@@ -602,14 +633,14 @@ export const Shop: React.FC = () => {
                     updateParam('sort', opt.value);
                     setMobileSortOpen(false);
                   }}
-                  className={`w-full p-3 rounded-xl border text-left text-xs font-semibold flex items-center justify-between transition-colors ${
+                  className={`w-full p-3 rounded-none border text-left text-xs font-semibold flex items-center justify-between transition-colors ${
                     currentSort === opt.value
-                      ? 'bg-[#5B111A] text-white border-[#5B111A]'
+                      ? 'bg-[#5E1224] text-white border-[#5E1224]'
                       : 'bg-white text-gray-800 border-[#E8DFD0]'
                   }`}
                 >
                   <span>{opt.label}</span>
-                  {currentSort === opt.value && <Check className="w-4 h-4 text-[#C59B27]" />}
+                  {currentSort === opt.value && <Check className="w-4 h-4 text-[#B58A3C]" />}
                 </button>
               ))}
             </div>

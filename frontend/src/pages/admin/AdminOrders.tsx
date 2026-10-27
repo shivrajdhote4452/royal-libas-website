@@ -127,7 +127,7 @@ export const AdminOrders: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
+          <span className="text-xs uppercase tracking-widest font-bold text-[#B58A3C]">
             Fulfillment Queue
           </span>
           <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
@@ -148,7 +148,7 @@ export const AdminOrders: React.FC = () => {
             onClick={() => setSelectedStatus(tab.value)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${
               selectedStatus === tab.value
-                ? 'bg-[#5B111A] text-white border-[#5B111A] shadow-sm'
+                ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-sm'
                 : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
             }`}
           >
@@ -166,7 +166,7 @@ export const AdminOrders: React.FC = () => {
 
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
-          <Loader2 className="w-8 h-8 text-[#5B111A] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
           <p className="text-xs text-gray-500 font-serif">Loading order details...</p>
         </div>
       ) : error ? (
@@ -174,7 +174,7 @@ export const AdminOrders: React.FC = () => {
           <p className="text-xs sm:text-sm text-red-800 font-semibold">{error}</p>
           <button
             onClick={loadOrders}
-            className="px-4 py-2 bg-[#5B111A] text-white rounded text-xs font-semibold"
+            className="px-4 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold"
           >
             Retry
           </button>
@@ -205,13 +205,13 @@ export const AdminOrders: React.FC = () => {
                   className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
                 >
                   <div className="flex items-start sm:items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#FAF7F2] border border-[#E8DFD0] flex items-center justify-center text-[#5B111A] shrink-0 font-serif font-bold text-sm">
+                    <div className="w-10 h-10 rounded-full bg-[#FCF8F0] border border-[#E8DFD0] flex items-center justify-center text-[#5E1224] shrink-0 font-serif font-bold text-sm">
                       {order.id}
                     </div>
 
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-sm text-[#5B111A]">
+                        <span className="font-mono font-bold text-sm text-[#5E1224]">
                           {order.order_code}
                         </span>
                         <span className="text-xs font-semibold text-gray-900">
@@ -253,7 +253,7 @@ export const AdminOrders: React.FC = () => {
                     <Link
                       to={`/admin/orders/${order.id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#5B111A]/5 hover:bg-[#5B111A]/10 text-[#5B111A] text-xs font-semibold transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#5E1224]/5 hover:bg-[#5E1224]/10 text-[#5E1224] text-xs font-semibold transition-colors"
                       title="Open dedicated order page"
                     >
                       <span>Full Page</span>
@@ -268,7 +268,7 @@ export const AdminOrders: React.FC = () => {
 
                 {/* Expanded Details Drawer */}
                 {isExpanded && (
-                  <div className="px-4 pb-5 sm:px-6 pt-2 border-t border-gray-100 bg-[#FAF7F2]/30 space-y-5">
+                  <div className="px-4 pb-5 sm:px-6 pt-2 border-t border-gray-100 bg-[#FCF8F0]/30 space-y-5">
                     {/* Customer Contact & Quick Actions */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                       {/* Customer Info */}
@@ -338,7 +338,7 @@ export const AdminOrders: React.FC = () => {
                           </div>
                           <div className="flex justify-between">
                             <span>Total Amount:</span>
-                            <span className="font-bold text-[#5B111A]">{formatPrice(order.total)}</span>
+                            <span className="font-bold text-[#5E1224]">{formatPrice(order.total)}</span>
                           </div>
 
                           {order.awb_code && (
@@ -361,7 +361,7 @@ export const AdminOrders: React.FC = () => {
                                     href={order.label_url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B111A] hover:underline"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5E1224] hover:underline"
                                   >
                                     <FileText className="w-3 h-3" />
                                     <span>Label PDF</span>
@@ -372,7 +372,7 @@ export const AdminOrders: React.FC = () => {
                                     href={order.manifest_url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B111A] hover:underline"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5E1224] hover:underline"
                                   >
                                     <FileText className="w-3 h-3" />
                                     <span>Manifest PDF</span>
@@ -400,7 +400,7 @@ export const AdminOrders: React.FC = () => {
                                 href={order.tracking_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-[#5B111A] font-semibold hover:underline flex items-center gap-1"
+                                className="text-xs text-[#5E1224] font-semibold hover:underline flex items-center gap-1"
                               >
                                 <span>Track Shipment</span>
                                 <ExternalLink className="w-3 h-3" />
@@ -424,7 +424,7 @@ export const AdminOrders: React.FC = () => {
                                 {item.colour_snapshot ? ` | Colour: ${item.colour_snapshot}` : ''} | Qty: {item.quantity}
                               </p>
                             </div>
-                            <span className="font-bold text-[#5B111A]">
+                            <span className="font-bold text-[#5E1224]">
                               {formatPrice(item.line_total)}
                             </span>
                           </div>
@@ -434,10 +434,10 @@ export const AdminOrders: React.FC = () => {
 
                     {/* Shipping Modal / Input Box (when Tanya clicks "Mark as Shipped") */}
                     {shippingOrderId === order.id && (
-                      <div className="bg-white p-4 rounded-lg border-2 border-[#5B111A] space-y-3">
+                      <div className="bg-white p-4 rounded-lg border-2 border-[#5E1224] space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="font-serif font-bold text-xs sm:text-sm text-[#5B111A] flex items-center gap-1.5">
-                            <Truck className="w-4 h-4 text-[#C59B27]" />
+                          <span className="font-serif font-bold text-xs sm:text-sm text-[#5E1224] flex items-center gap-1.5">
+                            <Truck className="w-4 h-4 text-[#B58A3C]" />
                             <span>Add Shipping Details for {order.order_code}</span>
                           </span>
                           <button
@@ -460,7 +460,7 @@ export const AdminOrders: React.FC = () => {
                               placeholder="e.g. Delhivery / BlueDart / DTDC"
                               value={courierName}
                               onChange={(e) => setCourierName(e.target.value)}
-                              className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:border-[#5B111A]"
+                              className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:border-[#5E1224]"
                             />
                           </div>
 
@@ -474,7 +474,7 @@ export const AdminOrders: React.FC = () => {
                               placeholder="https://delhivery.com/track/..."
                               value={trackingUrl}
                               onChange={(e) => setTrackingUrl(e.target.value)}
-                              className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:border-[#5B111A]"
+                              className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:border-[#5E1224]"
                             />
                           </div>
                         </div>
@@ -490,7 +490,7 @@ export const AdminOrders: React.FC = () => {
                               trackingUrl.trim()
                             )
                           }
-                          className="w-full py-2.5 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-400 text-white font-semibold text-xs uppercase tracking-wider rounded transition-colors shadow flex items-center justify-center gap-2"
+                          className="w-full py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white font-semibold text-xs uppercase tracking-wider rounded transition-colors shadow flex items-center justify-center gap-2"
                         >
                           {isUpdating ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -534,9 +534,9 @@ export const AdminOrders: React.FC = () => {
                                   ? (fulfillmentConfig?.disabled_reason || '')
                                   : ''
                               }
-                              className="px-3.5 py-2 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-200 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed border border-[#5B111A] text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                              className="px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-200 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed border border-[#5E1224] text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
                             >
-                              <Truck className="w-3.5 h-3.5 text-[#C59B27]" />
+                              <Truck className="w-3.5 h-3.5 text-[#B58A3C]" />
                               <span>{fulfillmentConfig?.button_label || 'Ship Parcel'}</span>
                             </button>
                             {!fulfillmentConfig?.is_configured && (

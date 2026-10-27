@@ -63,7 +63,7 @@ export const AdminCollections: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 text-[#5B111A] animate-spin" />
+        <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
         <p className="text-xs text-gray-500 font-serif">Loading boutique collections...</p>
       </div>
     );
@@ -75,7 +75,7 @@ export const AdminCollections: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E8DFD0]">
         <div>
           <div className="flex items-center gap-2">
-            <Layers className="w-6 h-6 text-[#5B111A]" />
+            <Layers className="w-6 h-6 text-[#5E1224]" />
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
               Collections Management
             </h1>
@@ -118,7 +118,7 @@ export const AdminCollections: React.FC = () => {
                     slug: /{col.slug}
                   </span>
                 </div>
-                <span className="px-2.5 py-1 bg-[#FAF7F2] border border-[#E8DFD0] text-[#5B111A] font-bold text-xs rounded-full">
+                <span className="px-2.5 py-1 bg-[#FCF8F0] border border-[#E8DFD0] text-[#5E1224] font-bold text-xs rounded-full">
                   {col.products.length} {col.products.length === 1 ? 'Product' : 'Products'}
                 </span>
               </div>
@@ -143,14 +143,14 @@ export const AdminCollections: React.FC = () => {
                       return (
                         <div
                           key={p.id}
-                          className="flex items-center justify-between text-xs py-1 px-2 rounded hover:bg-[#FAF7F2] transition-colors"
+                          className="flex items-center justify-between text-xs py-1 px-2 rounded hover:bg-[#FCF8F0] transition-colors"
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-7 h-9 rounded bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
                               {cover ? (
                                 <img src={cover} alt={p.name} className="w-full h-full object-cover" />
                               ) : (
-                                <div className="w-full h-full bg-[#5B111A] text-white text-[7px] flex items-center justify-center font-serif">
+                                <div className="w-full h-full bg-[#5E1224] text-white text-[7px] flex items-center justify-center font-serif">
                                   RL
                                 </div>
                               )}
@@ -179,7 +179,7 @@ export const AdminCollections: React.FC = () => {
                 to={`/shop?collection=${col.slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5B111A] hover:text-[#3A080F] transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5E1224] hover:text-[#4A0E1C] transition-colors"
               >
                 <span>View Filtered Shop Edit</span>
                 <ExternalLink className="w-3.5 h-3.5" />

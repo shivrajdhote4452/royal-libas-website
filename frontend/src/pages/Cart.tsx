@@ -63,8 +63,8 @@ export const Cart: React.FC = () => {
   if (items.length === 0) {
     return (
       <div className="max-w-xl mx-auto px-4 py-20 text-center min-h-[60vh] flex flex-col justify-center items-center">
-        <div className="w-20 h-20 rounded-full bg-[#FAF7F2] border border-[#E8DFD0] flex items-center justify-center text-gray-400 mb-5 shadow-sm">
-          <ShoppingBag className="w-10 h-10 text-[#C59B27]" />
+        <div className="w-20 h-20 rounded-full bg-[#FCF8F0] border border-[#E8DFD0] flex items-center justify-center text-gray-400 mb-5 shadow-sm">
+          <ShoppingBag className="w-10 h-10 text-[#B58A3C]" />
         </div>
         <h2 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
           Your Shopping Bag is Empty
@@ -74,7 +74,7 @@ export const Cart: React.FC = () => {
         </p>
         <Link
           to="/shop"
-          className="inline-flex items-center gap-2 px-8 py-3.5 rounded bg-[#5B111A] hover:bg-[#3A080F] text-white text-xs sm:text-sm font-semibold tracking-wider uppercase transition-colors shadow-md"
+          className="inline-flex items-center gap-2 px-8 py-3.5 rounded-none bg-[#5E1224] hover:bg-[#3A080F] text-[#FCF8F0] text-xs sm:text-sm font-semibold tracking-[0.2em] uppercase transition-colors shadow-md"
         >
           <span>Explore The Shop</span>
           <ArrowRight className="w-4 h-4" />
@@ -86,31 +86,45 @@ export const Cart: React.FC = () => {
   const hasStockErrors = validationResult && !validationResult.is_valid;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 min-h-screen">
-      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between mb-8 pb-4 border-b border-[#E8DFD0] gap-2">
-        <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
-          Your Shopping Bag
-        </h1>
-        <span className="text-xs sm:text-sm text-gray-500 font-medium">
-          {totalItems} {totalItems === 1 ? 'item' : 'items'} in bag
-        </span>
-      </div>
-
-      {/* Stock warning notification if any item is sold out or low */}
-      {hasStockErrors && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs sm:text-sm flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-bold">Inventory Notice</p>
-            {validationResult.unavailable_lines.map((msg, idx) => (
-              <p key={idx} className="text-red-700">{msg}</p>
-            ))}
-            <p className="text-xs text-red-600 pt-1">
-              Please adjust quantities or remove sold-out sizes before proceeding to checkout.
-            </p>
+    <div className="min-h-screen bg-[#FCF8F0] page-enter font-sans">
+      {/* ========================================================
+          1. CART BANNER (PDF Page 6)
+          "YOUR CART - Beautiful choices, a more elegant you."
+          ======================================================== */}
+      <section className="bg-[#2B1B1E] text-[#FCF8F0] py-10 sm:py-14 px-4 sm:px-6 lg:px-8 border-b border-[#B58A3C]/30 text-center">
+        <div className="max-w-4xl mx-auto space-y-2">
+          <div className="inline-flex items-center justify-center gap-2">
+            <span className="w-6 h-[1px] bg-[#B58A3C]" />
+            <span className="text-[10px] uppercase tracking-[0.3em] text-[#B58A3C] font-semibold">
+              ATELIER SELECTIONS
+            </span>
+            <span className="w-6 h-[1px] bg-[#B58A3C]" />
           </div>
+          <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[#FCF8F0]">
+            YOUR CART
+          </h1>
+          <p className="text-xs sm:text-sm text-[#FCF8F0]/80 font-light italic">
+            Beautiful choices, a more elegant you.
+          </p>
         </div>
-      )}
+      </section>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+        {/* Stock warning notification if any item is sold out or low */}
+        {hasStockErrors && (
+          <div className="mb-6 p-4 rounded bg-red-50 border border-red-200 text-red-800 text-xs sm:text-sm flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">Inventory Notice</p>
+              {validationResult.unavailable_lines.map((msg, idx) => (
+                <p key={idx} className="text-red-700">{msg}</p>
+              ))}
+              <p className="text-xs text-red-600 pt-1">
+                Please adjust quantities or remove sold-out sizes before proceeding to checkout.
+              </p>
+            </div>
+          </div>
+        )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 sm:gap-10">
         {/* Cart Line Items */}
@@ -122,7 +136,7 @@ export const Cart: React.FC = () => {
             return (
               <div
                 key={item.variantId}
-                className={`bg-white p-4 sm:p-5 rounded-lg border transition-all duration-300 ease-out ${
+                className={`bg-white p-4 sm:p-5 rounded-none border transition-all duration-300 ease-out ${
                   removingId === item.variantId ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100'
                 } ${
                   isLineError ? 'border-red-300 bg-red-50/20' : 'border-[#E8DFD0] shadow-sm'
@@ -130,11 +144,11 @@ export const Cart: React.FC = () => {
               >
                 <div className="flex gap-4 items-center min-w-0 flex-1">
                   {/* Thumbnail */}
-                  <div className="w-20 h-24 sm:w-24 sm:h-28 rounded overflow-hidden bg-gray-100 shrink-0 border border-gray-100">
+                  <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-none overflow-hidden bg-gray-100 shrink-0 border border-gray-100">
                     {item.image ? (
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-[#5B111A] text-white text-[10px] flex items-center justify-center p-2 text-center font-serif">
+                      <div className="w-full h-full bg-[#5E1224] text-white text-[10px] flex items-center justify-center p-2 text-center font-serif">
                         {item.name}
                       </div>
                     )}
@@ -144,7 +158,7 @@ export const Cart: React.FC = () => {
                   <div className="flex-1 min-w-0 space-y-1">
                     <Link
                       to={`/product/${item.slug}`}
-                      className="font-serif font-semibold text-sm sm:text-base text-gray-900 hover:text-[#5B111A] transition-colors line-clamp-1"
+                      className="font-serif font-semibold text-sm sm:text-base text-gray-900 hover:text-[#5E1224] transition-colors line-clamp-1"
                     >
                       {item.name}
                     </Link>
@@ -161,7 +175,7 @@ export const Cart: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="text-sm font-bold text-[#5B111A] pt-1">
+                    <div className="text-sm font-bold text-[#5E1224] pt-1">
                       {formatPrice(item.sellingPrice * item.quantity)}
                     </div>
                   </div>
@@ -169,7 +183,7 @@ export const Cart: React.FC = () => {
 
                 {/* Quantity Controls & Remove */}
                 <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                  <div className="flex items-center border border-gray-300 rounded bg-[#FAF7F2]">
+                  <div className="flex items-center border border-gray-300 rounded-none bg-[#FCF8F0]">
                     <button
                       type="button"
                       onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
@@ -206,21 +220,21 @@ export const Cart: React.FC = () => {
           })}
         </div>
 
-        {/* Order Summary Card */}
+        {/* Order Summary Card (PDF Page 6) */}
         <div className="space-y-4">
-          <div className="bg-white p-6 rounded-lg border border-[#E8DFD0] shadow-sm space-y-4">
-            <h2 className="font-serif font-bold text-lg text-gray-900 border-b border-gray-100 pb-3">
+          <div className="bg-white p-6 sm:p-7 border border-[#B58A3C]/40 shadow-sm space-y-5 relative">
+            <h2 className="font-serif font-bold text-xl text-[#2B1B1E] border-b border-gray-100 pb-3">
               Order Summary
             </h2>
 
-            <div className="space-y-2.5 text-xs sm:text-sm text-gray-600">
+            <div className="space-y-3 text-xs sm:text-sm text-gray-600">
               <div className="flex justify-between">
-                <span>Items Subtotal</span>
+                <span>Items ({totalItems})</span>
                 <span className="font-semibold text-gray-900 price-display">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Shipping</span>
-                <span className="text-emerald-700 font-semibold">
+                <span className="text-[#5E1224] font-semibold">
                   {subtotal >= settings.freeShippingThreshold
                     ? 'Free'
                     : `₹${settings.standardShippingFee} (Free above ₹${settings.freeShippingThreshold})`}
@@ -228,30 +242,12 @@ export const Cart: React.FC = () => {
               </div>
             </div>
 
-            {/* Coupon Code Input matching PDF Page 5 */}
-            <div className="pt-2 border-t border-gray-100">
-              <span className="text-xs font-semibold text-gray-800 block mb-1.5">Apply Coupon Code</span>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Enter coupon code"
-                  className="flex-1 px-3 py-2 text-xs rounded border border-[#E8DFD0] uppercase font-mono bg-[#FAF7F2] focus:outline-none focus:border-[#5B111A]"
-                />
-                <button
-                  type="button"
-                  className="px-4 py-2 bg-[#5B111A] text-white text-xs font-ui font-semibold rounded hover:bg-[#3A080F]"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 pt-3.5 flex justify-between items-baseline">
+            <div className="border-t border-gray-100 pt-4 flex justify-between items-baseline">
               <div>
                 <span className="font-bold text-gray-900 text-sm">Estimated Total</span>
-                <p className="text-[10px] text-gray-500">Calculated authoritatively on server</p>
+                <p className="text-[10.5px] text-gray-400">Inclusive of all taxes</p>
               </div>
-              <span className="font-serif text-xl sm:text-2xl font-bold text-[#5B111A]">
+              <span className="font-serif text-2xl font-bold text-[#5E1224]">
                 {formatPrice(subtotal)}
               </span>
             </div>
@@ -260,33 +256,34 @@ export const Cart: React.FC = () => {
               type="button"
               onClick={() => navigate('/checkout')}
               disabled={hasStockErrors || isValidating}
-              className="w-full py-3.5 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold uppercase tracking-wider rounded transition-colors shadow-md flex items-center justify-center gap-2"
+              className="w-full py-4 bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-[#FCF8F0] text-xs sm:text-sm font-semibold uppercase tracking-[0.18em] transition-colors shadow-md flex items-center justify-center gap-2"
             >
-              <span>Proceed to Checkout</span>
+              <span>PROCEED TO CHECKOUT</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
             <Link
               to="/shop"
-              className="w-full py-2.5 text-center text-xs text-gray-600 hover:text-[#5B111A] font-medium block transition-colors"
+              className="w-full py-2 text-center text-xs text-gray-500 hover:text-[#5E1224] font-medium block transition-colors uppercase tracking-wider"
             >
-              or Continue Shopping
+              Continue Shopping
             </Link>
-          </div>
 
-          {/* Trust Guarantees */}
-          <div className="p-4 bg-[#FAF7F2] rounded-lg border border-[#E8DFD0] space-y-2.5 text-xs text-gray-600">
-            <div className="flex items-center gap-2 text-gray-800 font-semibold">
-              <ShieldCheck className="w-4 h-4 text-[#C59B27]" />
-              <span>Handcrafted Boutique Quality</span>
-            </div>
-            <div className="flex items-center gap-2 text-gray-800 font-semibold">
-              <Truck className="w-4 h-4 text-[#C59B27]" />
-              <span>Free Delivery on Prepaid or Orders Above Rs. 1,500</span>
+            {/* Trust Badges matching PDF Page 6 */}
+            <div className="pt-4 border-t border-gray-100 grid grid-cols-2 gap-3 text-center text-[10.5px] text-gray-600">
+              <div className="flex flex-col items-center gap-1 p-2 bg-[#FCF8F0] border border-[#E8DFD0]/60">
+                <ShieldCheck className="w-4 h-4 text-[#B58A3C]" />
+                <span className="font-medium">Secure Checkout</span>
+              </div>
+              <div className="flex flex-col items-center gap-1 p-2 bg-[#FCF8F0] border border-[#E8DFD0]/60">
+                <Truck className="w-4 h-4 text-[#B58A3C]" />
+                <span className="font-medium">Reliable Delivery</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
   );
 };

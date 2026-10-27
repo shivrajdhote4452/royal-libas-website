@@ -56,7 +56,7 @@ export const AdminCoupons: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E8DFD0]">
         <div>
           <div className="flex items-center gap-2">
-            <Tag className="w-6 h-6 text-[#5B111A]" />
+            <Tag className="w-6 h-6 text-[#5E1224]" />
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
               Coupon Management
             </h1>
@@ -68,7 +68,7 @@ export const AdminCoupons: React.FC = () => {
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#5B111A] hover:bg-[#3A080F] text-white text-xs font-ui font-semibold rounded-lg shadow-sm transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-ui font-semibold rounded-lg shadow-sm transition-colors"
         >
           <Plus className="w-4 h-4" />
           <span>Create Coupon</span>
@@ -79,7 +79,7 @@ export const AdminCoupons: React.FC = () => {
       <div className="bg-white rounded-2xl border border-[#E8DFD0] shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#FAF7F2] text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
+            <thead className="bg-[#FCF8F0] text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
               <tr>
                 <th className="p-3.5">Coupon Code</th>
                 <th className="p-3.5">Discount Type</th>
@@ -93,7 +93,7 @@ export const AdminCoupons: React.FC = () => {
             <tbody className="divide-y divide-gray-100 font-medium">
               {coupons.map((c) => (
                 <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="p-3.5 font-mono font-bold text-sm text-[#5B111A]">
+                  <td className="p-3.5 font-mono font-bold text-sm text-[#5E1224]">
                     {c.code}
                   </td>
                   <td className="p-3.5 text-gray-700">
@@ -123,7 +123,7 @@ export const AdminCoupons: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => toggleStatus(c.id)}
-                      className="text-xs font-semibold text-[#5B111A] hover:underline"
+                      className="text-xs font-semibold text-[#5E1224] hover:underline"
                     >
                       {c.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                     </button>
@@ -149,7 +149,7 @@ export const AdminCoupons: React.FC = () => {
                   placeholder="e.g. DIWALI15"
                   value={newCode}
                   onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 text-xs font-mono uppercase rounded-lg border border-gray-300 focus:outline-none focus:border-[#5B111A]"
+                  className="w-full px-3 py-2 text-xs font-mono uppercase rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
                 />
               </div>
 
@@ -159,7 +159,7 @@ export const AdminCoupons: React.FC = () => {
                   <select
                     value={newType}
                     onChange={(e) => setNewType(e.target.value as any)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:outline-none focus:border-[#5B111A]"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
                   >
                     <option value="PERCENTAGE">Percentage (%)</option>
                     <option value="FLAT">Flat (₹)</option>
@@ -173,7 +173,7 @@ export const AdminCoupons: React.FC = () => {
                     required
                     value={newValue}
                     onChange={(e) => setNewValue(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:outline-none focus:border-[#5B111A]"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
                   />
                 </div>
               </div>
@@ -185,7 +185,7 @@ export const AdminCoupons: React.FC = () => {
                   required
                   value={newMinOrder}
                   onChange={(e) => setNewMinOrder(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:outline-none focus:border-[#5B111A]"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
                 />
               </div>
 
@@ -199,7 +199,7 @@ export const AdminCoupons: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-lg bg-[#5B111A] text-white text-xs font-semibold uppercase tracking-wider"
+                  className="flex-1 py-2.5 rounded-lg bg-[#5E1224] text-white text-xs font-semibold uppercase tracking-wider"
                 >
                   Save Coupon
                 </button>

@@ -43,24 +43,24 @@ export const AdminLayout: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-gray-900 flex font-sans">
+    <div className="min-h-screen bg-[#FCF8F0] text-gray-900 flex font-sans">
       {/* ========================================================
-          DESKTOP DARK MAROON SIDEBAR (PDF Page 12 & 13)
+          DESKTOP LUXURY MAROON SIDEBAR (PDF Page 12 & 13)
           ======================================================== */}
-      <aside className="hidden lg:flex w-64 bg-[#3A080F] text-white flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-30 shadow-xl border-r border-[#5B111A]">
+      <aside className="hidden lg:flex w-64 bg-[#5E1224] text-white flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-30 shadow-xl border-r border-[#4A0E1C]">
         <div>
           {/* Brand Header */}
-          <div className="p-5 border-b border-[#5B111A]">
+          <div className="p-5 border-b border-[#4A0E1C]/80">
             <Link to="/admin/dashboard" className="block text-center hover:opacity-95 transition-opacity" aria-label="Royal Libas Admin Dashboard">
               <BrandLogo variant="white" layout="compact" emblemSize={28} />
-              <span className="text-[9px] uppercase tracking-[0.25em] text-[#C59B27] font-semibold block mt-1.5">
+              <span className="text-[9px] uppercase tracking-[0.25em] text-[#B58A3C] font-semibold block mt-1.5">
                 Admin Panel
               </span>
             </Link>
           </div>
 
           {/* Navigation Items */}
-          <nav className="p-4 space-y-1.5 font-ui">
+          <nav className="p-4 space-y-1.5 font-sans">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -68,14 +68,14 @@ export const AdminLayout: React.FC = () => {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-medium transition-all ${
+                    `flex items-center gap-3 px-4 py-2.5 rounded-none text-xs font-medium transition-all ${
                       isActive
-                        ? 'bg-[#5B111A] text-[#EAD186] font-bold shadow-inner border-l-4 border-[#C59B27]'
+                        ? 'bg-[#4A0E1C] text-[#B58A3C] font-bold shadow-inner border-l-4 border-[#B58A3C]'
                         : 'text-white/80 hover:text-white hover:bg-white/10'
                     }`
                   }
                 >
-                  <Icon className="w-4 h-4 text-[#C59B27]" />
+                  <Icon className="w-4 h-4 text-[#B58A3C]" />
                   <span>{item.label}</span>
                 </NavLink>
               );
@@ -84,20 +84,20 @@ export const AdminLayout: React.FC = () => {
         </div>
 
         {/* Bottom Sidebar Actions */}
-        <div className="p-4 border-t border-[#5B111A] space-y-2">
+        <div className="p-4 border-t border-[#4A0E1C]/80 space-y-2">
           <Link
             to="/"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-none text-xs text-white/70 hover:text-white hover:bg-white/10 transition-colors"
           >
-            <ExternalLink className="w-4 h-4 text-[#C59B27]" />
+            <ExternalLink className="w-4 h-4 text-[#B58A3C]" />
             <span>View Storefront</span>
           </Link>
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-xs text-red-300 hover:text-red-100 hover:bg-red-950/40 transition-colors"
+            className="w-full flex items-center gap-2 px-4 py-2 rounded-none text-xs text-red-300 hover:text-red-100 hover:bg-red-950/40 transition-colors"
           >
             <LogOut className="w-4 h-4" />
             <span>Logout</span>
@@ -110,13 +110,13 @@ export const AdminLayout: React.FC = () => {
           ======================================================== */}
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
         {/* Mobile Header */}
-        <header className="lg:hidden bg-[#3A080F] text-white p-3.5 sticky top-0 z-30 flex items-center justify-between border-b border-[#5B111A]">
+        <header className="lg:hidden bg-[#5E1224] text-white p-3.5 sticky top-0 z-30 flex items-center justify-between border-b border-[#4A0E1C]">
           <Link to="/admin/dashboard" className="flex items-center gap-2">
             <BrandLogo variant="white" layout="horizontal" emblemSize={26} showTagline={false} />
-            <span className="text-[9px] text-[#C59B27] uppercase tracking-wider font-semibold border-l border-[#5B111A] pl-2">Admin</span>
+            <span className="text-[9px] text-[#B58A3C] uppercase tracking-wider font-semibold border-l border-[#4A0E1C] pl-2">Admin</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link to="/" target="_blank" className="text-xs text-[#EAD186]">
+            <Link to="/" target="_blank" className="text-xs text-[#B58A3C]">
               View Store
             </Link>
             <button onClick={handleLogout} className="text-xs text-red-300">
@@ -134,7 +134,7 @@ export const AdminLayout: React.FC = () => {
       {/* ========================================================
           MOBILE BOTTOM NAVIGATION (PDF Page 13)
           ======================================================== */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#3A080F] border-t border-[#5B111A] z-40 px-2 py-1.5 shadow-2xl overflow-x-auto no-scrollbar">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#5E1224] border-t border-[#4A0E1C] z-40 px-2 py-1.5 shadow-2xl overflow-x-auto no-scrollbar">
         <div className="flex items-center min-w-max mx-auto px-1 gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -143,12 +143,12 @@ export const AdminLayout: React.FC = () => {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex flex-col items-center py-1 px-2.5 rounded text-[10px] transition-colors shrink-0 ${
-                    isActive ? 'text-[#EAD186] font-bold bg-white/10' : 'text-white/70 hover:text-white'
+                  `flex flex-col items-center py-1 px-2.5 rounded-none text-[10px] transition-colors shrink-0 ${
+                    isActive ? 'text-[#B58A3C] font-bold bg-white/10' : 'text-white/70 hover:text-white'
                   }`
                 }
               >
-                <Icon className="w-4 h-4 mb-0.5 text-[#C59B27]" />
+                <Icon className="w-4 h-4 mb-0.5 text-[#B58A3C]" />
                 <span>{item.label}</span>
               </NavLink>
             );

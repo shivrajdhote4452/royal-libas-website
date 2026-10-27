@@ -34,10 +34,11 @@ import { AdminCollections } from './pages/admin/AdminCollections';
 import { AdminReports } from './pages/admin/AdminReports';
 import { AdminOrderDetail } from './pages/admin/AdminOrderDetail';
 import { CartDrawer } from './components/CartDrawer';
+import { MobileBottomNav } from './components/MobileBottomNav';
 
 const StorefrontLayout: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF7F2] text-gray-900 selection:bg-[#C59B27] selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#FCF8F0] text-[#2B1B1E] selection:bg-[#B58A3C] selection:text-white pb-14 md:pb-0">
       <Header />
       <CartDrawer />
       <QuickAddModal />
@@ -45,6 +46,7 @@ const StorefrontLayout: React.FC = () => {
         <Outlet />
       </main>
       <Footer />
+      <MobileBottomNav />
     </div>
   );
 };

@@ -47,7 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   return (
     <div
-      className={`group relative bg-white rounded-xl overflow-hidden border border-[#E8DFD0] shadow-sm hover:shadow-md transition-all duration-300 ease-out flex flex-col justify-between ${
+      className={`group relative bg-white rounded-none border border-[#E8DFD0] hover:border-[#B58A3C]/50 shadow-sm hover:shadow-[0_8px_24px_rgba(43,27,30,0.08)] transition-all duration-300 ease-out flex flex-col justify-between ${
         isSoldOut ? 'opacity-90' : ''
       }`}
       style={{
@@ -56,19 +56,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     >
       <Link to={`/product/${product.slug}`} className="block">
         {/* Image container with 3/4 aspect ratio */}
-        <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#F0E9DF]">
-          {/* Primary Badge */}
+        <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#F6F1EA]">
+          {/* Primary Luxury Badge */}
           {primaryBadge && (
             <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
               <span
-                className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded text-[10px] font-semibold tracking-wider uppercase shadow-sm ${
+                className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-none text-[9.5px] font-semibold tracking-[0.16em] uppercase shadow-sm ${
                   primaryBadge === 'Sold Out'
-                    ? 'bg-neutral-800 text-white'
+                    ? 'bg-[#2B1B1E] text-white'
                     : primaryBadge === 'Low Stock'
-                    ? 'bg-amber-700 text-white'
+                    ? 'bg-[#8C6F5B] text-white'
                     : primaryBadge === 'Bestseller'
-                    ? 'bg-[#C59B27] text-[#3A080F]'
-                    : 'bg-[#5B111A] text-white'
+                    ? 'bg-[#B58A3C] text-white'
+                    : 'bg-[#5E1224] text-[#FCF8F0]'
                 }`}
               >
                 {primaryBadge}
@@ -76,48 +76,41 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </div>
           )}
 
-          {/* SAMPLE PHOTO badge */}
-          <div className="absolute top-2.5 right-11 sm:right-11 z-10 pointer-events-none">
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-black/75 text-amber-200 border border-amber-400/40 shadow-sm backdrop-blur-[2px]">
-              SAMPLE PHOTO
-            </span>
-          </div>
-
-          {/* Wishlist Heart Icon (Point 20) */}
+          {/* Wishlist Heart Icon */}
           <button
             type="button"
             onClick={handleWishlistClick}
             className={`absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ${
               inWishlist
-                ? 'bg-white text-[#5B111A] shadow-md scale-105'
-                : 'bg-white/80 text-gray-600 hover:text-[#5B111A] hover:bg-white hover:scale-105 shadow-sm backdrop-blur-[2px]'
+                ? 'bg-white text-[#5E1224] shadow-md scale-105'
+                : 'bg-white/90 text-gray-700 hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
             }`}
             aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
           >
             <Heart
-              className={`w-4 h-4 transition-transform duration-200 ${
-                inWishlist ? 'fill-[#5B111A] stroke-[#5B111A]' : 'stroke-current'
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                inWishlist ? 'fill-[#5E1224] stroke-[#5E1224]' : 'stroke-current'
               }`}
             />
           </button>
 
           {/* Sold Out Overlay */}
           {isSoldOut && (
-            <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-[5] pointer-events-none flex items-center justify-center">
-              <span className="bg-neutral-900/90 text-white text-xs sm:text-sm font-bold tracking-widest uppercase px-3.5 py-1.5 rounded shadow">
+            <div className="absolute inset-0 bg-[#FCF8F0]/70 backdrop-blur-[1px] z-[5] pointer-events-none flex items-center justify-center">
+              <span className="bg-[#2B1B1E] text-white text-[11px] sm:text-xs font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 shadow">
                 Sold Out
               </span>
             </div>
           )}
 
-          {/* Image with Secondary Crossfade & 1.02-1.04 Soft Scale (Point 1) */}
+          {/* Image with Secondary Crossfade & Soft Scale */}
           <div className="relative w-full h-full overflow-hidden">
             {primaryImage && !primaryError ? (
               <img
                 src={primaryImage}
                 alt={product.name}
                 onError={() => setPrimaryError(true)}
-                className={`absolute inset-0 w-full h-full object-cover object-center transition-all duration-300 ease-out group-hover:scale-[1.03] ${
+                className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-500 ease-out group-hover:scale-[1.03] ${
                   secondaryImage && !secondaryError ? 'group-hover:opacity-0' : ''
                 }`}
                 loading="lazy"
@@ -126,7 +119,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 }}
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center select-none bg-[#5B111A] text-[#FAF7F2]">
+              <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center select-none bg-[#5E1224] text-[#FCF8F0]">
                 <div className="w-10 h-10 rounded-full border border-white/30 flex items-center justify-center mb-2">
                   <span className="font-serif text-base font-bold">RL</span>
                 </div>
@@ -155,9 +148,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               <button
                 type="button"
                 onClick={handleQuickAddClick}
-                className="w-full py-2.5 px-3 bg-[#5B111A]/95 hover:bg-[#460C13] text-white text-xs font-ui font-semibold rounded-lg shadow-lg backdrop-blur-sm tracking-wider uppercase flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full py-2.5 px-3 bg-[#5E1224]/95 hover:bg-[#3A080F] text-[#FCF8F0] text-xs font-ui font-semibold rounded-none border border-[#B58A3C]/50 shadow-md backdrop-blur-sm tracking-[0.14em] uppercase flex items-center justify-center gap-1.5 transition-colors"
               >
-                <Plus className="w-3.5 h-3.5 text-[#C59B27]" />
+                <Plus className="w-3.5 h-3.5 text-[#B58A3C]" />
                 <span>Quick Add</span>
               </button>
             </div>
@@ -165,17 +158,31 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Details Container */}
-        <div className="p-3 sm:p-4">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-[#C59B27] truncate mb-0.5">
-            {product.fabric || product.category || 'Boutique Collection'}
+        <div className="p-3.5 sm:p-4 bg-white">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#B58A3C] truncate">
+              {product.fabric || product.category || 'Atelier Collection'}
+            </span>
+            {/* 5-star preview */}
+            <div className="flex items-center text-[11px] text-[#B58A3C] tracking-tighter" aria-label="5 stars">
+              ★★★★★
+            </div>
           </div>
-          <h3 className="font-serif text-sm sm:text-base font-semibold text-gray-900 group-hover:text-[#5B111A] transition-colors line-clamp-1">
+
+          <h3 className="font-serif text-sm sm:text-base font-semibold text-[#2B1B1E] group-hover:text-[#5E1224] transition-colors line-clamp-1">
             {product.name}
           </h3>
 
-          <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
-            <div className="flex items-baseline gap-1.5 flex-wrap no-motion">
-              <span className="price-display text-sm sm:text-base font-bold text-[#5B111A]">
+          {/* Color dots preview matching PDF Page 3 & 4 */}
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#5E1224] border border-black/10 inline-block" title="Maroon" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#B58A3C] border border-black/10 inline-block" title="Gold" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#FCF8F0] border border-gray-300 inline-block" title="Ivory" />
+          </div>
+
+          <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between">
+            <div className="flex items-baseline gap-2 flex-wrap no-motion">
+              <span className="price-display text-sm sm:text-base font-bold text-[#5E1224]">
                 {formatPrice(sellingPrice)}
               </span>
               {mrp && mrp > sellingPrice && (
@@ -193,7 +200,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                     key={v.id}
                     className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-medium border ${
                       v.stock > 0
-                        ? 'bg-[#FAF7F2] text-gray-700 border-[#E8DFD0]'
+                        ? 'bg-[#FCF8F0] text-gray-700 border-[#E8DFD0]'
                         : 'bg-gray-100 text-gray-400 line-through border-gray-200'
                     }`}
                     title={`${v.size}: ${v.stock > 0 ? `${v.stock} in stock` : 'Sold out'}`}
@@ -209,13 +216,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
       {/* Mobile-Only Quick Add Button Strip (Point 1: Do NOT depend on hover) */}
       {!isSoldOut && (
-        <div className="sm:hidden px-3 pb-3">
+        <div className="sm:hidden px-3 pb-3 bg-white">
           <button
             type="button"
             onClick={handleQuickAddClick}
-            className="w-full py-2 bg-[#FAF7F2] hover:bg-[#5B111A] text-[#5B111A] hover:text-white border border-[#5B111A]/30 text-xs font-ui font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+            className="w-full py-2 bg-[#FCF8F0] hover:bg-[#5E1224] text-[#5E1224] hover:text-[#FCF8F0] border border-[#B58A3C]/40 text-[11px] font-ui font-semibold rounded-none tracking-[0.14em] uppercase flex items-center justify-center gap-1.5 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5 text-[#C59B27]" />
+            <Plus className="w-3.5 h-3.5 text-[#B58A3C]" />
             <span>Quick Add</span>
           </button>
         </div>

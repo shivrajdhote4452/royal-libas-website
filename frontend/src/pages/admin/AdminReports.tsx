@@ -41,7 +41,7 @@ export const AdminReports: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 text-[#5B111A] animate-spin" />
+        <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
         <p className="text-xs text-gray-500 font-serif">Generating operations reports from real orders...</p>
       </div>
     );
@@ -80,7 +80,7 @@ export const AdminReports: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E8DFD0]">
         <div>
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-[#5B111A]" />
+            <BarChart3 className="w-6 h-6 text-[#5E1224]" />
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
               Sales & Fulfillment Reports
             </h1>
@@ -124,7 +124,7 @@ export const AdminReports: React.FC = () => {
           <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
             Real Total Revenue
           </span>
-          <div className="text-2xl sm:text-3xl font-serif font-bold text-[#5B111A]">
+          <div className="text-2xl sm:text-3xl font-serif font-bold text-[#5E1224]">
             {formatPrice(realTotalRevenue)}
           </div>
           <p className="text-[11px] text-gray-400">Sum of real order totals</p>
@@ -222,7 +222,7 @@ export const AdminReports: React.FC = () => {
           </h2>
           <Link
             to="/admin/orders"
-            className="text-xs font-semibold text-[#5B111A] hover:underline"
+            className="text-xs font-semibold text-[#5E1224] hover:underline"
           >
             Fulfillment Queue →
           </Link>
@@ -235,7 +235,7 @@ export const AdminReports: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#FAF7F2] text-gray-600 border-b border-[#E8DFD0] uppercase tracking-wider text-[10px]">
+              <thead className="bg-[#FCF8F0] text-gray-600 border-b border-[#E8DFD0] uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-3 px-4">Order Code</th>
                   <th className="py-3 px-4">Customer</th>
@@ -248,8 +248,8 @@ export const AdminReports: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {orders.slice(0, 10).map((o) => (
-                  <tr key={o.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-[#5B111A]">
+                  <tr key={o.id} className="hover:bg-[#FCF8F0]/50 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-[#5E1224]">
                       {o.order_code}
                     </td>
                     <td className="py-3 px-4 font-medium text-gray-900">
@@ -285,7 +285,7 @@ export const AdminReports: React.FC = () => {
                     <td className="py-3 px-4 text-center">
                       <Link
                         to={`/admin/orders/${o.id}`}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5B111A] hover:text-[#3A080F]"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5E1224] hover:text-[#4A0E1C]"
                       >
                         <span>Details</span>
                         <ExternalLink className="w-3 h-3" />

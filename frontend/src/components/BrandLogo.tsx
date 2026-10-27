@@ -9,6 +9,7 @@ export interface BrandLogoProps {
   className?: string;
   emblemSize?: number;
   showTagline?: boolean;
+  taglineText?: string;
 }
 
 /**
@@ -16,7 +17,7 @@ export interface BrandLogoProps {
  * 
  * Features the approved 5-petal symmetrical lotus/floral emblem inspired
  * by Indian textile and floral craftsmanship, positioned with the luxury
- * high-fashion serif wordmark "ROYAL LIBAS" and spaced tagline "— BY TANYA —".
+ * high-fashion serif wordmark "ROYAL LIBAS" and spaced tagline.
  * 
  * Colors:
  * - Deep Maroon: #5E1224
@@ -30,6 +31,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   className = '',
   emblemSize,
   showTagline = true,
+  taglineText = 'TIMELESS TRADITIONS, MODERN WOMEN.',
 }) => {
   // Resolve colors based on variant
   let petalFill = '#5E1224'; // Deep Maroon
@@ -250,7 +252,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
               className="text-[9px] uppercase tracking-[0.28em] font-semibold"
               style={{ color: textTanya }}
             >
-              BY TANYA
+              {taglineText}
             </span>
             <span className="w-3 sm:w-5 h-[1px]" style={{ backgroundColor: lineColor }} />
           </div>
@@ -279,7 +281,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
                 className="text-[8px] sm:text-[9px] uppercase tracking-[0.28em] font-semibold"
                 style={{ color: textTanya }}
               >
-                BY TANYA
+                {taglineText}
               </span>
               <span className="w-3 h-[1px]" style={{ backgroundColor: lineColor }} />
             </div>
@@ -308,7 +310,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
               className="text-[8px] sm:text-[8.5px] uppercase tracking-[0.3em] font-semibold"
               style={{ color: textTanya }}
             >
-              BY TANYA
+              {taglineText}
             </span>
             <span className="w-3 sm:w-4 h-[1px]" style={{ backgroundColor: lineColor }} />
           </div>
@@ -336,7 +338,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
               className="text-[10px] sm:text-[11px] uppercase tracking-[0.32em] font-semibold"
               style={{ color: textTanya }}
             >
-              BY TANYA
+              {taglineText}
             </span>
             <span className="w-6 sm:w-8 h-[1px]" style={{ backgroundColor: lineColor }} />
           </div>

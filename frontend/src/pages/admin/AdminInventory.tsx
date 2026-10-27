@@ -81,7 +81,7 @@ export const AdminInventory: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E8DFD0]">
         <div>
           <div className="flex items-center gap-2">
-            <Boxes className="w-6 h-6 text-[#5B111A]" />
+            <Boxes className="w-6 h-6 text-[#5E1224]" />
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
               Inventory Management
             </h1>
@@ -110,7 +110,7 @@ export const AdminInventory: React.FC = () => {
             placeholder="Search by product name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-1.5 text-xs rounded-lg border border-[#E8DFD0] bg-[#FAF7F2] focus:outline-none focus:border-[#5B111A]"
+            className="w-full pl-9 pr-3.5 py-1.5 text-xs rounded-lg border border-[#E8DFD0] bg-[#FCF8F0] focus:outline-none focus:border-[#5E1224]"
           />
         </div>
 
@@ -121,8 +121,8 @@ export const AdminInventory: React.FC = () => {
             onClick={() => setFilterState('all')}
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filterState === 'all'
-                ? 'bg-[#5B111A] text-white shadow-sm'
-                : 'bg-[#FAF7F2] text-gray-700 hover:bg-gray-100'
+                ? 'bg-[#5E1224] text-white shadow-sm'
+                : 'bg-[#FCF8F0] text-gray-700 hover:bg-gray-100'
             }`}
           >
             All Pieces ({products.length})
@@ -133,7 +133,7 @@ export const AdminInventory: React.FC = () => {
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filterState === 'low'
                 ? 'bg-amber-600 text-white shadow-sm'
-                : 'bg-[#FAF7F2] text-amber-800 hover:bg-amber-50'
+                : 'bg-[#FCF8F0] text-amber-800 hover:bg-amber-50'
             }`}
           >
             Low Stock (≤ 3)
@@ -144,7 +144,7 @@ export const AdminInventory: React.FC = () => {
             className={`px-3 py-1.5 rounded-lg transition-colors ${
               filterState === 'out'
                 ? 'bg-red-700 text-white shadow-sm'
-                : 'bg-[#FAF7F2] text-red-800 hover:bg-red-50'
+                : 'bg-[#FCF8F0] text-red-800 hover:bg-red-50'
             }`}
           >
             Out of Stock
@@ -155,14 +155,14 @@ export const AdminInventory: React.FC = () => {
       {/* Inventory Matrix Table */}
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
-          <Loader2 className="w-8 h-8 text-[#5B111A] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
           <p className="text-xs text-gray-500 font-serif">Loading inventory matrix...</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-[#E8DFD0] shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#FAF7F2] text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
+              <thead className="bg-[#FCF8F0] text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
                 <tr>
                   <th className="p-3.5">Product</th>
                   <th className="p-3.5">Category</th>
@@ -180,12 +180,12 @@ export const AdminInventory: React.FC = () => {
                           {p.primary_image ? (
                             <img src={p.primary_image} alt={p.name} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full bg-[#5B111A] text-white text-[8px] flex items-center justify-center font-serif">RL</div>
+                            <div className="w-full h-full bg-[#5E1224] text-white text-[8px] flex items-center justify-center font-serif">RL</div>
                           )}
                         </div>
                         <div>
                           <p className="font-serif font-bold text-gray-900 line-clamp-1">{p.name}</p>
-                          <span className="text-[11px] text-[#5B111A] font-bold price-display">
+                          <span className="text-[11px] text-[#5E1224] font-bold price-display">
                             {formatPrice(p.min_price || 0)}
                           </span>
                         </div>
@@ -211,7 +211,7 @@ export const AdminInventory: React.FC = () => {
                                   ? 'bg-red-50/60 border-red-200'
                                   : v.stock <= 3
                                   ? 'bg-amber-50/60 border-amber-200'
-                                  : 'bg-[#FAF7F2] border-[#E8DFD0]'
+                                  : 'bg-[#FCF8F0] border-[#E8DFD0]'
                               }`}
                             >
                               <div className="flex items-center justify-between gap-1 text-[10px] font-bold text-gray-600 mb-1">

@@ -46,7 +46,7 @@ export async function fetchCollections(): Promise<Collection[]> {
 
 export function formatPrice(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return '';
-  return `Rs. ${Math.round(amount).toLocaleString('en-IN')}`;
+  return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
 }
 
 import {

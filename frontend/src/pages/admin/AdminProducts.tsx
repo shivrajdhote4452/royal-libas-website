@@ -293,7 +293,7 @@ export const AdminProducts: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
+          <span className="text-xs uppercase tracking-widest font-bold text-[#B58A3C]">
             Catalogue Management
           </span>
           <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
@@ -304,7 +304,7 @@ export const AdminProducts: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 bg-[#5B111A] hover:bg-[#3A080F] text-white font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-lg shadow transition-colors flex items-center justify-center gap-2"
+          className="px-4 py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-lg shadow transition-colors flex items-center justify-center gap-2"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Product</span>
@@ -320,7 +320,7 @@ export const AdminProducts: React.FC = () => {
 
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
-          <Loader2 className="w-8 h-8 text-[#5B111A] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
           <p className="text-xs text-gray-500 font-serif">Loading catalogue products...</p>
         </div>
       ) : error ? (
@@ -328,7 +328,7 @@ export const AdminProducts: React.FC = () => {
           <p className="text-xs sm:text-sm text-red-800 font-semibold">{error}</p>
           <button
             onClick={loadProducts}
-            className="px-4 py-2 bg-[#5B111A] text-white rounded text-xs font-semibold"
+            className="px-4 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold"
           >
             Retry
           </button>
@@ -354,7 +354,7 @@ export const AdminProducts: React.FC = () => {
                       {primaryImg ? (
                         <img src={primaryImg} alt={product.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full bg-[#5B111A] text-white text-[9px] flex items-center justify-center p-1 text-center font-serif">
+                        <div className="w-full h-full bg-[#5E1224] text-white text-[9px] flex items-center justify-center p-1 text-center font-serif">
                           RL
                         </div>
                       )}
@@ -380,7 +380,7 @@ export const AdminProducts: React.FC = () => {
                         <span>•</span>
                         <span>{product.variants.length} sizes</span>
                         <span>•</span>
-                        <span className="font-semibold text-[#5B111A]">
+                        <span className="font-semibold text-[#5E1224]">
                           From {formatPrice(product.min_price)}
                         </span>
                       </div>
@@ -411,7 +411,7 @@ export const AdminProducts: React.FC = () => {
 
                 {/* Expanded Variants & Stock Editor */}
                 {isExpanded && (
-                  <div className="px-4 pb-5 sm:px-6 pt-2 border-t border-gray-100 bg-[#FAF7F2]/30 space-y-4">
+                  <div className="px-4 pb-5 sm:px-6 pt-2 border-t border-gray-100 bg-[#FCF8F0]/30 space-y-4">
                     <div className="flex items-center justify-between pt-1">
                       <span className="font-bold text-xs text-gray-800 uppercase tracking-wider">
                         Size Variants & Live Stock ({product.variants.length})
@@ -423,7 +423,7 @@ export const AdminProducts: React.FC = () => {
                           setAddingVariantForId(product.id);
                           setNewVariantPrice(String(product.min_price || 2999));
                         }}
-                        className="text-xs font-semibold text-[#5B111A] hover:underline flex items-center gap-1"
+                        className="text-xs font-semibold text-[#5E1224] hover:underline flex items-center gap-1"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add Size</span>
@@ -441,7 +441,7 @@ export const AdminProducts: React.FC = () => {
                             className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/50"
                           >
                             <div className="flex items-center gap-3">
-                              <span className="w-8 h-8 rounded bg-[#FAF7F2] border border-[#E8DFD0] flex items-center justify-center font-bold text-xs text-gray-800">
+                              <span className="w-8 h-8 rounded bg-[#FCF8F0] border border-[#E8DFD0] flex items-center justify-center font-bold text-xs text-gray-800">
                                 {v.size}
                               </span>
                               <div>
@@ -463,7 +463,7 @@ export const AdminProducts: React.FC = () => {
                                     type="number"
                                     value={editPrice}
                                     onChange={(e) => setEditPrice(e.target.value)}
-                                    className="w-20 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5B111A]"
+                                    className="w-20 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5E1224]"
                                   />
                                 </div>
 
@@ -473,7 +473,7 @@ export const AdminProducts: React.FC = () => {
                                     type="number"
                                     value={editStock}
                                     onChange={(e) => setEditStock(e.target.value)}
-                                    className="w-16 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5B111A]"
+                                    className="w-16 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5E1224]"
                                   />
                                 </div>
 
@@ -481,7 +481,7 @@ export const AdminProducts: React.FC = () => {
                                   type="button"
                                   onClick={() => handleSaveVariantEdit(v.id)}
                                   disabled={actionLoading}
-                                  className="px-2.5 py-1 bg-[#5B111A] text-white rounded text-xs font-semibold hover:bg-[#3A080F]"
+                                  className="px-2.5 py-1 bg-[#5E1224] text-white rounded text-xs font-semibold hover:bg-[#4A0E1C]"
                                 >
                                   Save
                                 </button>
@@ -498,7 +498,7 @@ export const AdminProducts: React.FC = () => {
                                 {/* Stock Counter with +/- */}
                                 <div className="flex items-center gap-2">
                                   <span className="text-[11px] text-gray-500">Stock:</span>
-                                  <div className="flex items-center border border-gray-300 rounded bg-[#FAF7F2]">
+                                  <div className="flex items-center border border-gray-300 rounded bg-[#FCF8F0]">
                                     <button
                                       type="button"
                                       onClick={() => handleAdjustStock(v, -1)}
@@ -537,7 +537,7 @@ export const AdminProducts: React.FC = () => {
                                     setEditPrice(String(v.selling_price));
                                     setEditStock(String(v.stock));
                                   }}
-                                  className="p-1.5 text-gray-500 hover:text-[#5B111A] rounded hover:bg-gray-100"
+                                  className="p-1.5 text-gray-500 hover:text-[#5E1224] rounded hover:bg-gray-100"
                                   title="Edit price or stock directly"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -551,7 +551,7 @@ export const AdminProducts: React.FC = () => {
 
                     {/* Add Variant Form Drawer */}
                     {addingVariantForId === product.id && (
-                      <div className="p-4 bg-white rounded-lg border-2 border-[#5B111A] space-y-3 text-xs">
+                      <div className="p-4 bg-white rounded-lg border-2 border-[#5E1224] space-y-3 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-gray-900">
                             Add New Size Variant to {product.name}
@@ -575,7 +575,7 @@ export const AdminProducts: React.FC = () => {
                               value={newSize}
                               onChange={(e) => setNewSize(e.target.value.toUpperCase())}
                               placeholder="XL, XXL, Free Size"
-                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5B111A]"
+                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5E1224]"
                             />
                           </div>
 
@@ -587,7 +587,7 @@ export const AdminProducts: React.FC = () => {
                               type="number"
                               value={newVariantPrice}
                               onChange={(e) => setNewVariantPrice(e.target.value)}
-                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5B111A]"
+                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5E1224]"
                             />
                           </div>
 
@@ -599,7 +599,7 @@ export const AdminProducts: React.FC = () => {
                               type="number"
                               value={newVariantStock}
                               onChange={(e) => setNewVariantStock(e.target.value)}
-                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5B111A]"
+                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5E1224]"
                             />
                           </div>
                         </div>
@@ -608,7 +608,7 @@ export const AdminProducts: React.FC = () => {
                           type="button"
                           disabled={actionLoading || !newSize.trim()}
                           onClick={() => handleAddVariant(product.id)}
-                          className="w-full py-2 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-400 text-white font-semibold rounded shadow transition-colors flex items-center justify-center gap-1.5"
+                          className="w-full py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white font-semibold rounded shadow transition-colors flex items-center justify-center gap-1.5"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Save Size Variant</span>
@@ -620,7 +620,7 @@ export const AdminProducts: React.FC = () => {
                     <div className="p-4 bg-white rounded-lg border border-[#E8DFD0] space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4 text-[#C59B27]" />
+                          <ImageIcon className="w-4 h-4 text-[#B58A3C]" />
                           <span className="font-bold text-xs text-gray-800 uppercase tracking-wider">
                             Product Images ({photosMap[product.id]?.length || 0})
                           </span>
@@ -631,7 +631,7 @@ export const AdminProducts: React.FC = () => {
                             type="button"
                             disabled={isSavingGallery === product.id}
                             onClick={() => handleSaveGallery(product.id)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5B111A] hover:bg-[#3A080F] text-white text-xs font-semibold rounded shadow transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-semibold rounded shadow transition-colors disabled:opacity-50"
                           >
                             {isSavingGallery === product.id ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -653,7 +653,7 @@ export const AdminProducts: React.FC = () => {
                             <div className="aspect-[3/4] bg-gray-100 overflow-hidden relative">
                               <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
                               {idx === 0 && (
-                                <span className="absolute top-1.5 left-1.5 bg-[#5B111A] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                                <span className="absolute top-1.5 left-1.5 bg-[#5E1224] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
                                   Cover
                                 </span>
                               )}
@@ -662,7 +662,7 @@ export const AdminProducts: React.FC = () => {
                               </span>
                             </div>
 
-                            <div className="p-1 bg-[#FAF7F2] border-t border-gray-200 flex items-center justify-between">
+                            <div className="p-1 bg-[#FCF8F0] border-t border-gray-200 flex items-center justify-between">
                               <div className="flex items-center gap-0.5">
                                 <button
                                   type="button"
@@ -700,7 +700,7 @@ export const AdminProducts: React.FC = () => {
                       {/* Add Image Inputs */}
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
                         <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8DFD0] hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-sm transition-colors">
-                          <Upload className="w-3.5 h-3.5 text-[#C59B27]" />
+                          <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
                           <span>Upload Photos</span>
                           <input
                             type="file"
@@ -719,7 +719,7 @@ export const AdminProducts: React.FC = () => {
                             onChange={(e) =>
                               setPhotoUrlInput((prev) => ({ ...prev, [product.id]: e.target.value }))
                             }
-                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5B111A] bg-white"
+                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224] bg-white"
                           />
                           <button
                             type="button"
@@ -767,7 +767,7 @@ export const AdminProducts: React.FC = () => {
                   placeholder="e.g. Royal Indigo Silk Anarkali Set"
                   value={newProductName}
                   onChange={(e) => setNewProductName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A]"
+                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                 />
               </div>
 
@@ -779,7 +779,7 @@ export const AdminProducts: React.FC = () => {
                   <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A] bg-white"
+                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224] bg-white"
                   >
                     <option value="Festive Sets">Festive Sets</option>
                     <option value="Everyday Cotton">Everyday Cotton</option>
@@ -797,7 +797,7 @@ export const AdminProducts: React.FC = () => {
                     required
                     value={initialPrice}
                     onChange={(e) => setInitialPrice(e.target.value)}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A]"
+                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                   />
                 </div>
               </div>
@@ -812,7 +812,7 @@ export const AdminProducts: React.FC = () => {
                     value={newFabric}
                     onChange={(e) => setNewFabric(e.target.value)}
                     placeholder="e.g. Pure Mulmul Cotton"
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A]"
+                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                   />
                 </div>
 
@@ -825,7 +825,7 @@ export const AdminProducts: React.FC = () => {
                     value={newCare}
                     onChange={(e) => setNewCare(e.target.value)}
                     placeholder="Dry clean only"
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A]"
+                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                   />
                 </div>
               </div>
@@ -835,8 +835,8 @@ export const AdminProducts: React.FC = () => {
                   Product Photos ({newImages.length})
                 </label>
                 <div className="flex items-center gap-2">
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FAF7F2] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors">
-                    <Upload className="w-3.5 h-3.5 text-[#C59B27]" />
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FCF8F0] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors">
+                    <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
                     <span>Upload Photos</span>
                     <input
                       type="file"
@@ -851,7 +851,7 @@ export const AdminProducts: React.FC = () => {
                     placeholder="Or paste photo URL"
                     value={newImageUrlInput}
                     onChange={(e) => setNewImageUrlInput(e.target.value)}
-                    className="flex-1 px-3 py-2 border rounded focus:outline-none focus:border-[#5B111A]"
+                    className="flex-1 px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                   />
                   <button
                     type="button"
@@ -872,7 +872,7 @@ export const AdminProducts: React.FC = () => {
                         <div className="aspect-[3/4] bg-gray-100 relative">
                           <img src={url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
                           {idx === 0 && (
-                            <span className="absolute top-1 left-1 bg-[#5B111A] text-white text-[8px] font-bold px-1 rounded">
+                            <span className="absolute top-1 left-1 bg-[#5E1224] text-white text-[8px] font-bold px-1 rounded">
                               Cover
                             </span>
                           )}
@@ -910,7 +910,7 @@ export const AdminProducts: React.FC = () => {
                 )}
               </div>
 
-              <p className="text-[11px] text-gray-500 bg-[#FAF7F2] p-2.5 rounded border border-[#E8DFD0]">
+              <p className="text-[11px] text-gray-500 bg-[#FCF8F0] p-2.5 rounded border border-[#E8DFD0]">
                 Initial stock for sizes <strong>S</strong> (8 units), <strong>M</strong> (12 units), and <strong>L</strong> (6 units) will be created automatically. You can add extra sizes anytime.
               </p>
 
@@ -925,7 +925,7 @@ export const AdminProducts: React.FC = () => {
                 <button
                   type="submit"
                   disabled={actionLoading || !newProductName.trim()}
-                  className="px-5 py-2 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-400 text-white font-semibold rounded shadow"
+                  className="px-5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white font-semibold rounded shadow"
                 >
                   {actionLoading ? 'Creating...' : 'Create Product'}
                 </button>

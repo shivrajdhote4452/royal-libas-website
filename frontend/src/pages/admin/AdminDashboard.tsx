@@ -51,7 +51,7 @@ export const AdminDashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 text-[#5B111A] animate-spin" />
+        <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
         <p className="text-xs text-gray-500 font-serif">Loading operational dashboard...</p>
       </div>
     );
@@ -63,7 +63,7 @@ export const AdminDashboard: React.FC = () => {
         <p className="text-xs sm:text-sm text-red-800 font-semibold">{error || 'Unable to retrieve dashboard.'}</p>
         <button
           onClick={loadDashboard}
-          className="px-4 py-2 bg-[#5B111A] text-white rounded text-xs font-semibold"
+          className="px-4 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold"
         >
           Retry
         </button>
@@ -136,7 +136,7 @@ export const AdminDashboard: React.FC = () => {
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              className="appearance-none bg-white border border-[#E8DFD0] rounded-lg px-3.5 py-1.5 pr-8 text-xs font-semibold text-gray-700 shadow-sm focus:outline-none focus:border-[#5B111A]"
+              className="appearance-none bg-white border border-[#E8DFD0] rounded-lg px-3.5 py-1.5 pr-8 text-xs font-semibold text-gray-700 shadow-sm focus:outline-none focus:border-[#5E1224]"
             >
               <option value="Today">Today</option>
               <option value="Last 7 Days">Last 7 Days</option>
@@ -149,7 +149,7 @@ export const AdminDashboard: React.FC = () => {
           <button
             type="button"
             onClick={loadDashboard}
-            className="p-2 rounded-lg border border-[#E8DFD0] bg-white hover:bg-gray-50 text-gray-600 hover:text-[#5B111A] transition-colors shadow-sm"
+            className="p-2 rounded-lg border border-[#E8DFD0] bg-white hover:bg-gray-50 text-gray-600 hover:text-[#5E1224] transition-colors shadow-sm"
             title="Refresh metrics"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -187,7 +187,7 @@ export const AdminDashboard: React.FC = () => {
             <span>Total Revenue</span>
             <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Net</span>
           </div>
-          <div className="text-2xl sm:text-3xl font-serif font-bold text-[#5B111A]">
+          <div className="text-2xl sm:text-3xl font-serif font-bold text-[#5E1224]">
             {formatPrice(totalRevenue)}
           </div>
           <p className="text-[11px] text-gray-400">Sum of non-cancelled orders</p>
@@ -227,8 +227,8 @@ export const AdminDashboard: React.FC = () => {
             <h2 className="font-serif font-bold text-base text-gray-900">Sales Overview</h2>
             <p className="text-xs text-gray-500">Real daily gross sales (Last 7 Days)</p>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-[#5B111A] font-semibold bg-[#5B111A]/5 px-2.5 py-1 rounded-md">
-            <TrendingUp className="w-3.5 h-3.5 text-[#C59B27]" />
+          <div className="flex items-center gap-1.5 text-xs text-[#5E1224] font-semibold bg-[#5E1224]/5 px-2.5 py-1 rounded-md">
+            <TrendingUp className="w-3.5 h-3.5 text-[#B58A3C]" />
             <span>{totalRevenue > 0 ? 'Active Sales' : 'Awaiting Orders'}</span>
           </div>
         </div>
@@ -242,7 +242,7 @@ export const AdminDashboard: React.FC = () => {
               left: `${Math.min(Math.max(10, (getX(activeHoverIdx) / chartWidth) * 100 - 8), 80)}%`,
             }}
           >
-            <span className="text-xs font-bold text-[#5B111A] block">
+            <span className="text-xs font-bold text-[#5E1224] block">
               {formatPrice(activePoint.total)}
             </span>
             <span className="text-[10px] text-gray-500">
@@ -263,7 +263,7 @@ export const AdminDashboard: React.FC = () => {
             <path
               d={linePath}
               fill="none"
-              stroke="#5B111A"
+              stroke="#5E1224"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -281,7 +281,7 @@ export const AdminDashboard: React.FC = () => {
                     cx={cx}
                     cy={cy}
                     r={isActive ? 6 : 4}
-                    fill={isActive ? '#5B111A' : '#C59B27'}
+                    fill={isActive ? '#5E1224' : '#B58A3C'}
                     stroke="#FFFFFF"
                     strokeWidth={2}
                     className="transition-all"
@@ -308,12 +308,12 @@ export const AdminDashboard: React.FC = () => {
       <div className="bg-white rounded-2xl border border-[#E8DFD0] shadow-sm overflow-hidden">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#5B111A]" />
+            <Package className="w-4 h-4 text-[#5E1224]" />
             <h2 className="font-serif font-bold text-base text-gray-900">Recent Orders</h2>
           </div>
           <Link
             to="/admin/orders"
-            className="text-xs font-semibold text-[#5B111A] hover:underline flex items-center gap-1"
+            className="text-xs font-semibold text-[#5E1224] hover:underline flex items-center gap-1"
           >
             <span>View All</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -322,7 +322,7 @@ export const AdminDashboard: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#FAF7F2] text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
+            <thead className="bg-[#FCF8F0] text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
               <tr>
                 <th className="p-3.5"># Order</th>
                 <th className="p-3.5">Customer</th>
@@ -335,7 +335,7 @@ export const AdminDashboard: React.FC = () => {
               {recentOrders.length > 0 ? (
                 recentOrders.map((ord) => (
                   <tr key={ord.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-3.5 font-mono font-bold text-[#5B111A]">
+                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">
                       #{ord.order_code}
                     </td>
                     <td className="p-3.5 text-gray-900">
@@ -370,28 +370,28 @@ export const AdminDashboard: React.FC = () => {
               ) : (
                 <>
                   <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5B111A]">#RL-2026-1254</td>
+                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1254</td>
                     <td className="p-3.5 text-gray-900">Priya Sharma</td>
                     <td className="p-3.5 font-bold text-gray-900">₹4,798</td>
                     <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">Delivered</span></td>
                     <td className="p-3.5 text-gray-500">20 Oct</td>
                   </tr>
                   <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5B111A]">#RL-2026-1255</td>
+                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1255</td>
                     <td className="p-3.5 text-gray-900">Neha Verma</td>
                     <td className="p-3.5 font-bold text-gray-900">₹2,499</td>
                     <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">Shipped</span></td>
                     <td className="p-3.5 text-gray-500">19 Oct</td>
                   </tr>
                   <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5B111A]">#RL-2026-1256</td>
+                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1256</td>
                     <td className="p-3.5 text-gray-900">Anjali Mehta</td>
                     <td className="p-3.5 font-bold text-gray-900">₹2,199</td>
                     <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">Packed</span></td>
                     <td className="p-3.5 text-gray-500">19 Oct</td>
                   </tr>
                   <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5B111A]">#RL-2026-1257</td>
+                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1257</td>
                     <td className="p-3.5 text-gray-900">Riya Singh</td>
                     <td className="p-3.5 font-bold text-gray-900">₹1,999</td>
                     <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Pending</span></td>
@@ -416,13 +416,13 @@ export const AdminDashboard: React.FC = () => {
                 Low Stock & Sold Out Alert ({data.low_stock_variants.length})
               </h3>
             </div>
-            <Link to="/admin/inventory" className="text-xs font-semibold text-[#5B111A] hover:underline">
+            <Link to="/admin/inventory" className="text-xs font-semibold text-[#5E1224] hover:underline">
               Adjust Stock →
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {data.low_stock_variants.slice(0, 6).map((v) => (
-              <div key={v.variant_id} className="p-3 bg-[#FAF7F2] rounded-lg border border-[#E8DFD0] flex items-center justify-between text-xs">
+              <div key={v.variant_id} className="p-3 bg-[#FCF8F0] rounded-lg border border-[#E8DFD0] flex items-center justify-between text-xs">
                 <div>
                   <p className="font-bold text-gray-900 truncate">{v.product_name}</p>
                   <span className="text-gray-500 text-[11px]">Size {v.size}</span>

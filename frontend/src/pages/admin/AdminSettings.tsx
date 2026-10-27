@@ -45,7 +45,7 @@ export const AdminSettings: React.FC = () => {
       <div className="flex items-center justify-between pb-4 border-b border-[#E8DFD0]">
         <div>
           <div className="flex items-center gap-2">
-            <Settings className="w-6 h-6 text-[#5B111A]" />
+            <Settings className="w-6 h-6 text-[#5E1224]" />
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
               Store Settings
             </h1>
@@ -67,7 +67,7 @@ export const AdminSettings: React.FC = () => {
         {/* Logistics & Delivery Settings */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-            <Truck className="w-5 h-5 text-[#C59B27]" />
+            <Truck className="w-5 h-5 text-[#B58A3C]" />
             <h2 className="font-serif font-bold text-base text-gray-900">
               Shipping & Delivery Thresholds
             </h2>
@@ -82,7 +82,7 @@ export const AdminSettings: React.FC = () => {
                 type="number"
                 value={freeShippingThreshold}
                 onChange={(e) => setFreeShippingThreshold(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5B111A] bg-[#FAF7F2]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0]"
               />
               <p className="text-[11px] text-gray-400 mt-1">Orders above this qualify for free shipping</p>
             </div>
@@ -95,7 +95,7 @@ export const AdminSettings: React.FC = () => {
                 type="number"
                 value={standardShippingFee}
                 onChange={(e) => setStandardShippingFee(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5B111A] bg-[#FAF7F2]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0]"
               />
               <p className="text-[11px] text-gray-400 mt-1">Applied when cart subtotal is under threshold</p>
             </div>
@@ -105,7 +105,7 @@ export const AdminSettings: React.FC = () => {
         {/* Announcement Bar Message */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-            <Bell className="w-5 h-5 text-[#C59B27]" />
+            <Bell className="w-5 h-5 text-[#B58A3C]" />
             <h2 className="font-serif font-bold text-base text-gray-900">
               Top Announcement Banner
             </h2>
@@ -119,7 +119,7 @@ export const AdminSettings: React.FC = () => {
               type="text"
               value={announcementText}
               onChange={(e) => setAnnouncementText(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5B111A] bg-[#FAF7F2]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0]"
             />
             <p className="text-[11px] text-gray-400 mt-1">Displayed at the top of every storefront page</p>
           </div>
@@ -128,7 +128,7 @@ export const AdminSettings: React.FC = () => {
         {/* Contact & Social Channels */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
-            <MessageCircle className="w-5 h-5 text-[#C59B27]" />
+            <MessageCircle className="w-5 h-5 text-[#B58A3C]" />
             <h2 className="font-serif font-bold text-base text-gray-900">
               Boutique Contact Channels
             </h2>
@@ -141,7 +141,7 @@ export const AdminSettings: React.FC = () => {
                 type="text"
                 value={whatsappNumber}
                 onChange={(e) => setWhatsappNumber(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5B111A] bg-[#FAF7F2]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0]"
               />
             </div>
 
@@ -151,7 +151,7 @@ export const AdminSettings: React.FC = () => {
                 type="text"
                 value={supportEmail}
                 onChange={(e) => setSupportEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5B111A] bg-[#FAF7F2]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0]"
               />
             </div>
 
@@ -161,7 +161,7 @@ export const AdminSettings: React.FC = () => {
                 type="text"
                 value={instagramHandle}
                 onChange={(e) => setInstagramHandle(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5B111A] bg-[#FAF7F2]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0]"
               />
             </div>
           </div>
@@ -171,7 +171,7 @@ export const AdminSettings: React.FC = () => {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="inline-flex items-center gap-2 px-7 py-3 bg-[#5B111A] hover:bg-[#3A080F] text-white text-xs font-ui font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors"
+            className="inline-flex items-center gap-2 px-7 py-3 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-ui font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors"
           >
             <Save className="w-4 h-4" />
             <span>Save Settings</span>

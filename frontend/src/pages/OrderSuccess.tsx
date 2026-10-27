@@ -7,7 +7,7 @@ import {
   Clock
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { fetchOrderByCode, fetchProducts } from '../lib/api';
+import { fetchOrderByCode, fetchProducts, formatPrice } from '../lib/api';
 import { OrderResponse } from '../types/order';
 import { Product } from '../types/product';
 import { ProductCard } from '../components/ProductCard';
@@ -90,27 +90,27 @@ export const OrderSuccess: React.FC = () => {
   const isPrepaidPending = order.payment_method === 'PREPAID' && order.payment_status !== 'PAID';
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans py-10 sm:py-16 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#FCF8F0] page-enter font-sans py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
       {/* ========================================================
-          1. SUCCESS CARD MATCHING PDF PAGE 7
+          1. ORDER CONFIRMED CARD (PDF Page 8)
           ======================================================== */}
-      <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-[#E8DFD0] shadow-sm p-8 sm:p-12 text-center space-y-6">
+      <div className="max-w-2xl mx-auto bg-white border border-[#B58A3C]/40 shadow-sm p-8 sm:p-12 text-center space-y-6 relative">
         {/* Brand Authenticity Header */}
-        <div className="flex justify-center pb-2 border-b border-[#E8DFD0]/60">
-          <BrandLogo layout="compact" emblemSize={28} />
+        <div className="flex justify-center pb-4 border-b border-gray-100">
+          <BrandLogo layout="compact" emblemSize={30} />
         </div>
+
         {isPrepaidPending ? (
           <>
-            {/* Pending Verification Icon */}
             <div className="w-20 h-20 rounded-full bg-amber-50 border-4 border-amber-400 flex items-center justify-center mx-auto shadow-md">
               <Clock className="w-10 h-10 text-amber-700 stroke-[2.5]" />
             </div>
 
             <div className="space-y-2">
-              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-amber-100 text-amber-900">
+              <span className="inline-block px-3 py-1 text-xs font-semibold uppercase tracking-wider bg-amber-100 text-amber-900">
                 Payment pending verification
               </span>
-              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
+              <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#5E1224]">
                 Payment Verification in Progress
               </h1>
               <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">
@@ -120,60 +120,79 @@ export const OrderSuccess: React.FC = () => {
           </>
         ) : (
           <>
-            {/* Gold Medallion Checkmark */}
-            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#5B111A] to-[#8E1C2B] border-4 border-[#C59B27] flex items-center justify-center mx-auto shadow-lg relative">
-              <div className="absolute inset-0 rounded-full border border-amber-300/40 animate-pulse" />
-              <Check className="w-10 h-10 text-[#EAD186] stroke-[3] animate-draw-check" />
+            {/* Gold Floral Medallion Checkmark (PDF Page 8) */}
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#5E1224] to-[#7D1B32] border-4 border-[#B58A3C] flex items-center justify-center mx-auto shadow-xl relative">
+              <div className="absolute inset-0 rounded-full border border-amber-200/40 animate-pulse" />
+              <Check className="w-10 h-10 text-[#FCF8F0] stroke-[3] animate-draw-check" />
             </div>
 
-            {/* Heading & Subtext */}
+            {/* Heading & Subtext matching PDF Page 8 */}
             <div className="space-y-2">
-              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
-                Order Placed Successfully!
+              <h1 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-[#2B1B1E] uppercase">
+                ORDER CONFIRMED
               </h1>
-              <p className="text-xs sm:text-sm text-gray-600">
-                Thank you for shopping with <strong>Royal Libas</strong>.
+              <p className="text-xs sm:text-sm uppercase tracking-[0.22em] text-[#B58A3C] font-semibold">
+                THANK YOU FOR SHOPPING WITH ROYAL LIBAS
               </p>
             </div>
           </>
         )}
 
-        {/* 2-Column Info Pill (PDF Page 7) */}
-        <div className="grid grid-cols-2 gap-4 bg-[#FAF7F2] p-4 sm:p-5 rounded-xl border border-[#E8DFD0] max-w-md mx-auto text-center">
-          <div className="border-r border-gray-200 pr-2">
-            <span className="text-[10px] uppercase font-bold text-gray-500 block">Order ID</span>
-            <span className="font-mono text-sm sm:text-base font-bold text-[#5B111A]">
-              #{order.order_code}
-            </span>
-          </div>
-          <div className="pl-2">
-            <span className="text-[10px] uppercase font-bold text-gray-500 block">Estimated Delivery</span>
-            <span className="font-serif text-sm sm:text-base font-bold text-gray-900">
-              3–5 Days
-            </span>
-          </div>
+        {/* Order ID Tag matching PDF Page 8 */}
+        <div className="inline-block px-4 py-2 bg-[#FCF8F0] border border-[#B58A3C]/40 text-xs font-mono font-bold tracking-wider text-[#5E1224]">
+          ORDER #{order.order_code}
         </div>
 
-        {/* Reassurance Message */}
-        <p className="text-xs text-gray-500 max-w-md mx-auto">
-          We have sent the order confirmation & tracking details to your phone.
+        <p className="text-xs text-gray-600 max-w-md mx-auto leading-relaxed">
+          Your order has been placed successfully. You will receive a confirmation message with your order details shortly.
         </p>
 
-        {/* Action CTAs (PDF Page 7) */}
-        <div className="space-y-3 max-w-sm mx-auto pt-2">
+        {/* Order Summary box matching PDF Page 8 */}
+        {order.items && order.items.length > 0 && (
+          <div className="border border-[#E8DFD0] bg-[#FCF8F0] p-4 text-left max-w-md mx-auto space-y-2.5">
+            <span className="text-[10.5px] uppercase tracking-[0.2em] font-bold text-[#B58A3C] block border-b border-gray-200 pb-1.5">
+              ORDER SUMMARY
+            </span>
+            <div className="space-y-2 text-xs">
+              {order.items.map((it) => (
+                <div key={it.id} className="flex justify-between items-center text-gray-700">
+                  <div>
+                    <span className="font-medium">{it.product_name_snapshot}</span>
+                    <span className="text-gray-400 text-[11px] ml-1.5">Qty: {it.quantity}</span>
+                  </div>
+                  <span className="font-semibold text-[#2B1B1E]">{formatPrice(it.unit_price_snapshot * it.quantity)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 pt-2 flex justify-between items-center font-bold text-xs text-[#5E1224]">
+              <span>Total:</span>
+              <span className="text-sm font-serif">{formatPrice(order.total)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Action CTAs (PDF Page 8) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto pt-2">
           <Link
             to="/track-order"
-            className="w-full py-3.5 px-6 rounded-lg bg-[#5B111A] hover:bg-[#3A080F] text-white font-ui font-semibold text-xs sm:text-sm uppercase tracking-wider transition-colors shadow flex items-center justify-center gap-2"
+            className="py-3.5 px-6 bg-[#5E1224] hover:bg-[#3A080F] text-[#FCF8F0] font-ui font-semibold text-xs uppercase tracking-[0.2em] transition-colors shadow flex items-center justify-center gap-2"
           >
-            <span>Track Order</span>
+            <span>TRACK ORDER</span>
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
             to="/shop"
-            className="w-full py-3 px-6 rounded-lg bg-transparent border border-[#5B111A] text-[#5B111A] hover:bg-[#5B111A]/5 font-ui font-semibold text-xs uppercase tracking-wider block transition-colors"
+            className="py-3.5 px-6 bg-transparent border border-[#5E1224] text-[#5E1224] hover:bg-[#5E1224] hover:text-[#FCF8F0] font-ui font-semibold text-xs uppercase tracking-[0.2em] block transition-colors text-center"
           >
-            Continue Shopping
+            CONTINUE SHOPPING
           </Link>
+        </div>
+
+        {/* Footer trust icons (PDF Page 8) */}
+        <div className="pt-6 border-t border-gray-100 grid grid-cols-3 gap-2 text-center text-[10.5px] text-gray-500 uppercase tracking-widest">
+          <div>SECURE CHECKOUT</div>
+          <div>PREMIUM QUALITY</div>
+          <div>TIMELESS TRADITION</div>
         </div>
       </div>
 
@@ -182,7 +201,7 @@ export const OrderSuccess: React.FC = () => {
           ======================================================== */}
       {recommended.length > 0 && (
         <div className="max-w-6xl mx-auto mt-16 pt-10 border-t border-[#E8DFD0]">
-          <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#5B111A] text-center mb-8">
+          <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#5E1224] text-center mb-8">
             You May Also Like
           </h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

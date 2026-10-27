@@ -31,7 +31,7 @@ export const AdminCustomers: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <span className="text-xs uppercase tracking-widest font-bold text-[#C59B27]">
+          <span className="text-xs uppercase tracking-widest font-bold text-[#B58A3C]">
             Clientele Roster
           </span>
           <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
@@ -45,7 +45,7 @@ export const AdminCustomers: React.FC = () => {
 
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
-          <Loader2 className="w-8 h-8 text-[#5B111A] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
           <p className="text-xs text-gray-500 font-serif">Loading boutique clientele...</p>
         </div>
       ) : error ? (
@@ -53,7 +53,7 @@ export const AdminCustomers: React.FC = () => {
           <p className="text-xs sm:text-sm text-red-800 font-semibold">{error}</p>
           <button
             onClick={loadCustomers}
-            className="px-4 py-2 bg-[#5B111A] text-white rounded text-xs font-semibold"
+            className="px-4 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold"
           >
             Retry
           </button>
@@ -71,7 +71,7 @@ export const AdminCustomers: React.FC = () => {
           {customers.map((c) => (
             <div
               key={c.phone}
-              className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm flex flex-col justify-between space-y-3 hover:border-[#5B111A]/40 transition-colors"
+              className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm flex flex-col justify-between space-y-3 hover:border-[#5E1224]/40 transition-colors"
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -81,7 +81,7 @@ export const AdminCustomers: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-0.5">+91 {c.phone}</p>
                 </div>
 
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#FAF7F2] border border-[#E8DFD0] text-[#5B111A]">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-[#FCF8F0] border border-[#E8DFD0] text-[#5E1224]">
                   {c.order_count} {c.order_count === 1 ? 'order' : 'orders'}
                 </span>
               </div>

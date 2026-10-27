@@ -28,23 +28,23 @@ export const AdminLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] flex flex-col justify-center py-12 sm:px-6 lg:px-8 px-4">
+    <div className="min-h-screen bg-[#FCF8F0] font-sans flex flex-col justify-center py-12 sm:px-6 lg:px-8 px-4">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <Link to="/" className="inline-block hover:opacity-95 transition-opacity mb-2" aria-label="Royal Libas Homepage">
           <BrandLogo layout="stacked" emblemSize={48} />
         </Link>
-        <span className="text-[10px] uppercase tracking-widest font-bold text-[#C59B27] block mt-1">
+        <span className="text-[10px] uppercase tracking-[0.25em] font-bold text-[#B58A3C] block mt-1">
           Boutique Operations Portal
         </span>
-        <p className="mt-2 text-xs text-gray-600">
+        <p className="mt-2 text-xs text-gray-600 font-light">
           Sign in to manage catalogue products, live inventory, and customer shipments.
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-6 sm:px-10 rounded-xl border border-[#E8DFD0] shadow-sm">
+        <div className="bg-white py-8 px-6 sm:px-10 rounded-none border border-[#E8DFD0] shadow-sm">
           {error && (
-            <div className="mb-6 p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
+            <div className="mb-6 p-3.5 rounded-none bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
               <span>{error}</span>
             </div>
@@ -63,7 +63,7 @@ export const AdminLogin: React.FC = () => {
                   placeholder="owner@royallibas.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded border border-gray-300 focus:outline-none focus:border-[#5B111A] focus:ring-1 focus:ring-[#5B111A]"
+                  className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-none border border-gray-300 focus:outline-none focus:border-[#5E1224] focus:ring-1 focus:ring-[#5E1224]"
                 />
               </div>
             </div>
@@ -80,7 +80,7 @@ export const AdminLogin: React.FC = () => {
                   placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded border border-gray-300 focus:outline-none focus:border-[#5B111A] focus:ring-1 focus:ring-[#5B111A]"
+                  className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-none border border-gray-300 focus:outline-none focus:border-[#5E1224] focus:ring-1 focus:ring-[#5E1224]"
                 />
               </div>
             </div>
@@ -88,7 +88,7 @@ export const AdminLogin: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-400 text-white font-semibold text-xs sm:text-sm uppercase tracking-wider rounded transition-colors shadow flex items-center justify-center gap-2"
+              className="w-full mt-2 py-3 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-none transition-colors shadow-sm flex items-center justify-center gap-2"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -102,11 +102,11 @@ export const AdminLogin: React.FC = () => {
           </form>
 
           <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-            <Link to="/" className="hover:text-[#5B111A] transition-colors underline">
+            <Link to="/" className="hover:text-[#5E1224] transition-colors underline">
               Return to Storefront
             </Link>
             <div className="flex items-center gap-1 text-[11px] text-gray-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#C59B27]" />
+              <ShieldCheck className="w-3.5 h-3.5 text-[#B58A3C]" />
               <span>JWT Protected</span>
             </div>
           </div>

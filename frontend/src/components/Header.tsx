@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, Menu, X, Search, Heart, ChevronDown } from 'lucide-react';
+import { ShoppingBag, Menu, X, Search, Heart, ChevronDown, User } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { BrandLogo } from './BrandLogo';
-import { useStoreSettings } from '../lib/settings';
 import { SearchModal } from './SearchModal';
 
 export const Header: React.FC = () => {
   const location = useLocation();
   const { totalItems, openDrawer } = useCart();
   const { wishlistCount } = useWishlist();
-  const { settings } = useStoreSettings();
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -48,15 +46,23 @@ export const Header: React.FC = () => {
   return (
     <>
       <header
-        className={`sticky top-0 z-40 bg-[#FAF7F2]/98 backdrop-blur-md transition-all duration-250 ease-out ${
+        className={`sticky top-0 z-40 bg-[#FCF8F0]/98 backdrop-blur-md transition-all duration-250 ease-out ${
           isScrolled
-            ? 'shadow-[0_2px_12px_rgba(43,27,30,0.06)] border-b border-[#E8DFD0]'
+            ? 'shadow-[0_2px_14px_rgba(43,27,30,0.08)] border-b border-[#E8DFD0]'
             : 'border-b border-[#E8DFD0]'
         }`}
       >
-        {/* Top Announcement Bar (Point 10) */}
-        <div className="bg-[#5B111A] text-[#FAF7F2] text-[11px] sm:text-xs py-2 px-4 text-center tracking-wider font-medium flex items-center justify-center gap-2 transition-all duration-300">
-          <span>Free shipping on orders above ₹{settings.freeShippingThreshold} | COD Available | 3-5 Days Delivery</span>
+        {/* Top Announcement Bar (PDF Page 2 & 4) */}
+        <div className="bg-[#5E1224] text-[#FCF8F0] text-[10.5px] sm:text-xs py-2 px-4 sm:px-8 tracking-[0.16em] uppercase font-medium flex items-center justify-between transition-all duration-300">
+          <div className="hidden md:block w-28 text-[10px] text-[#D4AF67] tracking-widest font-serif">
+            ROYAL LIBAS
+          </div>
+          <div className="flex-1 text-center">
+            <span className="font-medium tracking-[0.18em]">COMPLIMENTARY SHIPPING ON ALL ORDERS &nbsp;|&nbsp; FESTIVE EDIT NOW LIVE</span>
+          </div>
+          <div className="hidden md:flex items-center gap-1.5 text-[10.5px] text-[#FCF8F0] font-medium tracking-wider">
+            <span>INDIA (INR) ▾</span>
+          </div>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -66,137 +72,160 @@ export const Header: React.FC = () => {
             }`}
           >
             {/* Mobile Hamburger Button */}
-            <div className="flex items-center md:hidden">
+            <div className="flex items-center lg:hidden">
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
-                className="p-2 text-gray-800 hover:text-[#5B111A] focus:outline-none"
+                className="p-2 text-[#2B1B1E] hover:text-[#5E1224] focus:outline-none"
                 aria-label="Open Navigation Menu"
               >
                 <Menu className="w-6 h-6" />
               </button>
             </div>
 
-            {/* Logo / Brand Name - Option 5 Floral Motif Identity */}
-            <Link
-              to="/"
-              className="group flex flex-col items-center justify-center focus:outline-none py-1 transition-transform duration-200 hover:scale-[1.01]"
-              aria-label="Royal Libas Homepage"
-            >
-              <BrandLogo layout="compact" emblemSize={isScrolled ? 22 : 26} />
-            </Link>
-
-            {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center space-x-8 text-sm font-medium font-ui">
+            {/* Left Nav (Desktop Editorial) */}
+            <nav className="hidden lg:flex items-center space-x-7 text-xs font-semibold uppercase tracking-[0.18em] font-ui">
               <Link
-                to="/"
-                className={`transition-colors py-1 border-b-2 ${
-                  location.pathname === '/'
-                    ? 'text-[#5B111A] border-[#C59B27] font-semibold'
-                    : 'text-gray-700 hover:text-[#5B111A] border-transparent'
+                to="/shop?sort=newest"
+                className={`transition-colors py-1 hover:text-[#5E1224] ${
+                  location.search.includes('sort=newest') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                 }`}
               >
-                Home
+                NEW IN
               </Link>
               <Link
                 to="/shop"
-                className={`transition-colors py-1 border-b-2 ${
-                  location.pathname === '/shop' && !location.search
-                    ? 'text-[#5B111A] border-[#C59B27] font-semibold'
-                    : 'text-gray-700 hover:text-[#5B111A] border-transparent'
+                className={`transition-colors py-1 hover:text-[#5E1224] ${
+                  location.pathname === '/shop' && !location.search ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                 }`}
               >
-                Shop All
+                SHOP
               </Link>
               <div className="relative group">
                 <Link
                   to="/shop?collection=festive-edit"
-                  className={`transition-colors py-1 border-b-2 flex items-center gap-1 ${
-                    location.search.includes('collection')
-                      ? 'text-[#5B111A] border-[#C59B27] font-semibold'
-                      : 'text-gray-700 hover:text-[#5B111A] border-transparent'
+                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] ${
+                    location.search.includes('collection') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
                 >
-                  <span>Collections</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#5B111A] transition-transform duration-200 group-hover:rotate-180" />
+                  <span>COLLECTIONS</span>
+                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-200 group-hover:rotate-180" />
                 </Link>
 
                 {/* Sub-menu Dropdown */}
-                <div className="absolute top-full left-0 w-52 bg-white rounded-xl border border-[#E8DFD0] shadow-xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50">
+                <div className="absolute top-full left-0 w-56 bg-[#FCF8F0] rounded-lg border border-[#E8DFD0] shadow-xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50">
                   <Link
                     to="/shop?collection=festive-edit"
-                    className="block px-3 py-2 rounded-lg text-xs font-semibold text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+                    className="block px-3 py-2 rounded text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
                   >
                     Festive Edit
                   </Link>
                   <Link
                     to="/shop?collection=everyday-cotton"
-                    className="block px-3 py-2 rounded-lg text-xs font-semibold text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+                    className="block px-3 py-2 rounded text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
                   >
                     Everyday Cotton
                   </Link>
                   <Link
                     to="/shop?collection=bestsellers"
-                    className="block px-3 py-2 rounded-lg text-xs font-semibold text-gray-800 hover:bg-[#FAF7F2] hover:text-[#5B111A]"
+                    className="block px-3 py-2 rounded text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
                   >
                     Bestsellers
                   </Link>
                 </div>
               </div>
               <Link
-                to="/about"
-                className={`transition-colors py-1 border-b-2 ${
-                  location.pathname === '/about'
-                    ? 'text-[#5B111A] border-[#C59B27] font-semibold'
-                    : 'text-gray-700 hover:text-[#5B111A] border-transparent'
+                to="/shop?collection=festive-edit"
+                className={`transition-colors py-1 hover:text-[#5E1224] ${
+                  location.search.includes('festive-edit') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                 }`}
               >
-                About Tanya
+                BRIDAL
               </Link>
             </nav>
 
-            {/* Right Header Icons: Search, Wishlist, Bag */}
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              <button
-                type="button"
-                onClick={() => setSearchModalOpen(true)}
-                className="p-2 text-gray-700 hover:text-[#5B111A] transition-colors focus:outline-none rounded-full hover:bg-gray-100/60"
-                title="Search styles"
-                aria-label="Open Search"
-              >
-                <Search className="w-5 h-5" />
-              </button>
+            {/* Center Logo - Floral Motif Identity */}
+            <Link
+              to="/"
+              className="group flex flex-col items-center justify-center focus:outline-none py-1 transition-transform duration-200 hover:scale-[1.01]"
+              aria-label="Royal Libas Homepage"
+            >
+              <BrandLogo layout="compact" emblemSize={isScrolled ? 22 : 26} taglineText="TIMELESS TRADITIONS, MODERN WOMEN." />
+            </Link>
 
-              <Link
-                to="/shop?wishlist=true"
-                className="relative p-2 text-gray-700 hover:text-[#5B111A] transition-colors focus:outline-none rounded-full hover:bg-gray-100/60"
-                title="Wishlist"
-                aria-label="View Wishlist"
-              >
-                <Heart className={`w-5 h-5 ${wishlistCount > 0 ? 'fill-[#5B111A] text-[#5B111A]' : ''}`} />
-                {wishlistCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-[#C59B27] text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center shadow-sm">
-                    {wishlistCount}
-                  </span>
-                )}
-              </Link>
+            {/* Right Nav (Desktop Editorial + Action Icons) */}
+            <div className="flex items-center space-x-4 sm:space-x-6">
+              <nav className="hidden lg:flex items-center space-x-6 text-xs font-semibold uppercase tracking-[0.18em] font-ui">
+                <Link
+                  to="/about"
+                  className={`transition-colors py-1 hover:text-[#5E1224] ${
+                    location.pathname === '/about' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                  }`}
+                >
+                  OUR STORY
+                </Link>
+                <Link
+                  to="/about#journal"
+                  className={`transition-colors py-1 hover:text-[#5E1224] ${
+                    location.hash === '#journal' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                  }`}
+                >
+                  JOURNAL
+                </Link>
+              </nav>
 
-              <button
-                type="button"
-                onClick={openDrawer}
-                className="relative p-2 text-gray-800 hover:text-[#5B111A] transition-colors focus:outline-none rounded-full hover:bg-gray-100/60 flex items-center gap-1.5"
-                aria-label="Open Shopping Bag"
-              >
-                <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
-                {totalItems > 0 && (
-                  <span
-                    key={totalItems}
-                    className="absolute -top-1 -right-1 bg-[#5B111A] text-white text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#FAF7F2] animate-cart-bounce shadow-sm font-ui"
-                  >
-                    {totalItems}
-                  </span>
-                )}
-              </button>
+              {/* Action Icons: Search, User, Wishlist, Bag */}
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setSearchModalOpen(true)}
+                  className="p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
+                  title="Search styles"
+                  aria-label="Open Search"
+                >
+                  <Search className="w-5 h-5" />
+                </button>
+
+                <Link
+                  to="/admin/login"
+                  className="p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
+                  title="Account / Boutique Admin"
+                  aria-label="Account Login"
+                >
+                  <User className="w-5 h-5" />
+                </Link>
+
+                <Link
+                  to="/shop?wishlist=true"
+                  className="relative p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
+                  title="Wishlist"
+                  aria-label="View Wishlist"
+                >
+                  <Heart className={`w-5 h-5 ${wishlistCount > 0 ? 'fill-[#5E1224] text-[#5E1224]' : ''}`} />
+                  {wishlistCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-[#B58A3C] text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center shadow-sm">
+                      {wishlistCount}
+                    </span>
+                  )}
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={openDrawer}
+                  className="relative p-2 text-gray-800 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5 flex items-center gap-1.5"
+                  aria-label="Open Shopping Bag"
+                >
+                  <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
+                  {totalItems > 0 && (
+                    <span
+                      key={totalItems}
+                      className="absolute -top-1 -right-1 bg-[#5E1224] text-white text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#FCF8F0] animate-cart-bounce shadow-sm font-ui"
+                    >
+                      {totalItems}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
