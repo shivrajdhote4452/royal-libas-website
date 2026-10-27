@@ -732,15 +732,15 @@ export const Checkout: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-3.5 bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-400 text-white text-xs sm:text-sm font-ui font-semibold uppercase tracking-wider rounded transition-colors shadow-md flex items-center justify-center gap-2 mt-4"
+              className="w-full py-4 bg-[#5B111A] hover:bg-[#460C13] disabled:bg-gray-400 text-white text-xs sm:text-sm font-ui font-semibold uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 mt-4"
             >
               {isSubmitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Processing Order...</span>
-                </>
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>PROCESSING...</span>
+                </span>
               ) : (
-                <span>Place Order →</span>
+                <span>{paymentMethod === 'COD' ? 'PLACE COD ORDER →' : 'PAY & PLACE ORDER →'}</span>
               )}
             </button>
             <p className="text-[10px] text-center text-gray-400 mt-2">

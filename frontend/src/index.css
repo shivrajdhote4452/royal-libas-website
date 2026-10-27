@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --motion-fast: 180ms;
+  --motion-standard: 280ms;
+  --motion-slow: 520ms;
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+  --maroon-primary: #5B111A;
+  --maroon-dark: #460C13;
+  --gold-primary: #C59B27;
+  --ivory-primary: #FAF7F2;
+}
+
 @layer base {
   body {
     background-color: #FAF7F2;
@@ -213,5 +224,64 @@ button:active:not(:disabled),
 
 .gold-line {
   background: linear-gradient(90deg, transparent 0%, #C59B27 50%, transparent 100%);
+}
+
+/* Button Micro-interactions (Point 23) */
+.btn-primary {
+  background-color: #5B111A;
+  color: #FFFFFF;
+  transition: background-color var(--motion-fast) var(--ease-premium),
+              transform var(--motion-fast) var(--ease-premium),
+              box-shadow var(--motion-fast) var(--ease-premium);
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: #460C13;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(91, 17, 26, 0.18);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: #5B111A;
+  border: 1px solid #5B111A;
+  transition: all var(--motion-fast) var(--ease-premium);
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: #5B111A;
+  color: #FAF7F2;
+  transform: translateY(-1px);
+}
+
+/* Skeleton Shimmer Loading (Point 31) */
+@keyframes skeletonPulse {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(232, 223, 208, 0.35) 0%,
+    rgba(250, 247, 242, 0.75) 50%,
+    rgba(232, 223, 208, 0.35) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.8s infinite ease-in-out;
+}
+
+/* Editorial Scroll Reveal (Point 22) */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity var(--motion-slow) var(--ease-premium),
+              transform var(--motion-slow) var(--ease-premium);
+}
+.reveal-on-scroll.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
 }
 

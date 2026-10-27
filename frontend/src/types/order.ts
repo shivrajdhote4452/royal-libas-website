@@ -153,3 +153,12 @@ export interface AdminCustomerResponse {
   total_spent: number;
   last_order_date: string;
 }
+
+export interface CouponPublic {
+  id: number;
+  code: string;
+  type: 'FLAT' | 'PERCENT' | string;
+  value: number;
+  min_order_value: number;
+  is_active: boolean;
+}

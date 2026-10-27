@@ -57,6 +57,7 @@ import {
   CashfreeOrderResponse,
   PaymentGatewayConfigResponse,
   CouponValidateResponse,
+  CouponPublic,
 } from '../types/order';
 
 export async function validateCart(items: CartItemValidate[]): Promise<CartValidateResponse> {
@@ -68,6 +69,14 @@ export async function validateCart(items: CartItemValidate[]): Promise<CartValid
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || 'Failed to validate cart lines');
+  }
+  return response.json();
+}
+
+export async function fetchActiveCoupons(): Promise<CouponPublic[]> {
+  const response = await fetch(`${API_BASE_URL}/coupons`);
+  if (!response.ok) {
+    return [];
   }
   return response.json();
 }

@@ -6,29 +6,39 @@ import {
   Check,
   AlertCircle,
   X,
-  Star,
   ChevronRight,
+  ChevronLeft,
   Minus,
   Plus,
   Truck,
   RefreshCw,
   CreditCard,
-  Lock
+  Lock,
+  Heart,
+  Copy,
+  Tag,
 } from 'lucide-react';
 import type { Product, ProductVariant } from '../types/product';
-import { fetchProductBySlug, formatPrice, fetchProducts } from '../lib/api';
+import type { CouponPublic } from '../types/order';
+import { fetchProductBySlug, formatPrice, fetchProducts, fetchActiveCoupons } from '../lib/api';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { ProductCard } from '../components/ProductCard';
 import { useStoreSettings } from '../lib/settings';
+
+const RECENTLY_VIEWED_KEY = 'royal_libas_recently_viewed';
 
 export const ProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { settings } = useStoreSettings();
-  const { addToCart } = useCart();
+  const { addToCart, openDrawer } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [recentlyViewedProducts, setRecentlyViewedProducts] = useState<Product[]>([]);
+  const [coupons, setCoupons] = useState<CouponPublic[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,8 +48,11 @@ export const ProductPage: React.FC = () => {
   const [selectedColor, setSelectedColor] = useState<string>('Maroon');
   const [activeTab, setActiveTab] = useState<'desc' | 'fabric' | 'shipping' | 'exchange'>('desc');
   const [showSizeChart, setShowSizeChart] = useState<boolean>(false);
-  const [addedToast, setAddedToast] = useState<boolean>(false);
+  const [showAllOffersModal, setShowAllOffersModal] = useState<boolean>(false);
+  const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
+  const [btnState, setBtnState] = useState<'idle' | 'adding' | 'added'>('idle');
 
+  // Load product data
   useEffect(() => {
     let isMounted = true;
     async function loadProduct() {
@@ -54,8 +67,17 @@ export const ProductPage: React.FC = () => {
           // Pre-select first available variant
           const firstAvailable = data.variants.find((v) => v.stock > 0);
           setSelectedVariant(firstAvailable || null);
+          setActiveImageIndex(0);
 
-          // Infer color from product name
+          // Track in Recently Viewed (Point 25)
+          try {
+            const raw = localStorage.getItem(RECENTLY_VIEWED_KEY);
+            const list: number[] = raw ? JSON.parse(raw) : [];
+            const updated = [data.id, ...list.filter((pid) => pid !== data.id)].slice(0, 8);
+            localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(updated));
+          } catch {}
+
+          // Color inference
           if (data.name.toLowerCase().includes('maroon') || data.name.toLowerCase().includes('zari')) {
             setSelectedColor('Maroon');
           } else if (data.name.toLowerCase().includes('chandni') || data.name.toLowerCase().includes('ivory')) {
@@ -78,10 +100,31 @@ export const ProductPage: React.FC = () => {
     }
     loadProduct();
 
-    // Fetch related products
+    // Fetch related & recently viewed products
     fetchProducts({})
       .then((all) => {
-        if (isMounted) setRelatedProducts(all.filter((p) => p.slug !== id).slice(0, 4));
+        if (isMounted) {
+          setRelatedProducts(all.filter((p) => p.slug !== id).slice(0, 4));
+
+          // Resolve recently viewed from localStorage
+          try {
+            const raw = localStorage.getItem(RECENTLY_VIEWED_KEY);
+            const savedIds: number[] = raw ? JSON.parse(raw) : [];
+            const found = savedIds
+              .filter((pid) => all.some((p) => p.id === pid && p.slug !== id))
+              .map((pid) => all.find((p) => p.id === pid)!)
+              .filter(Boolean)
+              .slice(0, 4);
+            setRecentlyViewedProducts(found);
+          } catch {}
+        }
+      })
+      .catch(() => {});
+
+    // Fetch active coupons for "Available Offers" (Point 17)
+    fetchActiveCoupons()
+      .then((res) => {
+        if (isMounted) setCoupons(res);
       })
       .catch(() => {});
 
@@ -94,11 +137,11 @@ export const ProductPage: React.FC = () => {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-7 aspect-[3/4] bg-gray-200/60 animate-pulse rounded-xl" />
+          <div className="lg:col-span-7 aspect-[3/4] skeleton-shimmer rounded-2xl border border-[#E8DFD0]" />
           <div className="lg:col-span-5 space-y-4">
-            <div className="h-8 bg-gray-200/60 animate-pulse rounded w-3/4" />
-            <div className="h-6 bg-gray-200/60 animate-pulse rounded w-1/3" />
-            <div className="h-32 bg-gray-200/60 animate-pulse rounded" />
+            <div className="h-8 skeleton-shimmer rounded w-3/4" />
+            <div className="h-6 skeleton-shimmer rounded w-1/3" />
+            <div className="h-40 skeleton-shimmer rounded-xl" />
           </div>
         </div>
       </div>
@@ -117,7 +160,7 @@ export const ProductPage: React.FC = () => {
         </p>
         <Link
           to="/shop"
-          className="inline-flex items-center px-6 py-2.5 rounded bg-[#5B111A] text-white text-xs font-ui font-semibold uppercase tracking-wider hover:bg-[#3A080F]"
+          className="inline-flex items-center px-6 py-2.5 rounded bg-[#5B111A] text-white text-xs font-ui font-semibold uppercase tracking-wider hover:bg-[#460C13]"
         >
           Return to Shop
         </Link>
@@ -125,18 +168,26 @@ export const ProductPage: React.FC = () => {
     );
   }
 
-  const isSoldOut = product.total_stock === 0 || product.badges.includes('Sold Out');
-  const activeImage =
+  const galleryImages =
     product.images && product.images.length > 0
-      ? product.images[activeImageIndex]?.url
-      : product.primary_image;
+      ? product.images.map((img) => img.url)
+      : product.primary_image
+      ? [product.primary_image]
+      : [];
+
+  const activeImageUrl = galleryImages[activeImageIndex] || galleryImages[0] || null;
 
   const displaySellingPrice = selectedVariant ? selectedVariant.selling_price : product.min_price || 0;
   const displayMrp = selectedVariant?.mrp ?? (product.variants[0]?.mrp || null);
-  const discountPercent = displayMrp && displayMrp > displaySellingPrice
-    ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
-    : null;
+  const discountPercent =
+    displayMrp && displayMrp > displaySellingPrice
+      ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
+      : null;
 
+  const isSoldOut = product.total_stock === 0;
+  const inWishlist = isInWishlist(product.id);
+
+  // Parse size chart JSON if present
   let parsedSizeChart: any = null;
   if (product.size_chart) {
     try {
@@ -146,7 +197,34 @@ export const ProductPage: React.FC = () => {
     }
   }
 
+  // Handle Add to Cart (Point 5)
   const handleAddToCart = () => {
+    if (!selectedVariant || selectedVariant.stock <= 0 || btnState !== 'idle') return;
+
+    setBtnState('adding');
+    setTimeout(() => {
+      addToCart(
+        {
+          productId: product.id,
+          variantId: selectedVariant.id,
+          slug: product.slug,
+          name: product.name,
+          size: selectedVariant.size,
+          sellingPrice: Number(selectedVariant.selling_price),
+          image: activeImageUrl,
+        },
+        quantity
+      );
+      setBtnState('added');
+
+      setTimeout(() => {
+        setBtnState('idle');
+        openDrawer();
+      }, 500);
+    }, 280);
+  };
+
+  const handleBuyNow = () => {
     if (!selectedVariant || selectedVariant.stock <= 0) return;
     addToCart(
       {
@@ -156,158 +234,198 @@ export const ProductPage: React.FC = () => {
         name: product.name,
         size: selectedVariant.size,
         sellingPrice: Number(selectedVariant.selling_price),
-        image: activeImage || null,
+        image: activeImageUrl,
       },
       quantity
     );
-    setAddedToast(true);
-    setTimeout(() => setAddedToast(false), 3000);
-  };
-
-  const handleBuyNow = () => {
-    handleAddToCart();
     navigate('/checkout');
   };
 
-  const colorSwatches = [
-    { name: 'Maroon', hex: '#5B111A' },
-    { name: 'Ivory', hex: '#EFE9DF' },
-    { name: 'Emerald', hex: '#1A4D2E' },
-    { name: 'Mustard', hex: '#C59B27' },
-  ];
+  // Copy Coupon Code (Point 18: Inline feedback, no alert popup)
+  const handleCopyCoupon = (code: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(code);
+    }
+    setCopiedCoupon(code);
+    setTimeout(() => setCopiedCoupon(null), 1500);
+  };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans pb-16 sm:pb-24">
-      {/* Toast Notification */}
-      {addedToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#1A4D2E] text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-3 animate-draw-check">
-          <Check className="w-5 h-5 text-[#EAD186]" />
-          <div className="text-xs sm:text-sm font-medium">
-            <span className="font-bold">{product.name} (Size {selectedVariant?.size})</span> added to your bag!
-          </div>
+    <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans">
+      {/* Breadcrumb Navigation */}
+      <div className="border-b border-[#E8DFD0] bg-white/60">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <nav className="flex items-center space-x-2 text-xs text-gray-500 font-medium">
+            <Link to="/" className="hover:text-[#5B111A]">Home</Link>
+            <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+            <Link to="/shop" className="hover:text-[#5B111A]">Shop</Link>
+            {product.category && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                <Link to={`/shop?category=${encodeURIComponent(product.category)}`} className="hover:text-[#5B111A]">
+                  {product.category}
+                </Link>
+              </>
+            )}
+            <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-gray-900 font-semibold truncate max-w-[200px]">{product.name}</span>
+          </nav>
         </div>
-      )}
+      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* ========================================================
-            1. BREADCRUMBS
-            ======================================================== */}
-        <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-6 font-medium">
-          <Link to="/" className="hover:text-[#5B111A] transition-colors">Home</Link>
-          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-          <Link to="/shop" className="hover:text-[#5B111A] transition-colors">Kurti Sets</Link>
-          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-          <span className="text-gray-900 font-semibold truncate">{product.name}</span>
-        </nav>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+          {/* ========================================================
+              1. IMAGE GALLERY (Point 14: Desktop crossfade + mobile swipe/dots)
+              ======================================================== */}
+          <div className="lg:col-span-7 space-y-4">
+            {/* Main Stage Image */}
+            <div className="relative aspect-[3/4] w-full bg-[#F0E9DF] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm group">
+              {activeImageUrl ? (
+                <img
+                  key={activeImageUrl}
+                  src={activeImageUrl}
+                  alt={product.name}
+                  className="w-full h-full object-cover object-center transition-all duration-300 ease-out group-hover:scale-[1.03]"
+                  style={{
+                    transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-[#5B111A] text-white p-8 text-center">
+                  <span className="font-serif text-3xl font-bold mb-2">RL</span>
+                  <p className="font-serif text-lg">{product.name}</p>
+                </div>
+              )}
 
-        {/* ========================================================
-            2. PRODUCT DISPLAY (PDF Page 4 Split Layout)
-            Left: Gallery Strip + Main Image
-            Right: Sticky Purchase Information
-            ======================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-          {/* LEFT: GALLERY AREA (lg:col-span-7) */}
-          <div className="lg:col-span-7 flex flex-col-reverse sm:flex-row gap-4">
-            {/* Vertical Thumbnail Strip on Desktop */}
-            {product.images && product.images.length > 1 && (
-              <div className="flex sm:flex-col gap-2.5 overflow-x-auto sm:overflow-y-auto sm:w-20 shrink-0">
-                {product.images.map((img, idx) => (
-                  <button
-                    key={img.id}
-                    type="button"
-                    onClick={() => setActiveImageIndex(idx)}
-                    className={`relative w-16 h-20 sm:w-20 sm:h-26 rounded-lg overflow-hidden border-2 transition-all shrink-0 ${
-                      activeImageIndex === idx
-                        ? 'border-[#C59B27] ring-1 ring-[#C59B27] shadow-sm'
-                        : 'border-[#E8DFD0] hover:border-gray-400 opacity-80 hover:opacity-100'
+              {/* Badges */}
+              <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+                {product.badges?.map((badge) => (
+                  <span
+                    key={badge}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold uppercase tracking-wider shadow-sm ${
+                      badge === 'Bestseller'
+                        ? 'bg-[#C59B27] text-[#3A080F]'
+                        : badge === 'Low Stock'
+                        ? 'bg-amber-700 text-white'
+                        : 'bg-[#5B111A] text-white'
                     }`}
-                    aria-label={`View photo ${idx + 1}`}
                   >
-                    <img src={img.url} alt={img.alt_text || `Photo ${idx + 1}`} className="w-full h-full object-cover" />
-                  </button>
+                    {badge}
+                  </span>
                 ))}
               </div>
-            )}
 
-            {/* Main Featured Image */}
-            <div className="flex-1 relative aspect-[3/4] rounded-2xl overflow-hidden bg-white border border-[#E8DFD0] shadow-md">
-              {/* Visible SAMPLE PHOTO Badge */}
-              <div className="absolute top-4 right-4 z-20 pointer-events-none no-motion">
-                <span className="inline-flex items-center px-2.5 py-1 rounded bg-black/75 text-amber-200 text-[10px] font-bold tracking-wider uppercase shadow-md border border-amber-400/40 backdrop-blur-sm">
+              {/* Sample Photo Badge */}
+              <div className="absolute top-4 right-14 z-10">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-black/75 text-amber-200 border border-amber-400/40 shadow-sm backdrop-blur-[2px]">
                   SAMPLE PHOTO
                 </span>
               </div>
 
-              {/* Dynamic Badge */}
-              {product.badges && product.badges.length > 0 && (
-                <div className="absolute top-4 left-4 z-20 no-motion">
-                  <span className="inline-flex items-center px-3 py-1 rounded bg-[#5B111A] text-white text-[11px] font-bold tracking-wider uppercase shadow-md">
-                    {product.badges[0]}
-                  </span>
-                </div>
-              )}
-
-              {/* Sold Out Overlay */}
-              {isSoldOut && (
-                <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] z-10 flex items-center justify-center">
-                  <span className="bg-[#1F1A1C] text-white font-serif font-bold text-lg uppercase tracking-widest px-6 py-2.5 rounded-lg shadow-xl">
-                    Sold Out
-                  </span>
-                </div>
-              )}
-
-              {activeImage ? (
-                <img
-                  key={activeImageIndex}
-                  src={activeImage}
-                  alt={product.name}
-                  className="w-full h-full object-cover object-top transition-opacity duration-300 ease-out"
+              {/* Wishlist Button (Point 20) */}
+              <button
+                type="button"
+                onClick={() => toggleWishlist(product.id)}
+                className={`absolute top-4 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${
+                  inWishlist
+                    ? 'bg-white text-[#5B111A] shadow-md scale-105'
+                    : 'bg-white/80 text-gray-700 hover:text-[#5B111A] hover:bg-white hover:scale-105 shadow-sm backdrop-blur-[2px]'
+                }`}
+                aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+              >
+                <Heart
+                  className={`w-5 h-5 transition-transform duration-200 ${
+                    inWishlist ? 'fill-[#5B111A] stroke-[#5B111A]' : 'stroke-current'
+                  }`}
                 />
-              ) : (
-                <div className="w-full h-full bg-[#5B111A] flex items-center justify-center text-white p-8 text-center font-serif text-2xl font-bold">
-                  {product.name}
-                </div>
+              </button>
+
+              {/* Mobile Carousel Indicators (Point 14) */}
+              {galleryImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1))
+                    }
+                    className="sm:hidden absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 text-gray-800 flex items-center justify-center shadow"
+                    aria-label="Previous photo"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveImageIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0))
+                    }
+                    className="sm:hidden absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 text-gray-800 flex items-center justify-center shadow"
+                    aria-label="Next photo"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                  <div className="sm:hidden absolute bottom-3 right-3 bg-black/60 text-white text-[11px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm">
+                    {activeImageIndex + 1} / {galleryImages.length}
+                  </div>
+                </>
               )}
             </div>
+
+            {/* Desktop Thumbnails (Point 14: subtle 180-250ms crossfade) */}
+            {galleryImages.length > 1 && (
+              <div className="hidden sm:grid grid-cols-5 gap-3">
+                {galleryImages.map((imgUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+                      activeImageIndex === idx
+                        ? 'border-[#5B111A] shadow-md scale-102 ring-1 ring-[#5B111A]'
+                        : 'border-[#E8DFD0] hover:border-gray-400 opacity-80 hover:opacity-100'
+                    }`}
+                  >
+                    <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* RIGHT: STICKY PURCHASE PANEL (lg:col-span-5) (PDF Page 4) */}
-          <div className="lg:col-span-5 bg-white p-6 sm:p-8 rounded-2xl border border-[#E8DFD0] shadow-sm lg:sticky lg:top-28 space-y-5">
-            {/* Product Title */}
+          {/* ========================================================
+              2. BUYING CONTROLS PANEL
+              ======================================================== */}
+          <div className="lg:col-span-5 space-y-6">
             <div>
-              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A] leading-tight">
+              <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27] block mb-1">
+                {product.category || 'Handcrafted Boutique Silhouette'}
+              </span>
+              <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight">
                 {product.name}
               </h1>
-              {/* Star Rating */}
-              <div className="flex items-center gap-1.5 mt-2">
-                <div className="flex text-[#C59B27]">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-[#C59B27]" />
-                  ))}
-                </div>
-                <span className="text-xs font-semibold text-gray-800">4.8</span>
-                <span className="text-xs text-gray-400">(120 reviews)</span>
-              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Hand-embroidered festive ensemble &bull; Model wears Size M
+              </p>
             </div>
 
-            {/* Price Row */}
-            <div className="pb-4 border-b border-gray-100">
-              <div className="flex items-baseline gap-2.5 flex-wrap no-motion">
-                <span className="price-display text-2xl sm:text-3xl font-bold text-[#5B111A]">
+            {/* Pricing Area */}
+            <div className="p-4 bg-white rounded-xl border border-[#E8DFD0] shadow-sm">
+              <div className="flex items-baseline gap-3">
+                <span className="price-display text-2xl sm:text-3xl font-serif font-bold text-[#5B111A]">
                   {formatPrice(displaySellingPrice)}
                 </span>
                 {displayMrp && displayMrp > displaySellingPrice && (
-                  <span className="price-display text-sm text-gray-500 line-through">
+                  <span className="price-display text-sm text-gray-400 line-through">
                     {formatPrice(displayMrp)}
                   </span>
                 )}
                 {discountPercent && (
-                  <span className="px-2 py-0.5 rounded bg-green-50 text-green-700 text-xs font-bold border border-green-200">
+                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
                     {discountPercent}% OFF
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-gray-500 mt-1">Inclusive of all taxes</p>
+              <p className="text-[11px] text-gray-500 mt-1">Inclusive of all boutique taxes & duties</p>
             </div>
 
             {/* Color Swatches */}
@@ -316,7 +434,12 @@ export const ProductPage: React.FC = () => {
                 Color: <span className="text-[#5B111A] font-bold">{selectedColor}</span>
               </div>
               <div className="flex items-center gap-2">
-                {colorSwatches.map((c) => (
+                {[
+                  { name: 'Maroon', hex: '#5B111A' },
+                  { name: 'Ivory', hex: '#FAF7F2' },
+                  { name: 'Emerald', hex: '#1B4D3E' },
+                  { name: 'Rose Pink', hex: '#D47D97' },
+                ].map((c) => (
                   <button
                     key={c.name}
                     type="button"
@@ -333,17 +456,22 @@ export const ProductPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Size Selector */}
-            <div className="space-y-2.5 pt-1">
+            {/* Size Selector (Point 15) */}
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-900">Size:</span>
+                <span className="text-xs font-semibold text-gray-900">
+                  Size:{' '}
+                  {selectedVariant && (
+                    <strong className="text-[#5B111A] font-bold">({selectedVariant.size})</strong>
+                  )}
+                </span>
                 <button
                   type="button"
                   onClick={() => setShowSizeChart(true)}
                   className="inline-flex items-center gap-1 text-xs text-[#5B111A] hover:underline font-semibold"
                 >
                   <Ruler className="w-3.5 h-3.5 text-[#C59B27]" />
-                  <span>Size Guide</span>
+                  <span>Size Guide (cm)</span>
                 </button>
               </div>
 
@@ -358,12 +486,12 @@ export const ProductPage: React.FC = () => {
                       type="button"
                       disabled={soldOut}
                       onClick={() => setSelectedVariant(v)}
-                      className={`h-11 rounded-lg border text-center transition-all ${
+                      className={`h-11 rounded-lg border text-center transition-all duration-200 ${
                         soldOut
-                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-60 line-through'
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
                           : isSelected
                           ? 'bg-[#5B111A] text-white border-[#5B111A] shadow-md font-bold'
-                          : 'bg-[#FAF7F2] text-gray-800 border-[#E8DFD0] hover:bg-gray-100 font-semibold'
+                          : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-gray-400 font-semibold'
                       }`}
                     >
                       <span className="text-xs sm:text-sm">{v.size}</span>
@@ -373,16 +501,16 @@ export const ProductPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Quantity Selector & Live Stock Indicator */}
+            {/* Quantity Selector & Real Low-Stock Message (Point 16 & 19) */}
             <div className="flex items-center justify-between pt-1">
               <div className="space-y-1">
-                <span className="text-xs font-semibold text-gray-900 block">Quantity:</span>
-                <div className="flex items-center border border-[#E8DFD0] rounded-lg bg-[#FAF7F2]">
+                <span className="text-xs font-semibold text-gray-900 block">Quantity</span>
+                <div className="flex items-center border border-[#E8DFD0] rounded-lg bg-white">
                   <button
                     type="button"
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                     disabled={quantity <= 1}
-                    className="p-2 hover:bg-gray-200 text-gray-700 disabled:opacity-40"
+                    className="p-2 hover:bg-gray-100 text-gray-700 disabled:opacity-40 transition-colors"
                     title="Decrease"
                   >
                     <Minus className="w-3.5 h-3.5" />
@@ -392,7 +520,7 @@ export const ProductPage: React.FC = () => {
                     type="button"
                     onClick={() => setQuantity((q) => q + 1)}
                     disabled={Boolean(selectedVariant && quantity >= selectedVariant.stock)}
-                    className="p-2 hover:bg-gray-200 text-gray-700 disabled:opacity-40"
+                    className="p-2 hover:bg-gray-100 text-gray-700 disabled:opacity-40 transition-colors"
                     title="Increase"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -400,14 +528,14 @@ export const ProductPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Stock Status Badge */}
+              {/* Real Inventory Status (Point 16) */}
               <div className="text-right">
                 {isSoldOut || (selectedVariant && selectedVariant.stock <= 0) ? (
                   <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-bold">
                     <span className="w-2 h-2 rounded-full bg-red-600" />
                     Sold Out
                   </span>
-                ) : selectedVariant && selectedVariant.stock <= 3 ? (
+                ) : selectedVariant && selectedVariant.stock <= 5 ? (
                   <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-bold">
                     <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
                     Only {selectedVariant.stock} left in stock
@@ -415,36 +543,118 @@ export const ProductPage: React.FC = () => {
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
                     <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                    In Stock
+                    In Stock (Ready to dispatch)
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Action Buttons: ADD TO CART + BUY NOW */}
+            {/* Action Buttons: ADD TO CART + BUY NOW (Point 5 & 23) */}
             <div className="space-y-2.5 pt-2">
               <button
                 type="button"
-                disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0}
+                disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0 || btnState === 'adding'}
                 onClick={handleAddToCart}
-                className="w-full py-3.5 px-6 rounded-lg bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-ui font-semibold text-xs sm:text-sm uppercase tracking-wider shadow transition-all flex items-center justify-center gap-2"
+                className="w-full py-4 px-6 rounded-xl bg-[#5B111A] hover:bg-[#460C13] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-ui font-semibold text-xs sm:text-sm uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2"
               >
-                <ShoppingBag className="w-4 h-4" />
-                <span>{isSoldOut ? 'Sold Out' : 'ADD TO CART'}</span>
+                {btnState === 'adding' ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ADDING...
+                  </span>
+                ) : btnState === 'added' ? (
+                  <span className="inline-flex items-center gap-2 text-amber-200">
+                    <Check className="w-4 h-4" />
+                    ADDED ✓
+                  </span>
+                ) : (
+                  <>
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>{isSoldOut ? 'Sold Out' : 'ADD TO CART'}</span>
+                  </>
+                )}
               </button>
 
               <button
                 type="button"
                 disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0}
                 onClick={handleBuyNow}
-                className="w-full py-3.5 px-6 rounded-lg bg-transparent border-2 border-[#5B111A] hover:bg-[#5B111A]/5 disabled:border-gray-300 disabled:cursor-not-allowed text-[#5B111A] font-ui font-semibold text-xs sm:text-sm uppercase tracking-wider transition-all"
+                className="w-full py-3.5 px-6 rounded-xl bg-transparent border-2 border-[#5B111A] hover:bg-[#5B111A]/5 disabled:border-gray-300 disabled:cursor-not-allowed text-[#5B111A] font-ui font-semibold text-xs sm:text-sm uppercase tracking-wider transition-all"
               >
                 BUY NOW
               </button>
             </div>
 
-            {/* Assurance Strip (PDF Page 4) */}
-            <div className="grid grid-cols-4 gap-2 pt-4 border-t border-gray-100 text-center">
+            {/* ========================================================
+                AVAILABLE OFFERS / COUPON PRESENTATION (Points 17 & 18)
+                ======================================================== */}
+            {coupons.length > 0 && (
+              <div className="bg-white p-4 rounded-xl border border-[#E8DFD0] shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    <Tag className="w-4 h-4 text-[#C59B27]" />
+                    <span>Available Offers</span>
+                  </div>
+                  {coupons.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllOffersModal(true)}
+                      className="text-xs text-[#5B111A] hover:underline font-semibold"
+                    >
+                      View all ({coupons.length})
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {coupons.slice(0, 2).map((c) => {
+                    const isCopied = copiedCoupon === c.code;
+                    return (
+                      <div
+                        key={c.id}
+                        className="p-2.5 rounded-lg border border-dashed border-[#E8DFD0] bg-[#FAF7F2] flex items-center justify-between gap-3"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-[#5B111A] bg-white px-2 py-0.5 rounded border border-[#E8DFD0]">
+                              {c.code}
+                            </span>
+                            <span className="text-[11px] font-semibold text-emerald-800">
+                              {c.type === 'PERCENT' ? `${Math.round(c.value)}% OFF` : `Flat ₹${Math.round(c.value)} OFF`}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 mt-0.5">
+                            Applicable on orders above {formatPrice(c.min_order_value)}
+                          </p>
+                        </div>
+
+                        {/* Copy Button with inline feedback (Point 18) */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCoupon(c.code)}
+                          className="shrink-0 px-2.5 py-1 rounded text-xs font-semibold bg-white border border-[#E8DFD0] text-[#5B111A] hover:bg-[#5B111A] hover:text-white transition-colors flex items-center gap-1"
+                        >
+                          {isCopied ? (
+                            <span className="text-emerald-700 flex items-center gap-1 font-bold">
+                              <Check className="w-3 h-3" />
+                              COPIED ✓
+                            </span>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>COPY</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Assurance Strip */}
+            <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-100 text-center">
               <div className="flex flex-col items-center space-y-1">
                 <Truck className="w-4 h-4 text-[#C59B27]" />
                 <span className="text-[10px] text-gray-700 font-medium">Free Shipping above ₹{settings.freeShippingThreshold}</span>
@@ -463,7 +673,7 @@ export const ProductPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Tabs: Description | Fabric & Care | Shipping | Exchange (PDF Page 4) */}
+            {/* Tabs: Description | Fabric & Care | Shipping | Exchange */}
             <div className="pt-4 border-t border-gray-100">
               <div className="flex border-b border-gray-200 text-xs font-semibold">
                 {[
@@ -490,12 +700,11 @@ export const ProductPage: React.FC = () => {
               <div className="pt-3 text-xs text-gray-600 leading-relaxed">
                 {activeTab === 'desc' && (
                   <div className="space-y-2">
-                    <p>{product.description || 'This elegant kurti set is crafted for festive occasions and special gatherings. The intricate embroidery and premium fabric make it a timeless addition to your wardrobe.'}</p>
+                    <p>{product.description || 'This elegant ensemble is crafted for festive occasions and intimate celebrations with pure artisan precision.'}</p>
                     <ul className="list-disc pl-4 space-y-1 pt-1 text-gray-700">
-                      <li>Premium quality fabric</li>
-                      <li>Intricate embroidery work</li>
-                      <li>Comfortable and breathable</li>
-                      <li>Perfect for festive and casual occasions</li>
+                      <li>Intricate craftsmanship & hand-finished hems</li>
+                      <li>Comfortable, breathable, and flattering drape</li>
+                      <li>Includes matching bottom coordinate & dupatta</li>
                     </ul>
                   </div>
                 )}
@@ -508,16 +717,16 @@ export const ProductPage: React.FC = () => {
                 )}
                 {activeTab === 'shipping' && (
                   <div className="space-y-1.5">
-                    <p>• Dispatches within 24 hours from our boutique.</p>
-                    <p>• Standard Delivery: 5–7 business days across India.</p>
-                    <p>• Free shipping on orders above ₹{settings.freeShippingThreshold}.</p>
+                    <p>&bull; Dispatches within 24 hours from our boutique.</p>
+                    <p>&bull; Standard Delivery: 5–7 business days across India.</p>
+                    <p>&bull; Free shipping on orders above ₹{settings.freeShippingThreshold}.</p>
                   </div>
                 )}
                 {activeTab === 'exchange' && (
                   <div className="space-y-1.5">
-                    <p>• 7-day doorstep size exchange policy.</p>
-                    <p>• Garment must be unused with tags and original packaging intact.</p>
-                    <p>• Contact us on WhatsApp for instant doorstep pickup arrangement.</p>
+                    <p>&bull; 7-day doorstep size exchange policy.</p>
+                    <p>&bull; Garment must be unused with tags and original packaging intact.</p>
+                    <p>&bull; Contact concierge on WhatsApp for instant doorstep pickup.</p>
                   </div>
                 )}
               </div>
@@ -526,43 +735,38 @@ export const ProductPage: React.FC = () => {
         </div>
 
         {/* ========================================================
-            3. SUPPORTING EDITORIAL LOOKBOOK STRIP (PDF Page 4)
+            3. RECENTLY VIEWED PRODUCTS (Point 25: Real products customer opened)
             ======================================================== */}
-        <section className="mt-16 sm:mt-24 pt-12 border-t border-[#E8DFD0]">
-          <div className="text-center mb-8">
-            <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#C59B27]">
-              Lookbook
-            </span>
-            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A] mt-1">
-              The Editorial Edit
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="aspect-[3/4] rounded-xl overflow-hidden bg-gray-200">
-              <img src="/images/products/maroon_worn.jpg" alt="Lookbook 1" className="w-full h-full object-cover" />
+        {recentlyViewedProducts.length > 0 && (
+          <section className="mt-16 sm:mt-20 pt-12 border-t border-[#E8DFD0]">
+            <div className="flex items-center justify-between mb-8 pb-3 border-b border-gray-100">
+              <div>
+                <span className="text-[11px] uppercase tracking-wider text-[#C59B27] font-bold block">
+                  Your Browsing History
+                </span>
+                <h2 className="font-serif text-2xl font-bold text-[#5B111A]">Recently Viewed</h2>
+              </div>
+              <Link to="/shop" className="text-xs font-semibold text-[#5B111A] hover:underline">
+                Explore More &rarr;
+              </Link>
             </div>
-            <div className="aspect-[3/4] rounded-xl overflow-hidden bg-gray-200">
-              <img src="/images/products/chandni_ivory_worn.jpg" alt="Lookbook 2" className="w-full h-full object-cover" />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              {recentlyViewedProducts.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
             </div>
-            <div className="aspect-[3/4] rounded-xl overflow-hidden bg-gray-200">
-              <img src="/images/styling_moment_1.jpg" alt="Lookbook 3" className="w-full h-full object-cover" />
-            </div>
-            <div className="aspect-[3/4] rounded-xl overflow-hidden bg-gray-200">
-              <img src="/images/styling_moment_2.jpg" alt="Lookbook 4" className="w-full h-full object-cover" />
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* ========================================================
             4. YOU MAY ALSO LIKE (Recommendation Rail)
             ======================================================== */}
         {relatedProducts.length > 0 && (
-          <section className="mt-16 sm:mt-20 pt-12 border-t border-[#E8DFD0]">
+          <section className="mt-12 sm:mt-16 pt-10 border-t border-[#E8DFD0]">
             <div className="flex items-center justify-between mb-8 pb-3 border-b border-gray-100">
               <h2 className="font-serif text-2xl font-bold text-[#5B111A]">You May Also Like</h2>
               <Link to="/shop" className="text-xs font-semibold text-[#5B111A] hover:underline">
-                View All →
+                View All &rarr;
               </Link>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -579,7 +783,7 @@ export const ProductPage: React.FC = () => {
           ======================================================== */}
       {showSizeChart && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl relative">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
             <button
               type="button"
               onClick={() => setShowSizeChart(false)}
@@ -639,7 +843,60 @@ export const ProductPage: React.FC = () => {
       )}
 
       {/* ========================================================
-          6. MOBILE STICKY ADD TO CART BAR (PDF Page 4)
+          6. ALL OFFERS MODAL (Point 17)
+          ======================================================== */}
+      {showAllOffersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowAllOffersModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-gray-700"
+              aria-label="Close Offers"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2">
+              <Tag className="w-5 h-5 text-[#C59B27]" />
+              <h3 className="font-serif text-xl font-bold text-[#5B111A]">All Available Offers</h3>
+            </div>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {coupons.map((c) => {
+                const isCopied = copiedCoupon === c.code;
+                return (
+                  <div
+                    key={c.id}
+                    className="p-3 rounded-xl border border-[#E8DFD0] bg-[#FAF7F2] flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <span className="font-mono text-xs font-bold text-[#5B111A] bg-white px-2 py-0.5 rounded border border-[#E8DFD0]">
+                        {c.code}
+                      </span>
+                      <p className="text-xs font-semibold text-gray-900 mt-1">
+                        {c.type === 'PERCENT' ? `${Math.round(c.value)}% Discount` : `Flat ₹${Math.round(c.value)} Discount`}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        Min. order value: {formatPrice(c.min_order_value)}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCoupon(c.code)}
+                      className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-[#E8DFD0] text-[#5B111A] hover:bg-[#5B111A] hover:text-white transition-colors"
+                    >
+                      {isCopied ? 'COPIED ✓' : 'COPY'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          7. MOBILE STICKY ADD TO CART BAR (Point 1)
           ======================================================== */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E8DFD0] p-3 shadow-lg flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -650,26 +907,25 @@ export const ProductPage: React.FC = () => {
             </span>
             {selectedVariant && (
               <span className="text-[11px] text-gray-500 font-medium">
-                • Size {selectedVariant.size}
+                &bull; Size {selectedVariant.size}
               </span>
             )}
           </div>
         </div>
         <button
           type="button"
-          disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0}
+          disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0 || btnState === 'adding'}
           onClick={handleAddToCart}
-          className="shrink-0 px-4 py-2.5 rounded bg-[#5B111A] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-ui font-semibold text-xs uppercase tracking-wider shadow flex items-center gap-1.5"
+          className="shrink-0 px-4 py-2.5 rounded-lg bg-[#5B111A] hover:bg-[#460C13] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-ui font-semibold text-xs uppercase tracking-wider shadow flex items-center gap-1.5"
         >
-          {addedToast ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-[#EAD186]" />
-              <span>Added</span>
-            </>
+          {btnState === 'adding' ? (
+            <span>Adding...</span>
+          ) : btnState === 'added' ? (
+            <span className="text-amber-200">Added ✓</span>
           ) : (
             <>
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>{isSoldOut ? 'Sold Out' : 'Add to Cart'}</span>
+              <span>{isSoldOut ? 'Sold Out' : 'Add to Bag'}</span>
             </>
           )}
         </button>

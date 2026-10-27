@@ -1,13 +1,20 @@
+from typing import List
 from decimal import Decimal
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Coupon
-from app.schemas import CouponValidateRequest, CouponValidateResponse
+from app.schemas import CouponValidateRequest, CouponValidateResponse, CouponPublicResponse
 from app.services.order_service import calculate_coupon_discount
 
 router = APIRouter(prefix="/coupons", tags=["coupons"])
+
+
+@router.get("", response_model=List[CouponPublicResponse])
+def list_active_coupons(db: Session = Depends(get_db)):
+    """List currently active promotional coupons for Available Offers."""
+    return db.query(Coupon).filter(Coupon.is_active == True).order_by(Coupon.id.asc()).all()
 
 
 @router.post("/validate", response_model=CouponValidateResponse)

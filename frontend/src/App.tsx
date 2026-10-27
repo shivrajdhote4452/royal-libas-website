@@ -16,6 +16,9 @@ import { Contact } from './pages/Contact';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { TermsOfService } from './pages/TermsOfService';
 import { CartProvider } from './context/CartContext';
+import { WishlistProvider } from './context/WishlistContext';
+import { QuickAddProvider } from './context/QuickAddContext';
+import { QuickAddModal } from './components/QuickAddModal';
 
 // Admin imports
 import { AdminLogin } from './pages/admin/AdminLogin';
@@ -37,6 +40,7 @@ const StorefrontLayout: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-[#FAF7F2] text-gray-900 selection:bg-[#C59B27] selection:text-white">
       <Header />
       <CartDrawer />
+      <QuickAddModal />
       <main className="flex-1">
         <Outlet />
       </main>
@@ -48,8 +52,10 @@ const StorefrontLayout: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <CartProvider>
-      <BrowserRouter>
-        <Routes>
+      <WishlistProvider>
+        <QuickAddProvider>
+          <BrowserRouter>
+            <Routes>
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminLayout />}>
@@ -88,6 +94,8 @@ export const App: React.FC = () => {
           </Route>
         </Routes>
       </BrowserRouter>
+        </QuickAddProvider>
+      </WishlistProvider>
     </CartProvider>
   );
 };

@@ -48,6 +48,26 @@ export const Home: React.FC = () => {
     };
   }, []);
 
+  // Editorial Scroll Reveal Observer (Point 22)
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-revealed');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.15 }
+    );
+
+    const elements = document.querySelectorAll('.reveal-on-scroll');
+    elements.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [loading]);
+
   const newArrivals = products.slice(0, 4);
 
   return (
@@ -146,7 +166,7 @@ export const Home: React.FC = () => {
       {/* ========================================================
           3. SHOP BY CATEGORY (PDF Page 2 Arched Cards)
           ======================================================== */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full reveal-on-scroll">
         <div className="text-center mb-10">
           <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
             Shop by Category
@@ -204,7 +224,7 @@ export const Home: React.FC = () => {
           4. THE FESTIVE EDIT BANNER (PDF Page 2)
           Split Editorial Composition
           ======================================================== */}
-      <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16 px-4 sm:px-6 lg:px-8 reveal-on-scroll">
         <div className="max-w-7xl mx-auto">
           <div className="bg-[#FAF7F2] rounded-2xl border border-[#E8DFD0] overflow-hidden shadow-sm grid grid-cols-1 lg:grid-cols-12 items-center">
             {/* Left: Dual Photography Grid */}
@@ -254,7 +274,7 @@ export const Home: React.FC = () => {
           5. NEW ARRIVALS (PDF Page 2)
           ======================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 w-full">
-        <div className="flex items-end justify-between mb-8 pb-3 border-b border-[#E8DFD0]">
+        <div className="flex items-end justify-between mb-8 pb-3 border-b border-[#E8DFD0] reveal-on-scroll">
           <div>
             <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#5B111A]">
               New Arrivals
@@ -291,7 +311,7 @@ export const Home: React.FC = () => {
           6. SHOP THE REEL (PDF Page 2)
           4 Instagram-style vertical video cards
           ======================================================== */}
-      <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-white border-y border-[#E8DFD0] py-12 sm:py-16 px-4 sm:px-6 lg:px-8 reveal-on-scroll">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-end justify-between mb-8 pb-3 border-b border-gray-100">
             <div>
@@ -403,7 +423,7 @@ export const Home: React.FC = () => {
           8. FOUNDER QUOTE SECTION (PDF Page 2)
           Split Tanya Portrait & Deep Maroon Card
           ======================================================== */}
-      <section className="bg-white border-t border-[#E8DFD0] py-14 sm:py-20 px-4 sm:px-6 lg:px-8">
+      <section className="bg-white border-t border-[#E8DFD0] py-14 sm:py-20 px-4 sm:px-6 lg:px-8 reveal-on-scroll">
         <div className="max-w-5xl mx-auto rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-md grid grid-cols-1 md:grid-cols-12 bg-[#FAF7F2]">
           {/* Left: Tanya Portrait */}
           <div className="md:col-span-5 aspect-[4/5] sm:aspect-auto">

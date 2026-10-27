@@ -444,6 +444,17 @@ class CouponValidateResponse(BaseModel):
     message: str
 
 
+class CouponPublicResponse(BaseModel):
+    id: int
+    code: str
+    type: str  # FLAT or PERCENT
+    value: Decimal
+    min_order_value: Decimal
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ==========================================
 # Phase 5: Tracking & Admin Management Schemas
 # ==========================================
