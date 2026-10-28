@@ -6,6 +6,7 @@ export interface CartItem {
   slug: string;
   name: string;
   size: string;
+  colour?: string | null;
   sellingPrice: number;
   image: string | null;
   quantity: number;
@@ -22,6 +23,7 @@ interface CartContextType {
   addToCart: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
   updateQuantity: (variantId: number, quantity: number) => void;
   removeFromCart: (variantId: number) => void;
+  removePurchasedItems: (purchased: { variantId: number; quantity: number }[]) => void;
   clearCart: () => void;
 }
 
@@ -36,6 +38,7 @@ const CartContext = createContext<CartContextType>({
   addToCart: () => {},
   updateQuantity: () => {},
   removeFromCart: () => {},
+  removePurchasedItems: () => {},
   clearCart: () => {},
 });
 
@@ -95,6 +98,30 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setItems((prevItems) => prevItems.filter((i) => i.variantId !== variantId));
   };
 
+  const removePurchasedItems = (purchased: { variantId: number; quantity: number }[]) => {
+    if (!purchased || purchased.length === 0) return;
+    setItems((prevItems) => {
+      const remaining: CartItem[] = [];
+      const purchasedMap = new Map<number, number>();
+      purchased.forEach((p) => {
+        purchasedMap.set(p.variantId, (purchasedMap.get(p.variantId) || 0) + p.quantity);
+      });
+
+      for (const item of prevItems) {
+        const boughtQty = purchasedMap.get(item.variantId) || 0;
+        if (boughtQty === 0) {
+          remaining.push(item);
+        } else if (item.quantity > boughtQty) {
+          remaining.push({ ...item, quantity: item.quantity - boughtQty });
+          purchasedMap.set(item.variantId, 0);
+        } else {
+          purchasedMap.set(item.variantId, boughtQty - item.quantity);
+        }
+      }
+      return remaining;
+    });
+  };
+
   const clearCart = () => {
     setItems([]);
   };
@@ -112,6 +139,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         addToCart,
         updateQuantity,
         removeFromCart,
+        removePurchasedItems,
         clearCart,
       }}
     >
@@ -121,3 +149,4 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export const useCart = () => useContext(CartContext);
+

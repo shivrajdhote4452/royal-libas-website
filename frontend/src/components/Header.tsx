@@ -68,7 +68,7 @@ export const Header: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div
             className={`flex items-center justify-between transition-all duration-250 ease-out ${
-              isScrolled ? 'h-16' : 'h-20'
+              isScrolled ? 'h-14 sm:h-16' : 'h-16 sm:h-20'
             }`}
           >
             {/* Mobile Hamburger Button */}

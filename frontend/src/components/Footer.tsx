@@ -1,17 +1,34 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Mail, ArrowRight, Check } from 'lucide-react';
+import { Instagram, Mail, ArrowRight, Check, Loader2 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { subscribeNewsletter } from '../lib/api';
+import { useStoreSettings } from '../lib/settings';
 
 export const Footer: React.FC = () => {
+  const { settings } = useStoreSettings();
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.trim() && email.includes('@')) {
+    setErrorMsg(null);
+    if (!email.trim() || !email.includes('@')) {
+      setErrorMsg('Please enter a valid email address.');
+      return;
+    }
+
+    try {
+      setIsSubscribing(true);
+      await subscribeNewsletter(email.trim());
       setSubscribed(true);
       setEmail('');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Unable to subscribe right now. Please try again.');
+    } finally {
+      setIsSubscribing(false);
     }
   };
 
@@ -25,11 +42,11 @@ export const Footer: React.FC = () => {
               <BrandLogo variant="maroon-bg" layout="horizontal" emblemSize={44} />
             </Link>
             <p className="text-xs text-[#FCF8F0]/80 leading-relaxed max-w-sm">
-              Rooted in timeless Indian heritage and handcrafted luxury. Meticulously tailored festive silhouettes, sarees, and everyday co-ords crafted for the modern woman.
+              Rooted in timeless Indian heritage and handcrafted luxury. Meticulously tailored festive silhouettes, kurti sets, and everyday co-ords crafted for the modern woman.
             </p>
             <div className="flex items-center space-x-3 pt-1">
               <a
-                href="https://instagram.com"
+                href={`https://instagram.com/${(settings.instagramHandle || '@royal_libas_by_tanya').replace('@', '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-9 h-9 rounded-full bg-white/10 text-[#FCF8F0] flex items-center justify-center hover:bg-[#B58A3C] hover:text-[#3A080F] transition-all"
@@ -59,23 +76,23 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/shop?category=Sarees" className="hover:text-[#B58A3C] transition-colors">
-                  Sarees
-                </Link>
-              </li>
-              <li>
-                <Link to="/shop?category=Lehengas" className="hover:text-[#B58A3C] transition-colors">
-                  Lehengas
-                </Link>
-              </li>
-              <li>
-                <Link to="/shop?category=Anarkalis" className="hover:text-[#B58A3C] transition-colors">
-                  Anarkalis
-                </Link>
-              </li>
-              <li>
                 <Link to="/shop?category=Kurti+Sets" className="hover:text-[#B58A3C] transition-colors">
-                  Suits & Sets
+                  Kurti Sets
+                </Link>
+              </li>
+              <li>
+                <Link to="/shop?category=Festive+Sets" className="hover:text-[#B58A3C] transition-colors">
+                  Festive Sets
+                </Link>
+              </li>
+              <li>
+                <Link to="/shop?category=Co-ord+Sets" className="hover:text-[#B58A3C] transition-colors">
+                  Co-ord Sets
+                </Link>
+              </li>
+              <li>
+                <Link to="/shop?collection=festive-edit" className="hover:text-[#B58A3C] transition-colors">
+                  Festive Edit
                 </Link>
               </li>
               <li>
@@ -139,23 +156,34 @@ export const Footer: React.FC = () => {
                 <span>Thank you for joining the Royal Libas circle.</span>
               </div>
             ) : (
-              <form onSubmit={handleSubscribe} className="relative flex items-center">
-                <input
-                  type="email"
-                  required
-                  placeholder="Your email address"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white/10 border border-[#B58A3C]/40 text-[#FCF8F0] placeholder-[#FCF8F0]/50 text-xs px-3.5 py-3 rounded-none focus:outline-none focus:border-[#B58A3C]"
-                />
-                <button
-                  type="submit"
-                  aria-label="Subscribe to newsletter"
-                  className="absolute right-0 top-0 bottom-0 px-4 bg-[#B58A3C] hover:bg-[#8C6726] text-[#3A080F] hover:text-white flex items-center justify-center transition-colors"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
+              <div className="space-y-2">
+                <form onSubmit={handleSubscribe} className="relative flex items-center">
+                  <input
+                    type="email"
+                    required
+                    disabled={isSubscribing}
+                    placeholder="Your email address"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-white/10 border border-[#B58A3C]/40 text-[#FCF8F0] placeholder-[#FCF8F0]/50 text-xs px-3.5 py-3 rounded-none focus:outline-none focus:border-[#B58A3C] disabled:opacity-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSubscribing}
+                    aria-label="Subscribe to newsletter"
+                    className="absolute right-0 top-0 bottom-0 px-4 bg-[#B58A3C] hover:bg-[#8C6726] disabled:bg-gray-500 text-[#3A080F] hover:text-white flex items-center justify-center transition-colors"
+                  >
+                    {isSubscribing ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    ) : (
+                      <ArrowRight className="w-4 h-4" />
+                    )}
+                  </button>
+                </form>
+                {errorMsg && (
+                  <p className="text-[11px] text-red-300 font-medium">{errorMsg}</p>
+                )}
+              </div>
             )}
             <p className="text-[10.5px] text-[#FCF8F0]/60">
               By subscribing you agree with our Privacy Policy.

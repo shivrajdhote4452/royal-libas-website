@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from app.models import Product, ProductVariant, Order, OrderItem, Address, Coupon
+from app.models import Product, ProductVariant, Order, OrderItem, Address, Coupon, StoreSetting
 from app.schemas import OrderCreateRequest, CartItemValidateRequest, CartValidateResponse, CartValidatedItem
 
 
@@ -211,18 +211,34 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
             )
             order_items_to_create.append(order_item)
 
-        # Shipping charge rule:
-        # Standard Delivery (5-7 days) = Free (or 99 for COD < 1500 per existing tests)
-        # Express Delivery (2-3 days) = 99.00
+        # Shipping charge rule (Backend is single source of truth using StoreSetting):
         payment_method = payload.payment_method.upper()
         shipping_method = (payload.shipping_method or "STANDARD").upper().strip()
 
+        # Query dynamic store settings
+        store_setting = db.query(StoreSetting).first()
+        cod_threshold = (
+            Decimal(str(store_setting.standard_cod_free_threshold))
+            if store_setting
+            else Decimal("1500.00")
+        )
+        std_fee = (
+            Decimal(str(store_setting.standard_shipping_fee))
+            if store_setting
+            else Decimal("99.00")
+        )
+        express_fee = (
+            Decimal(str(store_setting.express_shipping_fee))
+            if store_setting
+            else Decimal("99.00")
+        )
+
         if shipping_method == "EXPRESS":
-            shipping_charge = Decimal("99.00")
+            shipping_charge = express_fee
         elif payment_method == "PREPAID":
             shipping_charge = Decimal("0.00")
         else:  # COD Standard
-            shipping_charge = Decimal("0.00") if subtotal >= Decimal("1500.00") else Decimal("99.00")
+            shipping_charge = Decimal("0.00") if subtotal >= cod_threshold else std_fee
 
         if payment_method == "PREPAID":
             initial_status = "PENDING"

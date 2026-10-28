@@ -222,7 +222,7 @@ export const Home: React.FC = () => {
             {
               title: 'CO-ORD SETS',
               subtitle: '4 Modern Silhouettes',
-              image: '/images/products/tarang_green_front.jpg',
+              image: '/images/products/nazm_emerald_front.jpg',
               href: '/shop?category=Co-ord+Sets',
             },
             {
@@ -235,7 +235,7 @@ export const Home: React.FC = () => {
             <Link
               key={idx}
               to={cat.href}
-              className="group relative aspect-[3/4] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none"
+              className="group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none"
             >
               <img
                 src={cat.image}
@@ -333,7 +333,7 @@ export const Home: React.FC = () => {
         {loading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="aspect-[3/4] skeleton-shimmer rounded-none" />
+              <div key={i} className="aspect-[4/5] skeleton-shimmer rounded-none" />
             ))}
           </div>
         ) : (
@@ -355,7 +355,7 @@ export const Home: React.FC = () => {
           {/* Left Column: Workshop Craftsmanship Photography */}
           <div className="lg:col-span-6 aspect-[4/3] sm:aspect-[16/11] overflow-hidden border border-[#B58A3C]/40 shadow-xl bg-neutral-900 group">
             <img
-              src="/images/products/riwayat_maroon_front.jpg"
+              src="/images/products/riwayat_plum_front.jpg"
               alt="Artisan Craftsmanship at Royal Libas Atelier"
               className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
               loading="lazy"

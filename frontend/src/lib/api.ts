@@ -430,3 +430,71 @@ export async function refreshFulfillmentTracking(
   return response.json();
 }
 
+export async function fetchStoreSettings(): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/settings`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch store settings');
+  }
+  return response.json();
+}
+
+export async function updateAdminStoreSettings(token: string, payload: any): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update store settings');
+  }
+  return response.json();
+}
+
+export async function submitContactInquiry(payload: { name: string; email: string; message: string }): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/contact`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to submit inquiry');
+  }
+  return response.json();
+}
+
+export async function subscribeNewsletter(email: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/newsletter`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to subscribe to newsletter');
+  }
+  return response.json();
+}
+
+export async function adminUploadProductImage(token: string, file: File): Promise<{ status: string; url: string; filename: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE_URL}/admin/products/upload-image`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to upload product image');
+  }
+  return response.json();
+}
+
+

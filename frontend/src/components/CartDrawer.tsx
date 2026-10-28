@@ -171,8 +171,11 @@ export const CartDrawer: React.FC = () => {
                         >
                           {item.name}
                         </Link>
-                        <div className="text-[11px] text-gray-500 mt-0.5">
-                          Size: <span className="font-bold text-gray-800">{item.size}</span>
+                        <div className="text-[11px] text-gray-500 mt-0.5 flex flex-wrap items-center gap-x-2">
+                          <span>Size: <strong className="font-bold text-gray-800">{item.size}</strong></span>
+                          {item.colour && (
+                            <span>&bull; Colour: <strong className="font-bold text-gray-800">{item.colour}</strong></span>
+                          )}
                         </div>
                         <div className="text-xs font-bold text-[#5B111A] mt-1 price-display">
                           {formatPrice(item.sellingPrice * item.quantity)}

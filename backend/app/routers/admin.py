@@ -1,7 +1,7 @@
 from datetime import datetime, date, time, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -12,7 +12,7 @@ from app.config import (
     SHIPROCKET_PICKUP_PINCODE,
 )
 from app.database import get_db
-from app.models import Admin, Order, Product, ProductVariant
+from app.models import Admin, Order, Product, ProductVariant, StoreSetting
 from app.schemas import (
     AdminLogin,
     AdminResponse,
@@ -28,6 +28,8 @@ from app.schemas import (
     FulfillmentServiceabilityResponse,
     FulfillmentCourierOption,
     FulfillmentShipRequest,
+    StoreSettingResponse,
+    StoreSettingUpdate,
 )
 from app.services import shiprocket
 from app.services.product_service import build_product_detail_response
@@ -618,3 +620,134 @@ def admin_list_products(
         .all()
     )
     return [build_product_detail_response(p) for p in products]
+
+
+# ==========================================
+# Store Settings Endpoints (Admin Controlled)
+# ==========================================
+
+@router.get("/settings", response_model=StoreSettingResponse)
+def admin_get_settings(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve persistent store settings for admin dashboard."""
+    setting = db.query(StoreSetting).first()
+    if not setting:
+        setting = StoreSetting()
+        db.add(setting)
+        db.commit()
+        db.refresh(setting)
+
+    return StoreSettingResponse(
+        standard_cod_free_threshold=float(setting.standard_cod_free_threshold),
+        free_shipping_threshold=float(setting.standard_cod_free_threshold),
+        standard_shipping_fee=float(setting.standard_shipping_fee),
+        express_shipping_fee=float(setting.express_shipping_fee),
+        announcement_text=setting.announcement_text,
+        whatsapp_number=setting.whatsapp_number,
+        support_email=setting.support_email,
+        instagram_handle=setting.instagram_handle,
+    )
+
+
+@router.put("/settings", response_model=StoreSettingResponse)
+def admin_update_settings(
+    payload: StoreSettingUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Update persistent store settings on the server so changes apply to all customers."""
+    setting = db.query(StoreSetting).first()
+    if not setting:
+        setting = StoreSetting()
+        db.add(setting)
+
+    thresh = payload.standard_cod_free_threshold if payload.standard_cod_free_threshold is not None else payload.free_shipping_threshold
+    if thresh is not None:
+        setting.standard_cod_free_threshold = Decimal(str(thresh))
+    if payload.standard_shipping_fee is not None:
+        setting.standard_shipping_fee = Decimal(str(payload.standard_shipping_fee))
+    if payload.express_shipping_fee is not None:
+        setting.express_shipping_fee = Decimal(str(payload.express_shipping_fee))
+    if payload.announcement_text is not None:
+        setting.announcement_text = payload.announcement_text.strip()
+    if payload.whatsapp_number is not None:
+        setting.whatsapp_number = payload.whatsapp_number.strip()
+    if payload.support_email is not None:
+        setting.support_email = payload.support_email.strip()
+    if payload.instagram_handle is not None:
+        setting.instagram_handle = payload.instagram_handle.strip()
+
+    db.commit()
+    db.refresh(setting)
+
+    return StoreSettingResponse(
+        standard_cod_free_threshold=float(setting.standard_cod_free_threshold),
+        free_shipping_threshold=float(setting.standard_cod_free_threshold),
+        standard_shipping_fee=float(setting.standard_shipping_fee),
+        express_shipping_fee=float(setting.express_shipping_fee),
+        announcement_text=setting.announcement_text,
+        whatsapp_number=setting.whatsapp_number,
+        support_email=setting.support_email,
+        instagram_handle=setting.instagram_handle,
+    )
+
+
+# ==========================================
+# Product Image Upload (Persistent Disk Storage)
+# ==========================================
+
+@router.post("/products/upload-image")
+async def admin_upload_product_image(
+    file: UploadFile = File(...),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Safely upload a product image to persistent storage, returning a clean static URL.
+    
+    Prevents large Base64 data strings from being saved to the database.
+    """
+    import os
+    import secrets
+    from pathlib import Path
+
+    allowed_types = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+    }
+    content_type = file.content_type or ""
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image format. Allowed formats: JPEG, PNG, WebP.",
+        )
+
+    # Max file size 10MB
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size exceeds maximum limit of 10MB.",
+        )
+
+    ext = allowed_types[content_type]
+    random_token = secrets.token_hex(8)
+    filename = f"prod_{int(datetime.now().timestamp())}_{random_token}{ext}"
+
+    # Target upload directory in backend/uploads/products
+    base_uploads = Path(__file__).resolve().parent.parent.parent / "uploads" / "products"
+    base_uploads.mkdir(parents=True, exist_ok=True)
+    destination = base_uploads / filename
+
+    with open(destination, "wb") as f:
+        f.write(contents)
+
+    # Return relative static URL
+    return {
+        "status": "success",
+        "url": f"/uploads/products/{filename}",
+        "filename": filename,
+    }
+

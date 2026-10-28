@@ -1,17 +1,28 @@
+from pathlib import Path
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from app.config import FRONTEND_URL
-from app.database import get_db
+from app.database import get_db, engine, Base
 from app.models import Order
-from app.routers import admin, products, collections, cart, orders, payments, coupons
+from app.routers import admin, products, collections, cart, orders, payments, coupons, store_info
 from app.services import shiprocket
+
+# Create any missing database tables safely
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Royal Libas by Tanya API",
     description="Backend API for Royal Libas custom shop (Launch & Honesty Hardened)",
     version="0.8.1",
 )
+
+# Mount uploads directory for persistent product images
+uploads_dir = Path(__file__).resolve().parent.parent / "uploads"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+(uploads_dir / "products").mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 # Secure CORS configuration: allow configured frontend domain and local dev servers
 allowed_origins = [
@@ -42,6 +53,7 @@ app.include_router(cart.router)
 app.include_router(orders.router)
 app.include_router(payments.router)
 app.include_router(coupons.router)
+app.include_router(store_info.router)
 
 
 # ==========================================

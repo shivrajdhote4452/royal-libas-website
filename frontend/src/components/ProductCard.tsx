@@ -55,8 +55,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       }}
     >
       <Link to={`/product/${product.slug}`} className="block">
-        {/* Image container with 3/4 aspect ratio */}
-        <div className="relative aspect-[3/4] w-full overflow-hidden bg-[#F6F1EA]">
+        {/* Image container with 4:5 aspect ratio (Handbook Section 04) */}
+        <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#F6F1EA]">
           {/* Primary Luxury Badge */}
           {primaryBadge && (
             <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">

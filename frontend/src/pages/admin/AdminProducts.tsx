@@ -19,6 +19,7 @@ import {
   adminUpdateProduct,
   adminAddVariant,
   adminUpdateVariant,
+  adminUploadProductImage,
   formatPrice,
 } from '../../lib/api';
 import { Product, ProductVariant } from '../../types/product';
@@ -53,6 +54,7 @@ export const AdminProducts: React.FC = () => {
   const [photosMap, setPhotosMap] = useState<Record<number, string[]>>({});
   const [photoUrlInput, setPhotoUrlInput] = useState<Record<number, string>>({});
   const [isSavingGallery, setIsSavingGallery] = useState<number | null>(null);
+  const [uploadingTarget, setUploadingTarget] = useState<'new' | number | null>(null);
 
   // Image State for New Product Modal
   const [newImages, setNewImages] = useState<string[]>([]);
@@ -88,43 +90,62 @@ export const AdminProducts: React.FC = () => {
     loadProducts();
   }, [token]);
 
-  // Image Handlers: Upload, Add URL, Reorder, Remove
-  const handleUploadFiles = (files: FileList | null, target: 'new' | number) => {
+  // Image Handlers: Upload via backend file storage, Add URL, Reorder, Remove
+  const handleUploadFiles = async (files: FileList | null, target: 'new' | number) => {
     if (!files || files.length === 0) return;
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        if (dataUrl) {
+    setActionError(null);
+    setUploadingTarget(target);
+    try {
+      for (const file of Array.from(files)) {
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) {
+          throw new Error(`File ${file.name} is not an allowed image type (JPEG, PNG, WebP).`);
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          throw new Error(`File ${file.name} exceeds the 10MB limit.`);
+        }
+        const uploaded = await adminUploadProductImage(token, file);
+        if (uploaded && uploaded.url) {
           if (target === 'new') {
-            setNewImages((prev) => [...prev, dataUrl]);
+            setNewImages((prev) => [...prev, uploaded.url]);
           } else {
             setPhotosMap((prev) => ({
               ...prev,
-              [target]: [...(prev[target] || []), dataUrl],
+              [target]: [...(prev[target] || []), uploaded.url],
             }));
           }
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to upload product image');
+    } finally {
+      setUploadingTarget(null);
+    }
   };
 
   const handleAddUrl = (target: 'new' | number) => {
+    setActionError(null);
     if (target === 'new') {
-      if (newImageUrlInput.trim()) {
-        setNewImages((prev) => [...prev, newImageUrlInput.trim()]);
-        setNewImageUrlInput('');
+      const url = newImageUrlInput.trim();
+      if (!url) return;
+      if (url.startsWith('data:image/')) {
+        setActionError('Base64 data strings cannot be stored in database. Please upload the image file directly.');
+        return;
       }
+      setNewImages((prev) => [...prev, url]);
+      setNewImageUrlInput('');
     } else {
       const url = (photoUrlInput[target] || '').trim();
-      if (url) {
-        setPhotosMap((prev) => ({
-          ...prev,
-          [target]: [...(prev[target] || []), url],
-        }));
-        setPhotoUrlInput((prev) => ({ ...prev, [target]: '' }));
+      if (!url) return;
+      if (url.startsWith('data:image/')) {
+        setActionError('Base64 data strings cannot be stored in database. Please upload the image file directly.');
+        return;
       }
+      setPhotosMap((prev) => ({
+        ...prev,
+        [target]: [...(prev[target] || []), url],
+      }));
+      setPhotoUrlInput((prev) => ({ ...prev, [target]: '' }));
     }
   };
 
@@ -163,6 +184,9 @@ export const AdminProducts: React.FC = () => {
     setActionError(null);
     try {
       const urls = photosMap[productId] || [];
+      if (urls.some((u) => u.startsWith('data:image/'))) {
+        throw new Error('Base64 data URLs cannot be saved. Please remove them and upload images directly.');
+      }
       const imagePayload = urls.map((url, idx) => ({
         url,
         sort_order: idx + 1,
@@ -650,7 +674,7 @@ export const AdminProducts: React.FC = () => {
                             key={idx}
                             className="relative group bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm flex flex-col"
                           >
-                            <div className="aspect-[3/4] bg-gray-100 overflow-hidden relative">
+                            <div className="aspect-[4/5] bg-gray-100 overflow-hidden relative">
                               <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
                               {idx === 0 && (
                                 <span className="absolute top-1.5 left-1.5 bg-[#5E1224] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
@@ -699,13 +723,20 @@ export const AdminProducts: React.FC = () => {
 
                       {/* Add Image Inputs */}
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
-                        <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8DFD0] hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-sm transition-colors">
-                          <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
-                          <span>Upload Photos</span>
+                        <label className={`cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8DFD0] hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-sm transition-colors ${
+                          uploadingTarget === product.id ? 'opacity-60 cursor-not-allowed' : ''
+                        }`}>
+                          {uploadingTarget === product.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5E1224]" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
+                          )}
+                          <span>{uploadingTarget === product.id ? 'Uploading...' : 'Upload Photos'}</span>
                           <input
                             type="file"
                             multiple
                             accept="image/*"
+                            disabled={uploadingTarget === product.id}
                             onChange={(e) => handleUploadFiles(e.target.files, product.id)}
                             className="hidden"
                           />
@@ -835,13 +866,20 @@ export const AdminProducts: React.FC = () => {
                   Product Photos ({newImages.length})
                 </label>
                 <div className="flex items-center gap-2">
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FCF8F0] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors">
-                    <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
-                    <span>Upload Photos</span>
+                  <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FCF8F0] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors ${
+                    uploadingTarget === 'new' ? 'opacity-60 cursor-not-allowed' : ''
+                  }`}>
+                    {uploadingTarget === 'new' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5E1224]" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
+                    )}
+                    <span>{uploadingTarget === 'new' ? 'Uploading...' : 'Upload Photos'}</span>
                     <input
                       type="file"
                       multiple
                       accept="image/*"
+                      disabled={uploadingTarget === 'new'}
                       onChange={(e) => handleUploadFiles(e.target.files, 'new')}
                       className="hidden"
                     />
@@ -869,7 +907,7 @@ export const AdminProducts: React.FC = () => {
                         key={idx}
                         className="relative bg-white rounded border border-gray-200 overflow-hidden flex flex-col"
                       >
-                        <div className="aspect-[3/4] bg-gray-100 relative">
+                        <div className="aspect-[4/5] bg-gray-100 relative">
                           <img src={url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
                           {idx === 0 && (
                             <span className="absolute top-1 left-1 bg-[#5E1224] text-white text-[8px] font-bold px-1 rounded">

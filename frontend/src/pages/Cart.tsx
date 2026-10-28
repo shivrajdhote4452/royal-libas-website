@@ -162,8 +162,14 @@ export const Cart: React.FC = () => {
                     >
                       {item.name}
                     </Link>
-                    <div className="text-xs text-gray-500 flex items-center gap-2">
+                    <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2">
                       <span>Size: <strong className="text-gray-800">{item.size}</strong></span>
+                      {item.colour && (
+                        <>
+                          <span className="text-gray-300">|</span>
+                          <span>Colour: <strong className="text-gray-800">{item.colour}</strong></span>
+                        </>
+                      )}
                       <span className="text-gray-300">|</span>
                       <span>Unit: {formatPrice(item.sellingPrice)}</span>
                     </div>

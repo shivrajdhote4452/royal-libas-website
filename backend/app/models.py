@@ -267,3 +267,50 @@ class Coupon(Base):
     min_order_value = Column(Numeric(10, 2), default=0.00, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class StoreSetting(Base):
+    """Persistent store settings for shipping thresholds, fees, and brand contacts."""
+    __tablename__ = "store_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    standard_cod_free_threshold = Column(Numeric(10, 2), default=1500.00, nullable=False)
+    standard_shipping_fee = Column(Numeric(10, 2), default=99.00, nullable=False)
+    express_shipping_fee = Column(Numeric(10, 2), default=99.00, nullable=False)
+    announcement_text = Column(
+        String(500),
+        default="COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | FREE COD ABOVE ₹1,500",
+        nullable=False,
+    )
+    whatsapp_number = Column(String(50), default="+91 98112 23344", nullable=False)
+    support_email = Column(String(255), default="care@royallibas.com", nullable=False)
+    instagram_handle = Column(String(100), default="@royal_libas_by_tanya", nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class ContactInquiry(Base):
+    """Customer concierge and styling inquiries."""
+    __tablename__ = "contact_inquiries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    status = Column(String(50), default="NEW", nullable=False)  # NEW, RESPONDED, ARCHIVED
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class NewsletterSubscriber(Base):
+    """Newsletter email subscribers."""
+    __tablename__ = "newsletter_subscribers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+

@@ -615,3 +615,84 @@ class AdminCustomerResponse(BaseModel):
     total_spent: Decimal
     last_order_date: datetime
 
+
+# ==========================================
+# Store Settings, Contact & Newsletter Schemas
+# ==========================================
+
+class StoreSettingResponse(BaseModel):
+    standard_cod_free_threshold: float
+    free_shipping_threshold: Optional[float] = None
+    standard_shipping_fee: float
+    express_shipping_fee: float
+    announcement_text: str
+    whatsapp_number: str
+    support_email: str
+    instagram_handle: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StoreSettingUpdate(BaseModel):
+    standard_cod_free_threshold: Optional[float] = None
+    free_shipping_threshold: Optional[float] = None
+    standard_shipping_fee: Optional[float] = None
+    express_shipping_fee: Optional[float] = None
+    announcement_text: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    support_email: Optional[str] = None
+    instagram_handle: Optional[str] = None
+
+
+class ContactInquiryCreate(BaseModel):
+    name: str
+    email: str
+    message: str
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 2:
+            raise ValueError("Please provide your full name (at least 2 characters)")
+        return clean
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        clean = (v or "").strip().lower()
+        if "@" not in clean or "." not in clean:
+            raise ValueError("Please provide a valid email address")
+        return clean
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 5:
+            raise ValueError("Please provide a message with at least 5 characters")
+        return clean
+
+
+class ContactInquiryResponse(BaseModel):
+    status: str
+    message: str
+
+
+class NewsletterSubscribeCreate(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        clean = (v or "").strip().lower()
+        if "@" not in clean or "." not in clean:
+            raise ValueError("Please enter a valid email address")
+        return clean
+
+
+class NewsletterSubscribeResponse(BaseModel):
+    status: str
+    message: str
+
+

@@ -131,7 +131,7 @@ export const ProductPage: React.FC = () => {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-7 aspect-[3/4] skeleton-shimmer rounded-2xl border border-[#E8DFD0]" />
+          <div className="lg:col-span-7 aspect-[4/5] skeleton-shimmer rounded-2xl border border-[#E8DFD0]" />
           <div className="lg:col-span-5 space-y-4">
             <div className="h-8 skeleton-shimmer rounded w-3/4" />
             <div className="h-6 skeleton-shimmer rounded w-1/3" />
@@ -191,9 +191,80 @@ export const ProductPage: React.FC = () => {
     }
   }
 
-  // Handle Add to Cart (Point 5)
+  // Variant availability checks
+  const variantsForSelectedColor = selectedColor
+    ? product.variants.filter((v) => v.colour === selectedColor)
+    : product.variants;
+  const isColorSoldOut =
+    variantsForSelectedColor.length > 0 &&
+    variantsForSelectedColor.every((v) => v.stock <= 0);
+  const isVariantValidAndAvailable = Boolean(
+    selectedVariant &&
+    selectedVariant.stock > 0 &&
+    (!selectedColor || selectedVariant.colour === selectedColor)
+  );
+
+  // Handle customer color selection
+  const handleColorChange = (c: string) => {
+    setSelectedColor(c);
+    const variantsForColor = product.variants.filter((v) => v.colour === c);
+    // 1. Try to retain current size if available in the new color
+    const sameSizeMatch = variantsForColor.find(
+      (v) => v.size === selectedVariant?.size && v.stock > 0
+    );
+    if (sameSizeMatch) {
+      setSelectedVariant(sameSizeMatch);
+      setQuantity((q) => Math.min(q, sameSizeMatch.stock > 0 ? sameSizeMatch.stock : 1));
+      return;
+    }
+    // 2. Otherwise pick first available size in this color
+    const firstInStock = variantsForColor.find((v) => v.stock > 0);
+    if (firstInStock) {
+      setSelectedVariant(firstInStock);
+      setQuantity((q) => Math.min(q, firstInStock.stock > 0 ? firstInStock.stock : 1));
+    } else {
+      // 3. Completely sold out in this color: clear selected variant so previous color is never left active!
+      setSelectedVariant(null);
+    }
+  };
+
+  const handleSizeChange = (v: ProductVariant) => {
+    if (v.stock <= 0) return;
+    setSelectedVariant(v);
+    setQuantity((q) => Math.min(q, v.stock > 0 ? v.stock : 1));
+  };
+
+  // Touch swipe support for mobile product gallery
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+    setTouchEndX(null);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX || !touchEndX) return;
+    const distance = touchStartX - touchEndX;
+    const minSwipeDistance = 45;
+    if (distance > minSwipeDistance) {
+      // Swiped left -> next photo
+      setActiveImageIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0));
+    } else if (distance < -minSwipeDistance) {
+      // Swiped right -> prev photo
+      setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1));
+    }
+    setTouchStartX(null);
+    setTouchEndX(null);
+  };
+
+  // Handle Add to Cart (Point 5 & Directive 1)
   const handleAddToCart = () => {
-    if (!selectedVariant || selectedVariant.stock <= 0 || btnState !== 'idle') return;
+    if (!isVariantValidAndAvailable || !selectedVariant || btnState !== 'idle') return;
 
     setBtnState('adding');
     setTimeout(() => {
@@ -204,6 +275,7 @@ export const ProductPage: React.FC = () => {
           slug: product.slug,
           name: product.name,
           size: selectedVariant.size,
+          colour: selectedVariant.colour,
           sellingPrice: Number(selectedVariant.selling_price),
           image: activeImageUrl,
         },
@@ -219,7 +291,7 @@ export const ProductPage: React.FC = () => {
   };
 
   const handleBuyNow = () => {
-    if (!selectedVariant || selectedVariant.stock <= 0) return;
+    if (!isVariantValidAndAvailable || !selectedVariant) return;
     addToCart(
       {
         productId: product.id,
@@ -227,6 +299,7 @@ export const ProductPage: React.FC = () => {
         slug: product.slug,
         name: product.name,
         size: selectedVariant.size,
+        colour: selectedVariant.colour,
         sellingPrice: Number(selectedVariant.selling_price),
         image: activeImageUrl,
       },
@@ -245,7 +318,7 @@ export const ProductPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans">
+    <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans pb-28 sm:pb-12">
       {/* Breadcrumb Navigation */}
       <div className="border-b border-[#E8DFD0] bg-white/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
@@ -274,7 +347,12 @@ export const ProductPage: React.FC = () => {
               ======================================================== */}
           <div className="lg:col-span-7 space-y-4">
             {/* Main Stage Image */}
-            <div className="relative aspect-[3/4] w-full bg-[#F0E9DF] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm group">
+            <div
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              className="relative aspect-[4/5] w-full bg-[#F0E9DF] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm group touch-pan-y"
+            >
               {activeImageUrl ? (
                 <img
                   key={activeImageUrl}
@@ -366,7 +444,7 @@ export const ProductPage: React.FC = () => {
                     key={idx}
                     type="button"
                     onClick={() => setActiveImageIndex(idx)}
-                    className={`aspect-[3/4] rounded-none overflow-hidden border-2 transition-all duration-200 ${
+                    className={`aspect-[4/5] rounded-none overflow-hidden border-2 transition-all duration-200 ${
                       activeImageIndex === idx
                         ? 'border-[#5E1224] shadow-md ring-1 ring-[#5E1224]'
                         : 'border-[#E8DFD0] hover:border-[#B58A3C] opacity-80 hover:opacity-100'
@@ -466,11 +544,7 @@ export const ProductPage: React.FC = () => {
                       <button
                         key={c}
                         type="button"
-                        onClick={() => {
-                          setSelectedColor(c);
-                          const matching = product.variants.find((v) => v.colour === c && v.stock > 0);
-                          if (matching) setSelectedVariant(matching);
-                        }}
+                        onClick={() => handleColorChange(c)}
                         style={{ backgroundColor: COLOR_MAP[c] || '#8C6F5B' }}
                         className={`w-7 h-7 rounded-full border transition-all ${
                           selectedColor === c
@@ -484,6 +558,14 @@ export const ProductPage: React.FC = () => {
                 </div>
               );
             })()}
+
+            {/* Sold out in selected colour notice */}
+            {isColorSoldOut && (
+              <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Sold out in this colour &mdash; please choose another shade or explore alternative silhouettes.</span>
+              </div>
+            )}
 
             {/* Size Selector (PDF Page 5) */}
             <div className="space-y-2.5">
@@ -520,7 +602,7 @@ export const ProductPage: React.FC = () => {
                         key={v.id}
                         type="button"
                         disabled={soldOut}
-                        onClick={() => setSelectedVariant(v)}
+                        onClick={() => handleSizeChange(v)}
                         className={`h-11 rounded-none border text-center transition-all duration-200 ${
                           soldOut
                             ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
@@ -545,7 +627,7 @@ export const ProductPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    disabled={quantity <= 1}
+                    disabled={quantity <= 1 || !isVariantValidAndAvailable}
                     className="p-2 hover:bg-gray-100 text-gray-700 disabled:opacity-40 transition-colors"
                     title="Decrease"
                   >
@@ -555,7 +637,7 @@ export const ProductPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setQuantity((q) => q + 1)}
-                    disabled={Boolean(selectedVariant && quantity >= selectedVariant.stock)}
+                    disabled={Boolean(!isVariantValidAndAvailable || (selectedVariant && quantity >= selectedVariant.stock))}
                     className="p-2 hover:bg-gray-100 text-gray-700 disabled:opacity-40 transition-colors"
                     title="Increase"
                   >
@@ -566,10 +648,10 @@ export const ProductPage: React.FC = () => {
 
               {/* Real Inventory Status */}
               <div className="text-right">
-                {isSoldOut || (selectedVariant && selectedVariant.stock <= 0) ? (
+                {isSoldOut || isColorSoldOut || (selectedVariant && selectedVariant.stock <= 0) || !selectedVariant ? (
                   <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-bold">
                     <span className="w-2 h-2 rounded-full bg-red-600" />
-                    Sold Out
+                    {isColorSoldOut ? `Sold Out in ${selectedColor}` : 'Sold Out'}
                   </span>
                 ) : selectedVariant && selectedVariant.stock <= 5 ? (
                   <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-bold">
@@ -589,7 +671,7 @@ export const ProductPage: React.FC = () => {
             <div className="space-y-2.5 pt-2">
               <button
                 type="button"
-                disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0 || btnState === 'adding'}
+                disabled={isSoldOut || isColorSoldOut || !isVariantValidAndAvailable || btnState === 'adding'}
                 onClick={handleAddToCart}
                 className="w-full py-4 px-6 rounded-none bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-[#FCF8F0] font-ui font-semibold text-xs sm:text-sm uppercase tracking-[0.2em] shadow-md transition-all flex items-center justify-center gap-2"
               >
@@ -613,9 +695,9 @@ export const ProductPage: React.FC = () => {
 
               <button
                 type="button"
-                disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0}
+                disabled={isSoldOut || isColorSoldOut || !isVariantValidAndAvailable}
                 onClick={handleBuyNow}
-                className="w-full py-3.5 px-6 rounded-none bg-[#FCF8F0] border-2 border-[#5E1224] hover:bg-[#5E1224] hover:text-[#FCF8F0] disabled:border-gray-300 disabled:cursor-not-allowed text-[#5E1224] font-ui font-semibold text-xs sm:text-sm uppercase tracking-[0.2em] transition-all"
+                className="w-full py-3.5 px-6 rounded-none bg-[#FCF8F0] border-2 border-[#5E1224] hover:bg-[#5E1224] hover:text-[#FCF8F0] disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed text-[#5E1224] font-ui font-semibold text-xs sm:text-sm uppercase tracking-[0.2em] transition-all"
               >
                 BUY NOW
               </button>
@@ -932,39 +1014,52 @@ export const ProductPage: React.FC = () => {
       )}
 
       {/* ========================================================
-          7. MOBILE STICKY ADD TO CART BAR (Point 1 & PDF Page 13)
+          7. MOBILE STICKY ADD TO CART & BUY NOW BAR (Point 1 & PDF Page 13)
           ======================================================== */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FCF8F0]/95 backdrop-blur-md border-t border-[#E8DFD0] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-lg flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-gray-900 truncate">{product.name}</p>
-          <div className="flex items-center gap-1.5 no-motion">
-            <span className="price-display text-sm font-bold text-[#5E1224]">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FCF8F0]/98 backdrop-blur-md border-t border-[#E8DFD0] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-xl flex items-center justify-between gap-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold text-gray-900 truncate">{product.name}</p>
+          <div className="flex items-center gap-1.5">
+            <span className="price-display text-xs font-bold text-[#5E1224]">
               {formatPrice(displaySellingPrice)}
             </span>
-            {selectedVariant && (
-              <span className="text-[11px] text-gray-500 font-medium">
-                &bull; Size {selectedVariant.size}
+            {selectedVariant ? (
+              <span className="text-[10px] text-gray-500 font-medium truncate">
+                &bull; Size {selectedVariant.size} {selectedVariant.colour ? `(${selectedVariant.colour})` : ''}
               </span>
-            )}
+            ) : isColorSoldOut ? (
+              <span className="text-[10px] text-red-600 font-bold truncate">Sold out in {selectedColor}</span>
+            ) : null}
           </div>
         </div>
-        <button
-          type="button"
-          disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0 || btnState === 'adding'}
-          onClick={handleAddToCart}
-          className="shrink-0 px-4 py-2.5 rounded-none bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-[#FCF8F0] font-ui font-semibold text-xs uppercase tracking-wider shadow flex items-center gap-1.5"
-        >
-          {btnState === 'adding' ? (
-            <span>Adding...</span>
-          ) : btnState === 'added' ? (
-            <span className="text-[#B58A3C]">Added ✓</span>
-          ) : (
-            <>
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>{isSoldOut ? 'Sold Out' : 'Add to Bag'}</span>
-            </>
-          )}
-        </button>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={isSoldOut || isColorSoldOut || !isVariantValidAndAvailable || btnState === 'adding'}
+            onClick={handleAddToCart}
+            className="px-3 py-2.5 rounded-none bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-[#FCF8F0] font-ui font-semibold text-[11px] uppercase tracking-wider shadow flex items-center gap-1"
+          >
+            {btnState === 'adding' ? (
+              <span>...</span>
+            ) : btnState === 'added' ? (
+              <span className="text-[#B58A3C]">Added ✓</span>
+            ) : (
+              <>
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={isSoldOut || isColorSoldOut || !isVariantValidAndAvailable}
+            onClick={handleBuyNow}
+            className="px-3 py-2.5 rounded-none border border-[#5E1224] bg-[#FCF8F0] text-[#5E1224] hover:bg-[#5E1224] hover:text-[#FCF8F0] disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed font-ui font-semibold text-[11px] uppercase tracking-wider"
+          >
+            Buy Now
+          </button>
+        </div>
       </div>
     </div>
   );

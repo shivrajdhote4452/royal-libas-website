@@ -62,6 +62,7 @@ export const QuickAddModal: React.FC = () => {
           slug: activeProduct.slug,
           name: activeProduct.name,
           size: selectedVariant.size,
+          colour: selectedVariant.colour,
           sellingPrice: Number(selectedVariant.selling_price),
           image: imageUrl,
         },

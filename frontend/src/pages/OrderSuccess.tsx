@@ -20,7 +20,7 @@ export const OrderSuccess: React.FC = () => {
   const { orderCode } = useParams<{ orderCode: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { clearCart } = useCart();
+  const { removePurchasedItems } = useCart();
 
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [recommended, setRecommended] = useState<Product[]>([]);
@@ -32,6 +32,38 @@ export const OrderSuccess: React.FC = () => {
   const orderToken =
     searchParams.get('token') ||
     (orderCode ? sessionStorage.getItem(`rl_token_${orderCode}`) || '' : '');
+
+  // SAFE CART CLEARING:
+  // 1. Never clear on cancelled, failed, or pending payments
+  // 2. Clear only if order was placed in this session (matching session token)
+  // 3. Clear only once using session guard (never wipe a new cart on revisit or refresh)
+  // 4. Remove only the items & quantities purchased in this checkout
+  const tryClearPurchasedItems = (data: OrderResponse) => {
+    if (!orderCode) return;
+    const isCancelled = data.status === 'CANCELLED';
+    if (isCancelled) return;
+
+    const isPaid = data.payment_method === 'PREPAID' && data.payment_status === 'PAID';
+    const isCod = data.payment_method === 'COD';
+
+    if (!isPaid && !isCod) return;
+
+    try {
+      const alreadyCleared = sessionStorage.getItem(`rl_cleared_${orderCode}`);
+      const sessionToken = sessionStorage.getItem(`rl_token_${orderCode}`);
+      if (!alreadyCleared && sessionToken) {
+        if (data.items && data.items.length > 0) {
+          const purchasedList = data.items
+            .filter((it) => it.variant_id)
+            .map((it) => ({ variantId: it.variant_id!, quantity: it.quantity }));
+          removePurchasedItems(purchasedList);
+        }
+        sessionStorage.setItem(`rl_cleared_${orderCode}`, 'true');
+      }
+    } catch (e) {
+      console.error('Safe cart clearing error:', e);
+    }
+  };
 
   const loadOrder = async () => {
     if (!orderCode) {
@@ -46,12 +78,12 @@ export const OrderSuccess: React.FC = () => {
       const data = await fetchOrderByCode(orderCode, orderToken);
       setOrder(data);
 
-      // SAFE CART CLEARING: Only clear cart when order is actually accepted/confirmed
-      if (data.payment_status === 'PAID' || data.payment_method === 'COD') {
-        clearCart();
-      }
+      // Safe cart clearing only on verified success
+      tryClearPurchasedItems(data);
 
-      if (data.payment_method === 'PREPAID' && data.payment_status !== 'PAID') {
+      if (data.status === 'CANCELLED') {
+        document.title = `Order Cancelled: ${data.order_code} | Royal Libas`;
+      } else if (data.payment_method === 'PREPAID' && data.payment_status !== 'PAID') {
         document.title = `Payment Pending: ${data.order_code} | Royal Libas`;
       } else {
         document.title = `Order Confirmation: ${data.order_code} | Royal Libas`;
@@ -94,7 +126,7 @@ export const OrderSuccess: React.FC = () => {
         if (syncResult && syncResult.payment_status === 'PAID') {
           const updated = await fetchOrderByCode(order.order_code, orderToken);
           setOrder(updated);
-          clearCart();
+          tryClearPurchasedItems(updated);
           clearInterval(timer);
           return;
         }
@@ -117,9 +149,7 @@ export const OrderSuccess: React.FC = () => {
       setSyncMessage(syncResult.message);
       const updated = await fetchOrderByCode(orderCode, orderToken);
       setOrder(updated);
-      if (updated.payment_status === 'PAID') {
-        clearCart();
-      }
+      tryClearPurchasedItems(updated);
     } catch (err: any) {
       setSyncMessage(err.message || 'Unable to verify payment status with gateway. Please try again.');
     } finally {
@@ -167,10 +197,13 @@ export const OrderSuccess: React.FC = () => {
     );
   }
 
-  const isPrepaidPending = order.payment_method === 'PREPAID' && order.payment_status === 'PENDING';
-  const isPrepaidFailed = order.payment_method === 'PREPAID' && order.payment_status === 'FAILED';
+  // Mutually exclusive order states with strict priority (Cancelled > Prepaid Failed > Prepaid Pending > Prepaid Paid > COD Accepted)
   const isCancelled = order.status === 'CANCELLED';
-  const isConfirmed = order.payment_status === 'PAID' || order.payment_method === 'COD';
+  const isPrepaidFailed = !isCancelled && order.payment_method === 'PREPAID' && order.payment_status === 'FAILED';
+  const isPrepaidPending = !isCancelled && order.payment_method === 'PREPAID' && order.payment_status === 'PENDING';
+  const isPrepaidPaid = !isCancelled && order.payment_method === 'PREPAID' && order.payment_status === 'PAID';
+  const isCodAccepted = !isCancelled && order.payment_method === 'COD';
+  const isConfirmed = isPrepaidPaid || isCodAccepted;
 
   return (
     <div className="min-h-screen bg-[#FCF8F0] page-enter font-sans py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
@@ -290,8 +323,8 @@ export const OrderSuccess: React.FC = () => {
           </div>
         )}
 
-        {/* 4. STATE: CONFIRMED (PAID or COD) */}
-        {isConfirmed && !isCancelled && (
+        {/* 4. STATE: COD ACCEPTED (Never labeled paid) */}
+        {isCodAccepted && (
           <>
             <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#5E1224] to-[#7D1B32] border-4 border-[#B58A3C] flex items-center justify-center mx-auto shadow-xl relative">
               <div className="absolute inset-0 rounded-full border border-amber-200/40 animate-pulse" />
@@ -300,7 +333,7 @@ export const OrderSuccess: React.FC = () => {
 
             <div className="space-y-2">
               <h1 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-[#2B1B1E] uppercase">
-                ORDER CONFIRMED
+                CASH ON DELIVERY ACCEPTED
               </h1>
               <p className="text-xs sm:text-sm uppercase tracking-[0.22em] text-[#B58A3C] font-semibold">
                 THANK YOU FOR SHOPPING WITH ROYAL LIBAS
@@ -312,20 +345,53 @@ export const OrderSuccess: React.FC = () => {
                 ORDER #{order.order_code}
               </div>
               <div className="inline-block px-3 py-1.5 text-xs font-semibold tracking-wider uppercase border border-gray-200">
-                {order.payment_method === 'COD' ? (
-                  <span className="text-amber-900 bg-amber-50 px-2 py-0.5 font-bold">
-                    Cash on Delivery &bull; {formatPrice(order.total)} payable at delivery
-                  </span>
-                ) : (
-                  <span className="text-emerald-900 bg-emerald-50 px-2 py-0.5 font-bold">
-                    Payment Verified via Cashfree
-                  </span>
-                )}
+                <span className="text-amber-900 bg-amber-50 px-2 py-0.5 font-bold">
+                  Cash on Delivery &bull; {formatPrice(order.total)} payable upon delivery
+                </span>
               </div>
             </div>
 
             <p className="text-xs text-gray-600 max-w-md mx-auto leading-relaxed">
-              Your order has been recorded at our atelier. Every garment is hand-inspected, steam-pressed, and packed with care before dispatch.
+              Your order has been recorded at our atelier and queued for hand tailoring and dispatch. Please keep {formatPrice(order.total)} ready in cash or UPI for the courier partner.
+              {order.phone && (
+                <span className="block mt-1 text-[11px] text-gray-500">
+                  Dispatch notifications and live tracking will be shared with +91 {order.phone}.
+                </span>
+              )}
+            </p>
+          </>
+        )}
+
+        {/* 5. STATE: PREPAID PAID & VERIFIED */}
+        {isPrepaidPaid && (
+          <>
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#5E1224] to-[#7D1B32] border-4 border-[#B58A3C] flex items-center justify-center mx-auto shadow-xl relative">
+              <div className="absolute inset-0 rounded-full border border-amber-200/40 animate-pulse" />
+              <Check className="w-10 h-10 text-[#FCF8F0] stroke-[3] animate-draw-check" />
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-[#2B1B1E] uppercase">
+                PAYMENT VERIFIED & ORDER CONFIRMED
+              </h1>
+              <p className="text-xs sm:text-sm uppercase tracking-[0.22em] text-[#B58A3C] font-semibold">
+                THANK YOU FOR SHOPPING WITH ROYAL LIBAS
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+              <div className="inline-block px-4 py-1.5 bg-[#FCF8F0] border border-[#B58A3C]/40 text-xs font-mono font-bold tracking-wider text-[#5E1224]">
+                ORDER #{order.order_code}
+              </div>
+              <div className="inline-block px-3 py-1.5 text-xs font-semibold tracking-wider uppercase border border-gray-200">
+                <span className="text-emerald-900 bg-emerald-50 px-2 py-0.5 font-bold">
+                  Payment Verified via Cashfree
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600 max-w-md mx-auto leading-relaxed">
+              Your payment has been verified by the backend gateway. Every garment is hand-inspected, steam-pressed, and packed with care before dispatch.
               {order.phone && (
                 <span className="block mt-1 text-[11px] text-gray-500">
                   Dispatch notifications and live tracking will be shared with +91 {order.phone}.

@@ -304,7 +304,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
           ROYAL LIBAS
         </span>
         {showTagline && (
-          <div className="flex items-center justify-center gap-1.5 mt-0.5">
+          <div className="hidden sm:flex items-center justify-center gap-1.5 mt-0.5">
             <span className="w-3 sm:w-4 h-[1px]" style={{ backgroundColor: lineColor }} />
             <span
               className="text-[8px] sm:text-[8.5px] uppercase tracking-[0.3em] font-semibold"

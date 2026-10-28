@@ -26,7 +26,7 @@ import { useStoreSettings } from '../lib/settings';
 
 export const Checkout: React.FC = () => {
   const navigate = useNavigate();
-  const { items, subtotal, clearCart } = useCart();
+  const { items, subtotal, removePurchasedItems } = useCart();
   const { settings } = useStoreSettings();
 
   // Form state
@@ -75,12 +75,12 @@ export const Checkout: React.FC = () => {
   const discountAmount = appliedCoupon?.valid ? appliedCoupon.discount : 0;
   const shippingCharge =
     shippingMethod === 'EXPRESS'
-      ? 99
+      ? settings.standardShippingFee
       : paymentMethod === 'PREPAID'
       ? 0
       : subtotal >= settings.freeShippingThreshold
       ? 0
-      : 99;
+      : settings.standardShippingFee;
   const estimatedTotal = Math.max(0, subtotal - discountAmount + shippingCharge);
 
   // Apply Coupon Handler
@@ -188,8 +188,11 @@ export const Checkout: React.FC = () => {
 
       // Handle based on payment method
       if (paymentMethod === 'COD') {
-        // Cash on delivery: Order is confirmed immediately!
-        clearCart();
+        // Cash on delivery: Order is confirmed immediately! Remove purchased items once
+        removePurchasedItems(cartItemsPayload.map((item) => ({ variantId: item.variant_id, quantity: item.quantity })));
+        try {
+          sessionStorage.setItem(`rl_cleared_${orderResponse.order_code}`, 'true');
+        } catch {}
         navigate(`/order-success/${orderResponse.order_code}?token=${encodeURIComponent(orderToken)}`);
         return;
       }
@@ -655,7 +658,9 @@ export const Checkout: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">{item.name}</p>
-                    <p className="text-gray-500 text-[11px]">Size: {item.size} × {item.quantity}</p>
+                    <p className="text-gray-500 text-[11px]">
+                      Size: <strong className="text-gray-700">{item.size}</strong> {item.colour ? `| Colour: ${item.colour}` : ''} × {item.quantity}
+                    </p>
                   </div>
                   <span className="font-semibold text-gray-800 shrink-0">
                     {formatPrice(item.sellingPrice * item.quantity)}

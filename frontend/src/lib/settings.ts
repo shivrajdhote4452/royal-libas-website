@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { fetchStoreSettings } from './api';
 
 export interface StoreSettings {
   freeShippingThreshold: number;
@@ -12,10 +13,10 @@ export interface StoreSettings {
 const SETTINGS_STORAGE_KEY = 'royal_libas_store_settings';
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
-  freeShippingThreshold: 999,
+  freeShippingThreshold: 1500,
   standardShippingFee: 99,
-  announcementText: 'Free shipping on orders above ₹999 | COD Available | 3-5 Days Delivery',
-  whatsappNumber: '+91 98765 43210',
+  announcementText: 'COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | FREE COD ABOVE ₹1,500',
+  whatsappNumber: '+91 98112 23344',
   supportEmail: 'care@royallibas.com',
   instagramHandle: '@royal_libas_by_tanya',
 };
@@ -50,10 +51,33 @@ export function saveStoreSettings(settings: StoreSettings): void {
 export function useStoreSettings(): {
   settings: StoreSettings;
   updateSettings: (newSettings: StoreSettings) => void;
+  syncWithServer: () => Promise<void>;
 } {
   const [settings, setSettings] = useState<StoreSettings>(getStoreSettings);
 
+  const syncWithServer = async () => {
+    try {
+      const serverData = await fetchStoreSettings();
+      if (serverData) {
+        const synced: StoreSettings = {
+          freeShippingThreshold: Number(serverData.standard_cod_free_threshold) || 1500,
+          standardShippingFee: Number(serverData.standard_shipping_fee) || 99,
+          announcementText: serverData.announcement_text || DEFAULT_STORE_SETTINGS.announcementText,
+          whatsappNumber: serverData.whatsapp_number || DEFAULT_STORE_SETTINGS.whatsappNumber,
+          supportEmail: serverData.support_email || DEFAULT_STORE_SETTINGS.supportEmail,
+          instagramHandle: serverData.instagram_handle || DEFAULT_STORE_SETTINGS.instagramHandle,
+        };
+        saveStoreSettings(synced);
+        setSettings(synced);
+      }
+    } catch {
+      // Graceful fallback to cached/default settings
+    }
+  };
+
   useEffect(() => {
+    syncWithServer();
+
     const handleUpdate = () => {
       setSettings(getStoreSettings());
     };
@@ -72,5 +96,6 @@ export function useStoreSettings(): {
     setSettings(newSettings);
   };
 
-  return { settings, updateSettings };
+  return { settings, updateSettings, syncWithServer };
 }
+

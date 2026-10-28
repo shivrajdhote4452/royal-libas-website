@@ -51,6 +51,7 @@ export const Shop: React.FC = () => {
   const maxPriceParam = searchParams.get('max_price');
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,18 +60,20 @@ export const Shop: React.FC = () => {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
 
-  // Dynamic catalog price bounds
+  // Dynamic catalog price bounds from full catalog
+  const catalogReference = allProducts.length > 0 ? allProducts : products;
+
   const catalogMaxPrice = useMemo(() => {
-    if (!products.length) return 10000;
-    const max = Math.max(...products.map((p) => p.max_price || p.min_price || 0));
+    if (!catalogReference.length) return 10000;
+    const max = Math.max(...catalogReference.map((p) => p.max_price || p.min_price || 0));
     return Math.max(max, 6000);
-  }, [products]);
+  }, [catalogReference]);
 
   const catalogMinPrice = useMemo(() => {
-    if (!products.length) return 1500;
-    const min = Math.min(...products.map((p) => p.min_price || 0).filter((v) => v > 0));
+    if (!catalogReference.length) return 1500;
+    const min = Math.min(...catalogReference.map((p) => p.min_price || 0).filter((v) => v > 0));
     return min < Infinity ? min : 1500;
-  }, [products]);
+  }, [catalogReference]);
 
   // If user selected max_price exists in query, use it; otherwise null (show all products)
   const activeUserMaxPrice = maxPriceParam !== null && !isNaN(Number(maxPriceParam))
@@ -88,12 +91,16 @@ export const Shop: React.FC = () => {
     }
   }, [activeUserMaxPrice, catalogMaxPrice]);
 
-  // Load collections
+  // Load collections and full catalog reference on mount
   useEffect(() => {
     document.title = 'Shop Handcrafted Festive Silhouettes | Royal Libas by Tanya';
     fetchCollections()
       .then(setCollections)
       .catch((e) => console.error('Failed to load collections:', e));
+
+    fetchProducts({})
+      .then((data) => setAllProducts(data))
+      .catch((e) => console.error('Failed to load catalog products reference:', e));
   }, []);
 
   // Fetch products from backend
@@ -202,21 +209,21 @@ export const Shop: React.FC = () => {
     ? collections.find((c) => c.slug === currentCollection)?.name || 'Collection'
     : currentCategory || 'All Designs';
 
-  // Dynamic category counts from active catalog
+  // Dynamic category counts from full catalog reference so options never disappear
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    products.forEach((p) => {
+    catalogReference.forEach((p) => {
       if (p.category) {
         counts[p.category] = (counts[p.category] || 0) + 1;
       }
     });
     return counts;
-  }, [products]);
+  }, [catalogReference]);
 
-  // Dynamic available variant colours from active catalog
+  // Dynamic available variant colours from full catalog reference
   const availableColours = useMemo(() => {
     const counts: Record<string, number> = {};
-    products.forEach((p) => {
+    catalogReference.forEach((p) => {
       const coloursForProduct = new Set<string>();
       p.variants?.forEach((v) => {
         if (v.colour) coloursForProduct.add(v.colour.trim());
@@ -233,12 +240,12 @@ export const Shop: React.FC = () => {
         count,
         hex: COLOR_HEX_MAP[name] || '#8C6F5B',
       }));
-  }, [products]);
+  }, [catalogReference]);
 
-  // Dynamic available sizes from active catalog
+  // Dynamic available sizes from full catalog reference
   const availableSizes = useMemo(() => {
     const sizeSet = new Set<string>();
-    products.forEach((p) => {
+    catalogReference.forEach((p) => {
       p.variants?.forEach((v) => {
         if (v.size) sizeSet.add(v.size);
       });
@@ -250,7 +257,7 @@ export const Shop: React.FC = () => {
       if (ia !== -1 && ib !== -1) return ia - ib;
       return a.localeCompare(b);
     });
-  }, [products]);
+  }, [catalogReference]);
 
   const sortOptions = [
     { label: 'Recommended / Newest', value: 'newest' },
@@ -470,6 +477,12 @@ export const Shop: React.FC = () => {
                 onTouchEnd={() => {
                   updateParam('max_price', sliderPrice.toString());
                 }}
+                onKeyUp={(e) => {
+                  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+                    updateParam('max_price', sliderPrice.toString());
+                  }
+                }}
+                aria-label="Filter catalogue by maximum price"
                 className="w-full accent-[#5E1224] cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-gray-400">
@@ -613,7 +626,7 @@ export const Shop: React.FC = () => {
             {loading ? (
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-6">
                 {[...Array(6)].map((_, i) => (
-                  <div key={i} className="aspect-[3/4] skeleton-shimmer rounded-xl border border-[#E8DFD0]" />
+                  <div key={i} className="aspect-[4/5] skeleton-shimmer rounded-none border border-[#E8DFD0]" />
                 ))}
               </div>
             ) : filteredProducts.length > 0 ? (
@@ -782,6 +795,12 @@ export const Shop: React.FC = () => {
                 }}
                 onMouseUp={() => updateParam('max_price', sliderPrice.toString())}
                 onTouchEnd={() => updateParam('max_price', sliderPrice.toString())}
+                onKeyUp={(e) => {
+                  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+                    updateParam('max_price', sliderPrice.toString());
+                  }
+                }}
+                aria-label="Filter catalogue by maximum price"
                 className="w-full accent-[#5E1224] cursor-pointer"
               />
             </div>

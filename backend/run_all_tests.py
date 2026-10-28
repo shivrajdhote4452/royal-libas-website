@@ -12,12 +12,13 @@ test_files = [
     "test_phase8.py",
     "test_shiprocket.py",
     "test_security_reliability.py",
+    "test_store_and_variants.py",
 ]
 
 tests_dir = Path(__file__).parent / "tests"
 
 print("=" * 65)
-print(">>> RUNNING COMPLETE ROYAL LIBAS TEST SUITE (9 MODULES) <<<")
+print(">>> RUNNING COMPLETE ROYAL LIBAS TEST SUITE (10 MODULES) <<<")
 print("=" * 65)
 
 failed = []
@@ -31,7 +32,7 @@ for tf in test_files:
         continue
 
     print(f"\n[RUNNING] {tf} ...")
-    res = subprocess.run([sys.executable, str(test_path)], capture_output=True, text=True)
+    res = subprocess.run([sys.executable, str(test_path)], capture_output=True, text=True, cwd=str(Path(__file__).parent))
     if res.returncode == 0:
         print(f"[PASS] {tf}")
         passed.append(tf)

@@ -1,16 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, CheckCircle2, Truck, Bell, MessageCircle } from 'lucide-react';
+import { Settings, Save, CheckCircle2, Truck, Bell, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useStoreSettings } from '../../lib/settings';
+import { updateAdminStoreSettings } from '../../lib/api';
 
 export const AdminSettings: React.FC = () => {
-  const { settings, updateSettings } = useStoreSettings();
+  const { settings, updateSettings, syncWithServer } = useStoreSettings();
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(settings.freeShippingThreshold));
   const [standardShippingFee, setStandardShippingFee] = useState(String(settings.standardShippingFee));
   const [announcementText, setAnnouncementText] = useState(settings.announcementText);
   const [whatsappNumber, setWhatsappNumber] = useState(settings.whatsappNumber);
   const [supportEmail, setSupportEmail] = useState(settings.supportEmail);
   const [instagramHandle, setInstagramHandle] = useState(settings.instagramHandle);
+
+  const token = localStorage.getItem('royal_libas_admin_token') || '';
+
+  useEffect(() => {
+    syncWithServer();
+  }, []);
 
   useEffect(() => {
     setFreeShippingThreshold(String(settings.freeShippingThreshold));
@@ -21,22 +31,44 @@ export const AdminSettings: React.FC = () => {
     setInstagramHandle(settings.instagramHandle);
   }, [settings]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const thresholdNum = Number(freeShippingThreshold) || 999;
-    const feeNum = Number(standardShippingFee) || 99;
-    
-    updateSettings({
-      freeShippingThreshold: thresholdNum,
-      standardShippingFee: feeNum,
-      announcementText: announcementText.trim() || `Free shipping on orders above ₹${thresholdNum} | COD Available | 3-5 Days Delivery`,
-      whatsappNumber: whatsappNumber.trim(),
-      supportEmail: supportEmail.trim(),
-      instagramHandle: instagramHandle.trim(),
-    });
+    setIsSaving(true);
+    setSaveError(null);
+    setSaved(false);
 
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    const thresholdNum = Number(freeShippingThreshold) || 1500;
+    const feeNum = Number(standardShippingFee) || 99;
+    const cleanAnnouncement = announcementText.trim() || `COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | FREE COD ABOVE ₹${thresholdNum}`;
+
+    try {
+      if (token) {
+        await updateAdminStoreSettings(token, {
+          standard_cod_free_threshold: thresholdNum,
+          standard_shipping_fee: feeNum,
+          announcement_text: cleanAnnouncement,
+          whatsapp_number: whatsappNumber.trim(),
+          support_email: supportEmail.trim(),
+          instagram_handle: instagramHandle.trim(),
+        });
+      }
+
+      updateSettings({
+        freeShippingThreshold: thresholdNum,
+        standardShippingFee: feeNum,
+        announcementText: cleanAnnouncement,
+        whatsappNumber: whatsappNumber.trim(),
+        supportEmail: supportEmail.trim(),
+        instagramHandle: instagramHandle.trim(),
+      });
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to persist settings to server.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -58,7 +90,13 @@ export const AdminSettings: React.FC = () => {
         {saved && (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Settings Saved</span>
+            <span>Settings Saved to Server</span>
+          </div>
+        )}
+        {saveError && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-800 border border-red-200 text-xs font-semibold">
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span>{saveError}</span>
           </div>
         )}
       </div>
@@ -171,10 +209,11 @@ export const AdminSettings: React.FC = () => {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="inline-flex items-center gap-2 px-7 py-3 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-ui font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors"
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-7 py-3 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white text-xs font-ui font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors"
           >
-            <Save className="w-4 h-4" />
-            <span>Save Settings</span>
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>{isSaving ? 'Saving to Server...' : 'Save Settings'}</span>
           </button>
         </div>
       </form>
