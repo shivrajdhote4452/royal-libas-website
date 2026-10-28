@@ -25,6 +25,9 @@ class TokenResponse(BaseModel):
 class AdminResponse(BaseModel):
     id: int
     email: str
+    name: Optional[str] = None
+    role: str = 'OWNER'
+    is_active: bool = True
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -134,8 +137,11 @@ class ProductCreate(BaseModel):
     description: Optional[str] = None
     fabric: Optional[str] = None
     care: Optional[str] = None
+    fit: Optional[str] = None
     size_chart: Optional[str] = None
+    size_chart_id: Optional[int] = None
     category: Optional[str] = None
+    status: Optional[str] = 'PUBLISHED'
     is_bestseller: bool = False
     is_active: bool = True
     collection_ids: Optional[List[int]] = []
@@ -149,8 +155,11 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     fabric: Optional[str] = None
     care: Optional[str] = None
+    fit: Optional[str] = None
     size_chart: Optional[str] = None
+    size_chart_id: Optional[int] = None
     category: Optional[str] = None
+    status: Optional[str] = None
     is_bestseller: Optional[bool] = None
     is_active: Optional[bool] = None
     collection_ids: Optional[List[int]] = None
@@ -184,8 +193,11 @@ class ProductDetailResponse(BaseModel):
     description: Optional[str] = None
     fabric: Optional[str] = None
     care: Optional[str] = None
+    fit: Optional[str] = None
     size_chart: Optional[str] = None
+    size_chart_id: Optional[int] = None
     category: Optional[str] = None
+    status: str = 'PUBLISHED'
     is_bestseller: bool
     is_active: bool
     total_stock: int
@@ -605,6 +617,15 @@ class AdminDashboardResponse(BaseModel):
     orders_today: int
     to_pack_count: int
     total_orders: int
+    pending_prepaid_count: int = 0
+    failed_payment_count: int = 0
+    awaiting_shipment_count: int = 0
+    awaiting_pickup_count: int = 0
+    low_stock_count: int = 0
+    out_of_stock_count: int = 0
+    today_revenue_prepaid: Decimal = Decimal('0.00')
+    today_pending_cod: Decimal = Decimal('0.00')
+    recent_orders: List[OrderResponse] = []
     low_stock_variants: List[AdminLowStockVariant] = []
 
 
@@ -626,9 +647,18 @@ class StoreSettingResponse(BaseModel):
     standard_shipping_fee: float
     express_shipping_fee: float
     announcement_text: str
+    announcement_enabled: bool = True
+    hero_title: str = 'Timeless Elegance, Handcrafted Regality'
+    hero_subtitle: str = 'Pure handloom chanderi, tissue silks, and festive velvets made for the discerning connoisseur.'
+    hero_cta_text: str = 'Explore The Collection'
+    hero_cta_link: str = '/shop'
+    hero_image_url: Optional[str] = None
     whatsapp_number: str
     support_email: str
+    support_phone: str = '+91 98112 23344'
     instagram_handle: str
+    shipping_policy_content: Optional[str] = None
+    return_policy_content: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -639,9 +669,18 @@ class StoreSettingUpdate(BaseModel):
     standard_shipping_fee: Optional[float] = None
     express_shipping_fee: Optional[float] = None
     announcement_text: Optional[str] = None
+    announcement_enabled: Optional[bool] = None
+    hero_title: Optional[str] = None
+    hero_subtitle: Optional[str] = None
+    hero_cta_text: Optional[str] = None
+    hero_cta_link: Optional[str] = None
+    hero_image_url: Optional[str] = None
     whatsapp_number: Optional[str] = None
     support_email: Optional[str] = None
+    support_phone: Optional[str] = None
     instagram_handle: Optional[str] = None
+    shipping_policy_content: Optional[str] = None
+    return_policy_content: Optional[str] = None
 
 
 class ContactInquiryCreate(BaseModel):
@@ -696,3 +735,250 @@ class NewsletterSubscribeResponse(BaseModel):
     message: str
 
 
+
+# ==========================================
+# Upgraded Admin Schemas: Staff, Activity, Returns, Inventory, CMS
+# ==========================================
+
+class AdminUserResponse(BaseModel):
+    id: int
+    email: str
+    name: Optional[str] = None
+    role: str = "OWNER"
+    is_active: bool = True
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminCreate(BaseModel):
+    email: str
+    name: Optional[str] = None
+    password: str
+    role: str = "STORE_MANAGER"
+
+
+class AdminRoleUpdate(BaseModel):
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    name: Optional[str] = None
+
+
+class ActivityLogResponse(BaseModel):
+    id: int
+    actor_email: str
+    actor_role: Optional[str] = None
+    action: str
+    target_type: str
+    target_id: Optional[str] = None
+    details: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StockAdjustmentCreate(BaseModel):
+    variant_id: int
+    new_stock: int
+    reason: str  # RESTOCK, CORRECTION, DAMAGED, RETURN, OTHER
+    note: Optional[str] = None
+
+    @field_validator("new_stock")
+    @classmethod
+    def validate_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("New stock count must be >= 0")
+        return v
+
+
+class StockAdjustmentResponse(BaseModel):
+    id: int
+    variant_id: int
+    product_name: str
+    product_slug: str
+    size: str
+    colour: Optional[str] = None
+    sku: Optional[str] = None
+    previous_stock: int
+    new_stock: int
+    change_amount: int
+    reason: str
+    note: Optional[str] = None
+    actor_email: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReturnRequestCreate(BaseModel):
+    order_id: int
+    order_item_id: Optional[int] = None
+    request_type: str = "RETURN"  # RETURN, EXCHANGE
+    reason: str
+    customer_comment: Optional[str] = None
+    requested_resolution: str = "REFUND"  # REFUND, STORE_CREDIT, EXCHANGE_SIZE
+    exchange_size: Optional[str] = None
+
+
+class ReturnStatusUpdateRequest(BaseModel):
+    status: str  # REQUESTED, APPROVED, REJECTED, PICKUP_SCHEDULED, RECEIVED, RESOLVED, CANCELLED
+    pickup_awb: Optional[str] = None
+    pickup_courier: Optional[str] = None
+    refund_amount: Optional[Decimal] = None
+    refund_status: Optional[str] = None  # PENDING, PROCESSED, FAILED
+    refund_reference: Optional[str] = None
+    staff_notes: Optional[str] = None
+
+
+class ReturnRequestResponse(BaseModel):
+    id: int
+    return_code: str
+    order_id: int
+    order_code: str
+    customer_name: str
+    customer_phone: str
+    item_name: Optional[str] = None
+    item_size: Optional[str] = None
+    item_colour: Optional[str] = None
+    request_type: str
+    reason: str
+    customer_comment: Optional[str] = None
+    requested_resolution: str
+    exchange_size: Optional[str] = None
+    status: str
+    pickup_awb: Optional[str] = None
+    pickup_courier: Optional[str] = None
+    refund_amount: Optional[Decimal] = None
+    refund_status: Optional[str] = None
+    refund_reference: Optional[str] = None
+    staff_notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SizeChartCreate(BaseModel):
+    name: str
+    category: Optional[str] = None
+    measurements: str  # JSON array string
+
+
+class SizeChartUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    measurements: Optional[str] = None
+
+
+class SizeChartResponse(BaseModel):
+    id: int
+    name: str
+    category: Optional[str] = None
+    measurements: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MediaAssetResponse(BaseModel):
+    id: int
+    filename: str
+    url: str
+    file_size: int
+    mime_type: str
+    alt_text: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContactInquiryDetail(BaseModel):
+    id: int
+    name: str
+    email: str
+    phone: Optional[str] = None
+    subject: Optional[str] = None
+    message: str
+    status: str
+    admin_reply: Optional[str] = None
+    responded_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContactInquiryReply(BaseModel):
+    reply_text: str
+    status: Optional[str] = "RESPONDED"
+
+
+class PaymentRecordResponse(BaseModel):
+    order_id: int
+    order_code: str
+    customer_name: str
+    customer_phone: str
+    amount: Decimal
+    payment_method: str
+    payment_status: str
+    cashfree_order_id: Optional[str] = None
+    order_status: str
+    created_at: datetime
+    is_reconciled: bool = False
+
+
+class PaymentCODCollectRequest(BaseModel):
+    staff_notes: Optional[str] = None
+
+
+class ShipmentRecordResponse(BaseModel):
+    order_id: int
+    order_code: str
+    customer_name: str
+    customer_phone: str
+    delivery_pincode: Optional[str] = None
+    delivery_city: Optional[str] = None
+    status: str
+    payment_method: str
+    shiprocket_order_id: Optional[str] = None
+    shipment_id: Optional[str] = None
+    awb_code: Optional[str] = None
+    courier_name: Optional[str] = None
+    pickup_status: Optional[str] = None
+    tracking_url: Optional[str] = None
+    label_url: Optional[str] = None
+    manifest_url: Optional[str] = None
+    created_at: datetime
+
+
+class ReportSummaryResponse(BaseModel):
+    total_orders: int
+    prepaid_count: int
+    prepaid_revenue_paid: Decimal
+    cod_count: int
+    cod_revenue_pending: Decimal
+    cod_revenue_collected: Decimal
+    cancelled_count: int
+    cancelled_amount: Decimal
+    refunded_count: int
+    refunded_amount: Decimal
+    status_breakdown: dict
+    payment_breakdown: dict
+    top_products: list = []
+    coupon_stats: list = []
+
+
+class AdminDashboardV2Response(BaseModel):
+    orders_today: int
+    to_pack_count: int
+    total_orders: int
+    pending_prepaid_count: int
+    failed_payment_count: int
+    awaiting_shipment_count: int
+    awaiting_pickup_count: int
+    low_stock_count: int
+    out_of_stock_count: int
+    today_revenue_prepaid: Decimal
+    today_pending_cod: Decimal
+    recent_orders: List[OrderResponse] = []
+    low_stock_variants: List[AdminLowStockVariant] = []

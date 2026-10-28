@@ -438,6 +438,16 @@ export async function fetchStoreSettings(): Promise<any> {
   return response.json();
 }
 
+export async function fetchAdminStoreSettings(token: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load admin settings');
+  }
+  return response.json();
+}
+
 export async function updateAdminStoreSettings(token: string, payload: any): Promise<any> {
   const response = await fetch(`${API_BASE_URL}/admin/settings`, {
     method: 'PUT',
@@ -498,3 +508,436 @@ export async function adminUploadProductImage(token: string, file: File): Promis
 }
 
 
+
+// ==========================================
+// Upgraded Admin Panel API Endpoints
+// ==========================================
+
+export async function adminListPayments(
+  token: string,
+  status?: string,
+  method?: string,
+  search?: string
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (status && status !== 'ALL') params.append('status', status);
+  if (method && method !== 'ALL') params.append('method', method);
+  if (search) params.append('search', search);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/payments${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load payments');
+  }
+  return response.json();
+}
+
+export async function adminSyncPayment(token: string, orderCode: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/payments/sync/${orderCode}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Payment reconciliation failed');
+  }
+  return response.json();
+}
+
+export async function adminCollectCOD(
+  token: string,
+  orderId: number,
+  staffNotes?: string
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/payments/cod-collect/${orderId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ staff_notes: staffNotes }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to record COD collection');
+  }
+  return response.json();
+}
+
+export async function adminListShipments(
+  token: string,
+  tab: string = 'all',
+  search?: string
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (tab) params.append('tab', tab);
+  if (search) params.append('search', search);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/shipping${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load shipments');
+  }
+  return response.json();
+}
+
+export async function adminListInventory(
+  token: string,
+  filter: string = 'all',
+  search?: string
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (filter) params.append('filter', filter);
+  if (search) params.append('search', search);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/inventory${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load inventory');
+  }
+  return response.json();
+}
+
+export async function adminAdjustStock(
+  token: string,
+  payload: { variant_id: number; new_stock: number; reason: string; note?: string }
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/inventory/adjust`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to adjust stock');
+  }
+  return response.json();
+}
+
+export async function adminListStockAdjustments(
+  token: string,
+  variantId?: number
+): Promise<any[]> {
+  const query = variantId ? `?variant_id=${variantId}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/inventory/adjustments${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load stock adjustments');
+  }
+  return response.json();
+}
+
+export async function adminListReturns(
+  token: string,
+  status?: string,
+  requestType?: string,
+  search?: string
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (status && status !== 'ALL') params.append('status', status);
+  if (requestType && requestType !== 'ALL') params.append('request_type', requestType);
+  if (search) params.append('search', search);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/returns${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load returns');
+  }
+  return response.json();
+}
+
+export async function adminCreateReturn(token: string, payload: any): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/returns`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to create return request');
+  }
+  return response.json();
+}
+
+export async function adminUpdateReturnStatus(
+  token: string,
+  id: number,
+  payload: any
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/returns/${id}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update return status');
+  }
+  return response.json();
+}
+
+export async function adminGetCustomerDetail(token: string, phone: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/customers/${encodeURIComponent(phone)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load customer dossier');
+  }
+  return response.json();
+}
+
+export async function adminListInquiries(token: string, status?: string): Promise<any[]> {
+  const query = status && status !== 'ALL' ? `?status=${status}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/inquiries${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load inquiries');
+  }
+  return response.json();
+}
+
+export async function adminReplyInquiry(
+  token: string,
+  id: number,
+  replyText: string,
+  status: string = 'RESPONDED'
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/inquiries/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ reply_text: replyText, status }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to reply to inquiry');
+  }
+  return response.json();
+}
+
+export async function adminGetReports(token: string, period: string = '30d'): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/reports?period=${period}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load reports summary');
+  }
+  return response.json();
+}
+
+export async function adminExportOrdersCsv(token: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/admin/reports/export-orders-csv`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to export orders CSV');
+  }
+  return response.blob();
+}
+
+export async function adminListMedia(token: string): Promise<any[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load media library');
+  }
+  return response.json();
+}
+
+export async function adminUploadMedia(token: string, file: File): Promise<any> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE_URL}/admin/media/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to upload media');
+  }
+  return response.json();
+}
+
+export async function adminDeleteMedia(token: string, id: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to delete media asset');
+  }
+  return response.json();
+}
+
+export async function adminListSizeCharts(token: string): Promise<any[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/size-charts`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load size charts');
+  }
+  return response.json();
+}
+
+export async function adminCreateSizeChart(token: string, payload: any): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/size-charts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to create size chart');
+  }
+  return response.json();
+}
+
+export async function adminUpdateSizeChart(
+  token: string,
+  id: number,
+  payload: any
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/size-charts/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update size chart');
+  }
+  return response.json();
+}
+
+export async function adminDeleteSizeChart(token: string, id: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/size-charts/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to delete size chart');
+  }
+  return response.json();
+}
+
+export async function adminListStaff(token: string): Promise<any[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/staff`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load staff list');
+  }
+  return response.json();
+}
+
+export async function adminCreateStaff(token: string, payload: any): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/staff`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to create staff account');
+  }
+  return response.json();
+}
+
+export async function adminUpdateStaff(token: string, id: number, payload: any): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/staff/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update staff member');
+  }
+  return response.json();
+}
+
+export async function adminListActivityLogs(
+  token: string,
+  action?: string,
+  targetType?: string
+): Promise<any[]> {
+  const params = new URLSearchParams();
+  if (action && action !== 'ALL') params.append('action', action);
+  if (targetType && targetType !== 'ALL') params.append('target_type', targetType);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/activity-logs${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load activity logs');
+  }
+  return response.json();
+}
+
+export async function adminUpdateOrderNotes(
+  token: string,
+  orderId: number,
+  notes: string
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/notes`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ notes }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update order notes');
+  }
+  return response.json();
+}
+
+export async function adminDeleteProduct(token: string, id: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/products/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to delete product');
+  }
+  return response.json();
+}

@@ -39,13 +39,33 @@ product_collections = Table(
 
 
 class Admin(Base):
-    """Admin users table for shop management. One or two rows only. No public registration."""
+    """Admin users table for shop management. Supports Role-Based Access Control (RBAC)."""
     __tablename__ = "admins"
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=True)
+    role = Column(String(50), default="OWNER", nullable=False)  # OWNER, STORE_MANAGER, FULFILLMENT_STAFF
     password_hash = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SizeChart(Base):
+    """Reusable size charts with approved boutique measurements (in cm / inches)."""
+    __tablename__ = "size_charts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    category = Column(String(100), nullable=True)
+    measurements = Column(Text, nullable=False)  # JSON array: [{"size": "S", "bust": 36, "waist": 32, "hip": 38, "length": 44}, ...]
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 
 
 class Product(Base):
@@ -58,8 +78,11 @@ class Product(Base):
     description = Column(Text, nullable=True)
     fabric = Column(String(100), nullable=True)
     care = Column(String(255), nullable=True)
+    fit = Column(String(100), nullable=True)  # Slim Fit, Regular Fit, Relaxed, Tailored
     size_chart = Column(Text, nullable=True)  # JSON-encoded structured data (measurements in cm)
+    size_chart_id = Column(Integer, ForeignKey("size_charts.id", ondelete="SET NULL"), nullable=True)
     category = Column(String(100), nullable=True)
+    status = Column(String(50), default="PUBLISHED", nullable=False)  # DRAFT, PUBLISHED, ARCHIVED
     is_bestseller = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -71,6 +94,7 @@ class Product(Base):
     )
 
     # Relationships
+    size_chart_rel = relationship("SizeChart", foreign_keys=[size_chart_id])
     variants = relationship(
         "ProductVariant",
         back_populates="product",
@@ -115,10 +139,39 @@ class ProductVariant(Base):
 
     # Relationships
     product = relationship("Product", back_populates="variants")
+    stock_adjustments = relationship(
+        "StockAdjustment",
+        back_populates="variant",
+        cascade="all, delete-orphan",
+        order_by="StockAdjustment.created_at.desc()",
+    )
+
+
+class StockAdjustment(Base):
+    """Recorded audit history of inventory stock changes."""
+    __tablename__ = "stock_adjustments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    variant_id = Column(
+        Integer,
+        ForeignKey("product_variants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    previous_stock = Column(Integer, nullable=False)
+    new_stock = Column(Integer, nullable=False)
+    change_amount = Column(Integer, nullable=False)
+    reason = Column(String(50), nullable=False)  # RESTOCK, CORRECTION, DAMAGED, RETURN, ORDER_PLACED, ORDER_CANCELLED
+    note = Column(Text, nullable=True)
+    actor_email = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relationships
+    variant = relationship("ProductVariant", back_populates="stock_adjustments")
 
 
 class ProductImage(Base):
-    """Cloudinary image URLs and sorting order for product gallery."""
+    """Cloudinary / Persistent image URLs and sorting order for product gallery."""
     __tablename__ = "product_images"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -162,7 +215,7 @@ class Order(Base):
     order_code = Column(String(50), unique=True, index=True, nullable=False)
     customer_name = Column(String(255), nullable=False)
     phone = Column(String(20), index=True, nullable=False)
-    status = Column(String(50), default="PENDING", nullable=False)  # PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED
+    status = Column(String(50), default="PENDING", nullable=False)  # PENDING, PLACED, CONFIRMED, PACKED, SHIPPED, DELIVERED, CANCELLED
     payment_method = Column(String(20), nullable=False)  # PREPAID, COD
     payment_status = Column(String(20), default="PENDING", nullable=False)  # PENDING, PAID, FAILED, REFUNDED
     razorpay_order_id = Column(String(100), nullable=True)  # Kept for historical orders
@@ -201,6 +254,12 @@ class Order(Base):
         back_populates="order",
         uselist=False,
         cascade="all, delete-orphan",
+    )
+    returns = relationship(
+        "ReturnRequest",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        order_by="ReturnRequest.created_at.desc()",
     )
 
 
@@ -269,8 +328,41 @@ class Coupon(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class ReturnRequest(Base):
+    """Customer return, exchange, and refund requests."""
+    __tablename__ = "return_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    return_code = Column(String(50), unique=True, index=True, nullable=False)  # RET-2026-XXXX
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_item_id = Column(Integer, ForeignKey("order_items.id", ondelete="SET NULL"), nullable=True)
+    request_type = Column(String(20), default="RETURN", nullable=False)  # RETURN, EXCHANGE
+    reason = Column(String(100), nullable=False)  # SIZE_FIT, DEFECTIVE, COLOR_MISMATCH, WRONG_ITEM, OTHER
+    customer_comment = Column(Text, nullable=True)
+    requested_resolution = Column(String(50), default="REFUND", nullable=False)  # REFUND, STORE_CREDIT, EXCHANGE_SIZE
+    exchange_size = Column(String(20), nullable=True)
+    status = Column(String(50), default="REQUESTED", nullable=False)  # REQUESTED, APPROVED, REJECTED, PICKUP_SCHEDULED, RECEIVED, RESOLVED, CANCELLED
+    pickup_awb = Column(String(100), nullable=True)
+    pickup_courier = Column(String(100), nullable=True)
+    refund_amount = Column(Numeric(10, 2), nullable=True)
+    refund_status = Column(String(50), default="PENDING", nullable=True)  # PENDING, PROCESSED, FAILED
+    refund_reference = Column(String(100), nullable=True)
+    staff_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    order = relationship("Order", back_populates="returns")
+    order_item = relationship("OrderItem")
+
+
 class StoreSetting(Base):
-    """Persistent store settings for shipping thresholds, fees, and brand contacts."""
+    """Persistent store settings for shipping thresholds, fees, homepage CMS, and brand contacts."""
     __tablename__ = "store_settings"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -282,9 +374,18 @@ class StoreSetting(Base):
         default="COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | FREE COD ABOVE ₹1,500",
         nullable=False,
     )
+    announcement_enabled = Column(Boolean, default=True, nullable=False)
+    hero_title = Column(String(255), default="Timeless Elegance, Handcrafted Regality", nullable=False)
+    hero_subtitle = Column(Text, default="Pure handloom chanderi, tissue silks, and festive velvets made for the discerning connoisseur.", nullable=False)
+    hero_cta_text = Column(String(100), default="Explore The Collection", nullable=False)
+    hero_cta_link = Column(String(255), default="/shop", nullable=False)
+    hero_image_url = Column(String(500), nullable=True)
     whatsapp_number = Column(String(50), default="+91 98112 23344", nullable=False)
     support_email = Column(String(255), default="care@royallibas.com", nullable=False)
+    support_phone = Column(String(50), default="+91 98112 23344", nullable=False)
     instagram_handle = Column(String(100), default="@royal_libas_by_tanya", nullable=False)
+    shipping_policy_content = Column(Text, nullable=True)
+    return_policy_content = Column(Text, nullable=True)
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -300,8 +401,12 @@ class ContactInquiry(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False)
+    phone = Column(String(50), nullable=True)
+    subject = Column(String(255), nullable=True)
     message = Column(Text, nullable=False)
     status = Column(String(50), default="NEW", nullable=False)  # NEW, RESPONDED, ARCHIVED
+    admin_reply = Column(Text, nullable=True)
+    responded_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -314,3 +419,29 @@ class NewsletterSubscriber(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+
+class ActivityLog(Base):
+    """Audit log of important admin actions."""
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_email = Column(String(255), nullable=False)
+    actor_role = Column(String(50), nullable=True)
+    action = Column(String(100), nullable=False)  # STOCK_ADJUST, ORDER_UPDATE, PRODUCT_UPDATE, PRODUCT_CREATE, REFUND_RECORD, SETTING_UPDATE, etc.
+    target_type = Column(String(50), nullable=False)  # order, product, variant, inventory, settings, return, media
+    target_id = Column(String(100), nullable=True)
+    details = Column(Text, nullable=True)  # JSON or text description with before/after
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class MediaAsset(Base):
+    """Persistent media asset storage metadata."""
+    __tablename__ = "media_assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String(255), nullable=False)
+    url = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False)  # bytes
+    mime_type = Column(String(100), nullable=False)
+    alt_text = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

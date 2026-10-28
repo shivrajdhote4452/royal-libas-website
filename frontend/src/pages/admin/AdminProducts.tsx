@@ -20,6 +20,7 @@ import {
   adminAddVariant,
   adminUpdateVariant,
   adminUploadProductImage,
+  adminDeleteProduct,
   formatPrice,
 } from '../../lib/api';
 import { Product, ProductVariant } from '../../types/product';
@@ -37,7 +38,10 @@ export const AdminProducts: React.FC = () => {
   const [newCategory, setNewCategory] = useState('Festive Sets');
   const [newFabric, setNewFabric] = useState('Pure Chanderi Silk');
   const [newCare, setNewCare] = useState('Dry clean only');
+  const [newFit, setNewFit] = useState('Tailored Regular Fit');
+  const [newStatus, setNewStatus] = useState<'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('PUBLISHED');
   const [initialPrice, setInitialPrice] = useState('2999');
+  const [newMrp, setNewMrp] = useState('3999');
 
   // Variant Add State
   const [addingVariantForId, setAddingVariantForId] = useState<number | null>(null);
@@ -214,6 +218,13 @@ export const AdminProducts: React.FC = () => {
         .replace(/(^-|-$)/g, '');
 
     const priceNum = parseFloat(initialPrice) || 2999;
+    const mrpNum = parseFloat(newMrp) || priceNum + 1000;
+
+    if (priceNum > mrpNum) {
+      setActionError(`Selling price (₹${priceNum}) cannot exceed MRP (₹${mrpNum}).`);
+      setActionLoading(false);
+      return;
+    }
 
     const payload = {
       name: newProductName.trim(),
@@ -221,12 +232,14 @@ export const AdminProducts: React.FC = () => {
       category: newCategory,
       fabric: newFabric,
       care: newCare,
+      fit: newFit,
+      status: newStatus,
       description: `Boutique luxury ${newCategory.toLowerCase()} handcrafted with fine artisanal details.`,
-      is_active: true,
+      is_active: newStatus === 'PUBLISHED',
       variants: [
-        { size: 'S', selling_price: priceNum, mrp: priceNum + 1000, stock: 8 },
-        { size: 'M', selling_price: priceNum, mrp: priceNum + 1000, stock: 12 },
-        { size: 'L', selling_price: priceNum, mrp: priceNum + 1000, stock: 6 },
+        { size: 'S', selling_price: priceNum, mrp: mrpNum, stock: 8 },
+        { size: 'M', selling_price: priceNum, mrp: mrpNum, stock: 12 },
+        { size: 'L', selling_price: priceNum, mrp: mrpNum, stock: 6 },
       ],
       images: newImages.map((url, idx) => ({ url, sort_order: idx + 1 })),
     };
@@ -243,6 +256,17 @@ export const AdminProducts: React.FC = () => {
       setActionError(err.message || 'Failed to create product');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Delete product action
+  const handleDeleteProduct = async (product: Product) => {
+    if (!window.confirm(`Permanently remove product "${product.name}" from catalogue?`)) return;
+    try {
+      await adminDeleteProduct(token, product.id);
+      await loadProducts();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete product');
     }
   };
 
@@ -391,16 +415,24 @@ export const AdminProducts: React.FC = () => {
                         </span>
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                            product.is_active
+                            product.status === 'PUBLISHED' || (!product.status && product.is_active)
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : product.status === 'DRAFT'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
                               : 'bg-gray-100 text-gray-600 border border-gray-200'
                           }`}
                         >
-                          {product.is_active ? 'Active' : 'Inactive'}
+                          {product.status || (product.is_active ? 'PUBLISHED' : 'INACTIVE')}
                         </span>
                       </div>
-                      <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2">
+                      <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
                         <span>{product.category || 'Apparel'}</span>
+                        {product.fit && (
+                          <>
+                            <span>•</span>
+                            <span className="text-[#B58A3C] font-medium">{product.fit}</span>
+                          </>
+                        )}
                         <span>•</span>
                         <span>{product.variants.length} sizes</span>
                         <span>•</span>
@@ -411,20 +443,32 @@ export const AdminProducts: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleToggleActive(product);
                       }}
-                      className={`px-3 py-1 rounded text-xs font-semibold transition-colors border ${
+                      className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors border ${
                         product.is_active
                           ? 'border-gray-300 text-gray-600 hover:bg-gray-100'
                           : 'border-emerald-600 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
                       }`}
                     >
                       {product.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProduct(product);
+                      }}
+                      className="px-2.5 py-1 rounded text-xs font-semibold text-rose-600 border border-rose-200 hover:bg-rose-50 transition-colors"
+                      title="Remove product from catalogue"
+                    >
+                      Delete
                     </button>
 
                     <span className="text-gray-400">
@@ -802,7 +846,7 @@ export const AdminProducts: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">
                     Category
@@ -816,12 +860,14 @@ export const AdminProducts: React.FC = () => {
                     <option value="Everyday Cotton">Everyday Cotton</option>
                     <option value="Co-ord Sets">Co-ord Sets</option>
                     <option value="Kurti Sets">Kurti Sets</option>
+                    <option value="Anarkali">Anarkali</option>
+                    <option value="Lehenga">Lehenga</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">
-                    Selling Price (Rs.) <span className="text-red-500">*</span>
+                    Selling Price (₹) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -831,9 +877,22 @@ export const AdminProducts: React.FC = () => {
                     className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                   />
                 </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">
+                    MRP (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={newMrp}
+                    onChange={(e) => setNewMrp(e.target.value)}
+                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">
                     Fabric
@@ -849,16 +908,44 @@ export const AdminProducts: React.FC = () => {
 
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">
-                    Wash Care
+                    Silhouette / Fit
                   </label>
                   <input
                     type="text"
-                    value={newCare}
-                    onChange={(e) => setNewCare(e.target.value)}
-                    placeholder="Dry clean only"
+                    value={newFit}
+                    onChange={(e) => setNewFit(e.target.value)}
+                    placeholder="e.g. Tailored Regular Fit"
                     className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                   />
                 </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224] bg-white font-medium"
+                  >
+                    <option value="PUBLISHED">PUBLISHED (Visible)</option>
+                    <option value="DRAFT">DRAFT (Hidden)</option>
+                    <option value="ARCHIVED">ARCHIVED (Discontinued)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
+                  Wash Care
+                </label>
+                <input
+                  type="text"
+                  value={newCare}
+                  onChange={(e) => setNewCare(e.target.value)}
+                  placeholder="Dry clean only"
+                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
+                />
               </div>
 
               <div>

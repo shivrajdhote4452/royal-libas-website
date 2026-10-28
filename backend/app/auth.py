@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List, Callable
 import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -85,4 +85,35 @@ def get_current_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if not admin.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin account is inactive. Please contact store owner.",
+        )
+
     return admin
+
+
+def require_roles(*allowed_roles: str) -> Callable:
+    """Dependency factory to enforce role-based access control (RBAC).
+    
+    Roles:
+      - OWNER: Full unrestricted access
+      - STORE_MANAGER: Products, inventory, orders, customer service
+      - FULFILLMENT_STAFF: Packing, shipping, order tracking
+    """
+    def role_checker(admin: Admin = Depends(get_current_admin)) -> Admin:
+        admin_role = (admin.role or "OWNER").upper().strip()
+        # OWNER always has full permissions
+        if admin_role == "OWNER":
+            return admin
+
+        clean_allowed = [r.upper().strip() for r in allowed_roles]
+        if admin_role not in clean_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Requires one of roles: {', '.join(allowed_roles)}",
+            )
+        return admin
+
+    return role_checker

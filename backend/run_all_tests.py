@@ -13,12 +13,13 @@ test_files = [
     "test_shiprocket.py",
     "test_security_reliability.py",
     "test_store_and_variants.py",
+    "test_admin_upgrade.py",
 ]
 
 tests_dir = Path(__file__).parent / "tests"
 
 print("=" * 65)
-print(">>> RUNNING COMPLETE ROYAL LIBAS TEST SUITE (10 MODULES) <<<")
+print(">>> RUNNING COMPLETE ROYAL LIBAS TEST SUITE (11 MODULES) <<<")
 print("=" * 65)
 
 failed = []
@@ -48,4 +49,3 @@ print("=" * 65)
 
 if failed:
     sys.exit(1)
-sys.exit(0)

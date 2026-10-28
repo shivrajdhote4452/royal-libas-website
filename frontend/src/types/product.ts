@@ -24,7 +24,10 @@ export interface Product {
   description: string | null;
   fabric: string | null;
   care?: string | null;
+  fit?: string | null;
   size_chart?: string | null;
+  size_chart_id?: number | null;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | string;
   category: string | null;
   is_bestseller: boolean;
   is_active: boolean;

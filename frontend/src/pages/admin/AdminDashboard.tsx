@@ -3,24 +3,46 @@ import { Link } from 'react-router-dom';
 import {
   Package,
   AlertTriangle,
-  TrendingUp,
   ArrowRight,
   RefreshCw,
   Loader2,
-  ChevronDown
+  CreditCard,
+  Truck,
+  Boxes,
+  Clock,
+  XCircle,
 } from 'lucide-react';
-import { fetchAdminDashboard, fetchAdminOrders, fetchAdminProducts, formatPrice } from '../../lib/api';
-import { AdminDashboardResponse, OrderResponse } from '../../types/order';
+import { fetchAdminDashboard, formatPrice } from '../../lib/api';
+import { OrderResponse } from '../../types/order';
+
+interface UpgradedDashboardData {
+  orders_today: number;
+  to_pack_count: number;
+  total_orders: number;
+  pending_prepaid_count?: number;
+  failed_payment_count?: number;
+  awaiting_shipment_count?: number;
+  awaiting_pickup_count?: number;
+  low_stock_count?: number;
+  out_of_stock_count?: number;
+  today_revenue_prepaid?: number | string;
+  today_pending_cod?: number | string;
+  recent_orders?: OrderResponse[];
+  low_stock_variants?: Array<{
+    variant_id: number;
+    product_name: string;
+    product_slug: string;
+    size: string;
+    colour?: string;
+    stock: number;
+    selling_price: number | string;
+  }>;
+}
 
 export const AdminDashboard: React.FC = () => {
-  const [data, setData] = useState<AdminDashboardResponse | null>(null);
-  const [allOrders, setAllOrders] = useState<OrderResponse[]>([]);
-  const [recentOrders, setRecentOrders] = useState<OrderResponse[]>([]);
-  const [totalProducts, setTotalProducts] = useState(0);
+  const [data, setData] = useState<UpgradedDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState('Last 30 Days');
-  const [hoveredPointIdx, setHoveredPointIdx] = useState<number | null>(null);
 
   const token = localStorage.getItem('royal_libas_admin_token') || '';
 
@@ -28,17 +50,10 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [dashRes, ordersRes, productsRes] = await Promise.all([
-        fetchAdminDashboard(token),
-        fetchAdminOrders(token).catch(() => []),
-        fetchAdminProducts(token).catch(() => []),
-      ]);
-      setData(dashRes);
-      setAllOrders(ordersRes);
-      setRecentOrders(ordersRes.slice(0, 5));
-      setTotalProducts(productsRes.length);
+      const res = await fetchAdminDashboard(token);
+      setData(res as any);
     } catch (err: any) {
-      setError(err.message || 'Failed to load dashboard data');
+      setError(err.message || 'Failed to load operational dashboard');
     } finally {
       setLoading(false);
     }
@@ -59,379 +74,396 @@ export const AdminDashboard: React.FC = () => {
 
   if (error || !data) {
     return (
-      <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-center space-y-3">
-        <p className="text-xs sm:text-sm text-red-800 font-semibold">{error || 'Unable to retrieve dashboard.'}</p>
+      <div className="p-8 bg-red-50 border border-red-200 rounded-lg text-center space-y-3 max-w-xl mx-auto my-12">
+        <AlertTriangle className="w-8 h-8 text-red-600 mx-auto" />
+        <p className="text-sm text-red-800 font-semibold">{error || 'Unable to retrieve dashboard.'}</p>
         <button
           onClick={loadDashboard}
-          className="px-4 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold"
+          className="px-5 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold hover:bg-[#4A0E1C]"
         >
-          Retry
+          Retry Loading
         </button>
       </div>
     );
   }
 
-  // Real metrics calculated from live database records - ZERO placeholders
-  const activeOrders = allOrders.filter((o) => o.status.toUpperCase() !== 'CANCELLED');
-  const totalRevenue = activeOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
-  const distinctCustomers = new Set(
-    allOrders.map((o) => o.phone.trim().replace(/\D/g, '')).filter(Boolean)
-  ).size;
-  const totalOrdersCount = allOrders.length;
-
-  // Real 7-day daily sales aggregation
-  const chartDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const isoKey = d.toISOString().slice(0, 10);
-    const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    return { isoKey, label };
-  });
-
-  const dailyTotals = chartDays.map((day) => {
-    const dayOrders = activeOrders.filter((o) => {
-      const orderDate = new Date(o.created_at).toISOString().slice(0, 10);
-      return orderDate === day.isoKey;
-    });
-    const total = dayOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
-    return { ...day, total, count: dayOrders.length };
-  });
-
-  const maxDaily = Math.max(...dailyTotals.map((d) => d.total), 0);
-  const chartWidth = 600;
-  const paddingX = 40;
-  const baselineY = 135;
-  const topY = 25;
-  const usableHeight = baselineY - topY;
-
-  const getX = (idx: number) => paddingX + idx * ((chartWidth - paddingX * 2) / (dailyTotals.length - 1));
-  const getY = (val: number) => {
-    if (maxDaily === 0) return baselineY;
-    return baselineY - (val / maxDaily) * usableHeight;
-  };
-
-  const pointsPath = dailyTotals.map((d, idx) => `${getX(idx)},${getY(d.total)}`).join(' L ');
-  const areaPath = `M ${getX(0)},${baselineY} L ${pointsPath} L ${getX(dailyTotals.length - 1)},${baselineY} Z`;
-  const linePath = `M ${pointsPath}`;
-
-  const activeHoverIdx = hoveredPointIdx !== null ? hoveredPointIdx : dailyTotals.length - 1;
-  const activePoint = dailyTotals[activeHoverIdx] || dailyTotals[0];
+  const prepaidRev = Number(data.today_revenue_prepaid || 0);
+  const pendingCod = Number(data.today_pending_cod || 0);
 
   return (
-    <div className="space-y-8 font-sans">
-      {/* ========================================================
-          1. DASHBOARD HEADER (PDF Page 12)
-          ======================================================== */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E8DFD0]">
+    <div className="space-y-8">
+      {/* Header with Title and Refresh Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#B58A3C]/20 pb-4">
         <div>
-          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
-            Dashboard
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">Real-time boutique overview & fulfillment queue</p>
+          <h1 className="text-2xl font-serif font-bold text-[#5E1224]">Atelier Overview</h1>
+          <p className="text-xs text-gray-600 mt-1">
+            Real-time operations, inventory, cashflow, and fulfillment status from live database.
+          </p>
         </div>
-
-        <div className="flex items-center gap-3">
-          {/* Date Range Dropdown (PDF Page 12) */}
-          <div className="relative">
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="appearance-none bg-white border border-[#E8DFD0] rounded-lg px-3.5 py-1.5 pr-8 text-xs font-semibold text-gray-700 shadow-sm focus:outline-none focus:border-[#5E1224]"
-            >
-              <option value="Today">Today</option>
-              <option value="Last 7 Days">Last 7 Days</option>
-              <option value="Last 30 Days">Last 30 Days</option>
-              <option value="This Year">This Year</option>
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-2.5 pointer-events-none" />
-          </div>
-
-          <button
-            type="button"
-            onClick={loadDashboard}
-            className="p-2 rounded-lg border border-[#E8DFD0] bg-white hover:bg-gray-50 text-gray-600 hover:text-[#5E1224] transition-colors shadow-sm"
-            title="Refresh metrics"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <button
+          onClick={loadDashboard}
+          className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-[#B58A3C]/40 text-[#5E1224] hover:bg-[#FCF8F0] text-xs font-semibold rounded shadow-sm transition-colors self-start sm:self-auto"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Refresh Live Data</span>
+        </button>
       </div>
 
       {/* ========================================================
-          2. 4 KPI CARDS (PDF Page 12)
-          Total Orders, Total Revenue, Total Products, New Customers
+          TRUTHFUL CASHFLOW CARDS (Prepaid Paid vs Pending COD)
           ======================================================== */}
-      {/* ========================================================
-          2. 4 KPI CARDS (PDF Page 12)
-          Total Orders, Total Revenue, Total Products, New Customers
-          All derived from live database records - zero placeholder numbers
-          ======================================================== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        {/* Total Orders */}
-        <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
-            <span>Total Orders</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">
-              {data.orders_today > 0 ? `+${data.orders_today} today` : 'Live'}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Realized Prepaid Revenue */}
+        <div className="bg-white border-l-4 border-emerald-600 p-5 rounded-lg shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+              Today's Prepaid Revenue (Bank Settled)
+            </span>
+            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-semibold rounded">
+              Verified Paid
             </span>
           </div>
-          <div className="text-2xl sm:text-3xl font-serif font-bold text-gray-900">
-            {totalOrdersCount}
+          <div className="text-2xl font-bold font-serif text-gray-900 mt-2">
+            ₹ {prepaidRev.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <p className="text-[11px] text-gray-400">{data.orders_today} placed today</p>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Prepaid orders successfully confirmed via Cashfree webhook signature verification.
+          </p>
         </div>
 
-        {/* Total Revenue */}
-        <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
-            <span>Total Revenue</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Net</span>
+        {/* Pending COD Amount */}
+        <div className="bg-white border-l-4 border-amber-500 p-5 rounded-lg shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+              Today's COD Pending Collection
+            </span>
+            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-semibold rounded">
+              Awaiting Collection
+            </span>
           </div>
-          <div className="text-2xl sm:text-3xl font-serif font-bold text-[#5E1224]">
-            {formatPrice(totalRevenue)}
+          <div className="text-2xl font-bold font-serif text-gray-900 mt-2">
+            ₹ {pendingCod.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <p className="text-[11px] text-gray-400">Sum of non-cancelled orders</p>
-        </div>
-
-        {/* Total Products */}
-        <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
-            <span>Total Products</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Live</span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-serif font-bold text-gray-900">
-            {totalProducts}
-          </div>
-          <p className="text-[11px] text-gray-400">Active catalogue designs</p>
-        </div>
-
-        {/* New Customers */}
-        <div className="bg-white p-5 rounded-xl border border-[#E8DFD0] shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-xs text-gray-500 font-semibold uppercase tracking-wider">
-            <span>Customers</span>
-            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded text-[10px]">Distinct</span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-serif font-bold text-gray-900">
-            {distinctCustomers}
-          </div>
-          <p className="text-[11px] text-gray-400">Unique buyer phone numbers</p>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Expected on delivery. Not recognized as realized revenue until courier or staff confirms payment receipt.
+          </p>
         </div>
       </div>
 
       {/* ========================================================
-          3. SALES OVERVIEW (Dynamic SVG Line Chart from Real Orders)
+          OPERATIONAL METRICS GRID (Each links to filtered page)
           ======================================================== */}
-      <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {/* Orders Today */}
+        <Link
+          to="/admin/orders"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Orders Today</span>
+            <Package className="w-4 h-4" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-gray-900 mt-2">
+            {data.orders_today}
+          </div>
+          <div className="text-[10px] text-[#B58A3C] flex items-center gap-1 mt-1 font-medium">
+            <span>View All Orders</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Awaiting Packing */}
+        <Link
+          to="/admin/orders?status=PLACED"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Awaiting Packing</span>
+            <Clock className="w-4 h-4 text-blue-600" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-blue-700 mt-2">
+            {data.to_pack_count}
+          </div>
+          <div className="text-[10px] text-blue-600 flex items-center gap-1 mt-1 font-medium">
+            <span>Filter Placed Orders</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Awaiting Shipment Creation */}
+        <Link
+          to="/admin/shipping?tab=awaiting_shipment"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Awaiting Courier</span>
+            <Truck className="w-4 h-4 text-purple-600" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-purple-700 mt-2">
+            {data.awaiting_shipment_count ?? 0}
+          </div>
+          <div className="text-[10px] text-purple-600 flex items-center gap-1 mt-1 font-medium">
+            <span>Ready for Shiprocket</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Awaiting Pickup */}
+        <Link
+          to="/admin/shipping?tab=active_shipments"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Awaiting Pickup</span>
+            <Clock className="w-4 h-4 text-indigo-600" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-indigo-700 mt-2">
+            {data.awaiting_pickup_count ?? 0}
+          </div>
+          <div className="text-[10px] text-indigo-600 flex items-center gap-1 mt-1 font-medium">
+            <span>Pickup Scheduled</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Pending Payments */}
+        <Link
+          to="/admin/payments?status=PENDING"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Pending Payments</span>
+            <CreditCard className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-amber-600 mt-2">
+            {data.pending_prepaid_count ?? 0}
+          </div>
+          <div className="text-[10px] text-amber-600 flex items-center gap-1 mt-1 font-medium">
+            <span>Reconcile Cashfree</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Failed Payments */}
+        <Link
+          to="/admin/payments?status=FAILED"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Failed Payments</span>
+            <XCircle className="w-4 h-4 text-red-500" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-red-600 mt-2">
+            {data.failed_payment_count ?? 0}
+          </div>
+          <div className="text-[10px] text-red-600 flex items-center gap-1 mt-1 font-medium">
+            <span>Inspect Failed</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Low Stock Variants */}
+        <Link
+          to="/admin/inventory?filter=low_stock"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Low Stock (&le; 5)</span>
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-amber-600 mt-2">
+            {data.low_stock_count ?? (data.low_stock_variants ? data.low_stock_variants.length : 0)}
+          </div>
+          <div className="text-[10px] text-amber-700 flex items-center gap-1 mt-1 font-medium">
+            <span>Restock Variants</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Out of Stock */}
+        <Link
+          to="/admin/inventory?filter=out_of_stock"
+          className="bg-white p-4 rounded-lg border border-gray-200 hover:border-[#5E1224] transition-all hover:shadow-md group block"
+        >
+          <div className="flex items-center justify-between text-gray-500 group-hover:text-[#5E1224]">
+            <span className="text-xs font-semibold">Out of Stock</span>
+            <Boxes className="w-4 h-4 text-red-500" />
+          </div>
+          <div className="text-2xl font-serif font-bold text-red-600 mt-2">
+            {data.out_of_stock_count ?? 0}
+          </div>
+          <div className="text-[10px] text-red-600 flex items-center gap-1 mt-1 font-medium">
+            <span>Sold Out Items</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </Link>
+      </div>
+
+      {/* ========================================================
+          RECENT ORDERS TABLE
+          ======================================================== */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h2 className="font-serif font-bold text-base text-gray-900">Sales Overview</h2>
-            <p className="text-xs text-gray-500">Real daily gross sales (Last 7 Days)</p>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-[#5E1224] font-semibold bg-[#5E1224]/5 px-2.5 py-1 rounded-md">
-            <TrendingUp className="w-3.5 h-3.5 text-[#B58A3C]" />
-            <span>{totalRevenue > 0 ? 'Active Sales' : 'Awaiting Orders'}</span>
-          </div>
-        </div>
-
-        {/* SVG Chart */}
-        <div className="pt-4 relative">
-          {/* Tooltip Pill */}
-          <div
-            className="absolute top-0 bg-white border border-[#E8DFD0] px-3 py-1.5 rounded-lg shadow-md text-center z-10 transition-all pointer-events-none"
-            style={{
-              left: `${Math.min(Math.max(10, (getX(activeHoverIdx) / chartWidth) * 100 - 8), 80)}%`,
-            }}
-          >
-            <span className="text-xs font-bold text-[#5E1224] block">
-              {formatPrice(activePoint.total)}
-            </span>
-            <span className="text-[10px] text-gray-500">
-              {activePoint.label} ({activePoint.count} {activePoint.count === 1 ? 'order' : 'orders'})
-            </span>
-          </div>
-
-          <svg className="w-full h-44 overflow-visible" viewBox="0 0 600 160" preserveAspectRatio="none">
-            {/* Grid Lines */}
-            <line x1="0" y1="40" x2="600" y2="40" stroke="#F0EAE1" strokeDasharray="4 4" />
-            <line x1="0" y1="90" x2="600" y2="90" stroke="#F0EAE1" strokeDasharray="4 4" />
-            <line x1="0" y1="135" x2="600" y2="135" stroke="#E8DFD0" />
-
-            {/* Area Fill */}
-            <path d={areaPath} fill="rgba(91, 17, 26, 0.06)" />
-
-            {/* Smooth Crimson Curve */}
-            <path
-              d={linePath}
-              fill="none"
-              stroke="#5E1224"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-
-            {/* Real Data Points */}
-            {dailyTotals.map((point, idx) => {
-              const cx = getX(idx);
-              const cy = getY(point.total);
-              const isActive = idx === activeHoverIdx;
-
-              return (
-                <g key={point.isoKey} className="cursor-pointer" onMouseEnter={() => setHoveredPointIdx(idx)}>
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={isActive ? 6 : 4}
-                    fill={isActive ? '#5E1224' : '#B58A3C'}
-                    stroke="#FFFFFF"
-                    strokeWidth={2}
-                    className="transition-all"
-                  />
-                  {/* Invisible hit-target for easy hover on mobile/desktop */}
-                  <circle cx={cx} cy={cy} r={16} fill="transparent" />
-                </g>
-              );
-            })}
-          </svg>
-
-          {/* X-Axis Labels */}
-          <div className="flex justify-between text-[11px] text-gray-400 pt-2 font-medium px-4">
-            {dailyTotals.map((day) => (
-              <span key={day.isoKey}>{day.label}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          4. RECENT ORDERS TABLE (PDF Page 12)
-          ======================================================== */}
-      <div className="bg-white rounded-2xl border border-[#E8DFD0] shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#5E1224]" />
-            <h2 className="font-serif font-bold text-base text-gray-900">Recent Orders</h2>
+            <h2 className="font-serif font-bold text-[#5E1224] text-base">Recent Orders</h2>
+            <p className="text-xs text-gray-500">Latest orders placed across guest storefront.</p>
           </div>
           <Link
             to="/admin/orders"
-            className="text-xs font-semibold text-[#5E1224] hover:underline flex items-center gap-1"
+            className="text-xs text-[#B58A3C] font-semibold hover:text-[#5E1224] flex items-center gap-1"
           >
-            <span>View All</span>
+            <span>View All ({data.total_orders})</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#FCF8F0] text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
-              <tr>
-                <th className="p-3.5"># Order</th>
-                <th className="p-3.5">Customer</th>
-                <th className="p-3.5">Amount</th>
-                <th className="p-3.5">Status</th>
-                <th className="p-3.5">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 font-medium">
-              {recentOrders.length > 0 ? (
-                recentOrders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">
-                      #{ord.order_code}
-                    </td>
-                    <td className="p-3.5 text-gray-900">
-                      {ord.customer_name}
-                    </td>
-                    <td className="p-3.5 font-bold text-gray-900 price-display">
-                      {formatPrice(ord.total)}
-                    </td>
-                    <td className="p-3.5">
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                          ord.status === 'DELIVERED'
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : ord.status === 'SHIPPED'
-                            ? 'bg-blue-50 text-blue-800 border-blue-200'
-                            : ord.status === 'PACKED'
-                            ? 'bg-purple-50 text-purple-800 border-purple-200'
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}
-                      >
-                        {ord.status}
-                      </span>
-                    </td>
-                    <td className="p-3.5 text-gray-500">
-                      {new Date(ord.created_at).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                      })}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <>
-                  <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1254</td>
-                    <td className="p-3.5 text-gray-900">Priya Sharma</td>
-                    <td className="p-3.5 font-bold text-gray-900">₹4,798</td>
-                    <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">Delivered</span></td>
-                    <td className="p-3.5 text-gray-500">20 Oct</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1255</td>
-                    <td className="p-3.5 text-gray-900">Neha Verma</td>
-                    <td className="p-3.5 font-bold text-gray-900">₹2,499</td>
-                    <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">Shipped</span></td>
-                    <td className="p-3.5 text-gray-500">19 Oct</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1256</td>
-                    <td className="p-3.5 text-gray-900">Anjali Mehta</td>
-                    <td className="p-3.5 font-bold text-gray-900">₹2,199</td>
-                    <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">Packed</span></td>
-                    <td className="p-3.5 text-gray-500">19 Oct</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50">
-                    <td className="p-3.5 font-mono font-bold text-[#5E1224]">#RL-2026-1257</td>
-                    <td className="p-3.5 text-gray-900">Riya Singh</td>
-                    <td className="p-3.5 font-bold text-gray-900">₹1,999</td>
-                    <td className="p-3.5"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Pending</span></td>
-                    <td className="p-3.5 text-gray-500">18 Oct</td>
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {data.recent_orders && data.recent_orders.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#FCF8F0] border-b border-gray-200 text-gray-600 uppercase font-semibold text-[10px] tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Order Code</th>
+                  <th className="py-3 px-4">Customer</th>
+                  <th className="py-3 px-4">Items</th>
+                  <th className="py-3 px-4">Payment</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Total</th>
+                  <th className="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.recent_orders.map((o) => {
+                  const isPrepaid = o.payment_method === 'PREPAID';
+                  const isPaid = o.payment_status === 'PAID';
+                  return (
+                    <tr key={o.id} className="hover:bg-gray-50/80 transition-colors">
+                      <td className="py-3 px-4 font-mono font-semibold text-[#5E1224]">
+                        <Link to={`/admin/orders/${o.id}`} className="hover:underline">
+                          {o.order_code}
+                        </Link>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-gray-900">{o.customer_name}</div>
+                        <div className="text-[11px] text-gray-500">{o.phone}</div>
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">
+                        {o.items?.length || 1} item{o.items?.length !== 1 ? 's' : ''}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            isPaid
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : isPrepaid
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-blue-50 text-blue-700'
+                          }`}
+                        >
+                          {o.payment_method} &bull; {o.payment_status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            o.status === 'DELIVERED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : o.status === 'SHIPPED'
+                              ? 'bg-blue-100 text-blue-800'
+                              : o.status === 'CANCELLED'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {o.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-semibold text-gray-900">
+                        {formatPrice(o.total)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Link
+                          to={`/admin/orders/${o.id}`}
+                          className="px-2.5 py-1 bg-[#5E1224] text-white hover:bg-[#4A0E1C] rounded text-[11px] font-medium inline-block"
+                        >
+                          Manage
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-8 text-center text-gray-400 text-xs">
+            No orders placed yet. Live orders will populate automatically.
+          </div>
+        )}
       </div>
 
       {/* ========================================================
-          5. LOW-STOCK ALERT QUEUE
+          LOW STOCK ALERTS TABLE
           ======================================================== */}
       {data.low_stock_variants && data.low_stock_variants.length > 0 && (
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-amber-200 shadow-sm space-y-3">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="bg-white rounded-lg border border-amber-200 shadow-sm overflow-hidden">
+          <div className="p-4 sm:p-5 border-b border-amber-100 bg-amber-50/40 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <h3 className="font-serif font-bold text-base text-gray-900">
-                Low Stock & Sold Out Alert ({data.low_stock_variants.length})
-              </h3>
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <h2 className="font-serif font-bold text-amber-900 text-base">Low Stock Priority Alerts</h2>
             </div>
-            <Link to="/admin/inventory" className="text-xs font-semibold text-[#5E1224] hover:underline">
-              Adjust Stock →
+            <Link
+              to="/admin/inventory?filter=low_stock"
+              className="text-xs text-amber-800 font-semibold hover:underline flex items-center gap-1"
+            >
+              <span>Manage All Inventory</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {data.low_stock_variants.slice(0, 6).map((v) => (
-              <div key={v.variant_id} className="p-3 bg-[#FCF8F0] rounded-lg border border-[#E8DFD0] flex items-center justify-between text-xs">
-                <div>
-                  <p className="font-bold text-gray-900 truncate">{v.product_name}</p>
-                  <span className="text-gray-500 text-[11px]">Size {v.size}</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${v.stock === 0 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>
-                  {v.stock === 0 ? 'Sold Out' : `${v.stock} left`}
-                </span>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#FCF8F0] border-b border-gray-200 text-gray-600 uppercase font-semibold text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-4">Product</th>
+                  <th className="py-2.5 px-4">Variant</th>
+                  <th className="py-2.5 px-4">Current Stock</th>
+                  <th className="py-2.5 px-4">Selling Price</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.low_stock_variants.map((v) => (
+                  <tr key={v.variant_id} className="hover:bg-amber-50/20">
+                    <td className="py-2.5 px-4 font-medium text-gray-900">
+                      {v.product_name}
+                    </td>
+                    <td className="py-2.5 px-4 text-gray-600">
+                      Size: <span className="font-bold text-gray-800">{v.size}</span>
+                      {v.colour && <span className="ml-2 text-gray-500">({v.colour})</span>}
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                          v.stock === 0 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {v.stock === 0 ? 'SOLD OUT (0 units)' : `${v.stock} units left`}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-gray-900 font-medium">
+                      {formatPrice(v.selling_price as any)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right">
+                      <Link
+                        to={`/admin/inventory?search=${encodeURIComponent(v.product_name)}`}
+                        className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-medium inline-block"
+                      >
+                        Restock
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

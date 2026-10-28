@@ -25,14 +25,22 @@ import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminOrders } from './pages/admin/AdminOrders';
-import { AdminProducts } from './pages/admin/AdminProducts';
-import { AdminCustomers } from './pages/admin/AdminCustomers';
-import { AdminInventory } from './pages/admin/AdminInventory';
-import { AdminCoupons } from './pages/admin/AdminCoupons';
-import { AdminSettings } from './pages/admin/AdminSettings';
-import { AdminCollections } from './pages/admin/AdminCollections';
-import { AdminReports } from './pages/admin/AdminReports';
 import { AdminOrderDetail } from './pages/admin/AdminOrderDetail';
+import { AdminPayments } from './pages/admin/AdminPayments';
+import { AdminShipping } from './pages/admin/AdminShipping';
+import { AdminReturns } from './pages/admin/AdminReturns';
+import { AdminProducts } from './pages/admin/AdminProducts';
+import { AdminCollections } from './pages/admin/AdminCollections';
+import { AdminInventory } from './pages/admin/AdminInventory';
+import { AdminSizeCharts } from './pages/admin/AdminSizeCharts';
+import { AdminMedia } from './pages/admin/AdminMedia';
+import { AdminCustomers } from './pages/admin/AdminCustomers';
+import { AdminHomepage } from './pages/admin/AdminHomepage';
+import { AdminCoupons } from './pages/admin/AdminCoupons';
+import { AdminReports } from './pages/admin/AdminReports';
+import { AdminStaff } from './pages/admin/AdminStaff';
+import { AdminActivityLog } from './pages/admin/AdminActivityLog';
+import { AdminSettings } from './pages/admin/AdminSettings';
 import { CartDrawer } from './components/CartDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 
@@ -68,12 +76,20 @@ export const App: React.FC = () => {
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="orders/:id" element={<AdminOrderDetail />} />
+            <Route path="payments" element={<AdminPayments />} />
+            <Route path="shipping" element={<AdminShipping />} />
+            <Route path="returns" element={<AdminReturns />} />
             <Route path="products" element={<AdminProducts />} />
-            <Route path="collections" element={<AdminCollections />} />
             <Route path="inventory" element={<AdminInventory />} />
+            <Route path="collections" element={<AdminCollections />} />
+            <Route path="size-charts" element={<AdminSizeCharts />} />
+            <Route path="media" element={<AdminMedia />} />
             <Route path="customers" element={<AdminCustomers />} />
+            <Route path="homepage" element={<AdminHomepage />} />
             <Route path="coupons" element={<AdminCoupons />} />
             <Route path="reports" element={<AdminReports />} />
+            <Route path="staff" element={<AdminStaff />} />
+            <Route path="activity" element={<AdminActivityLog />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 

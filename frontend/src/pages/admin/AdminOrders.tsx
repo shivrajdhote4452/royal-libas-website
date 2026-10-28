@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Package,
   Phone,
-  MapPin,
+  Search,
   Truck,
   CheckCircle2,
-  XCircle,
   ExternalLink,
   MessageCircle,
   ChevronDown,
@@ -14,23 +13,34 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
-  FileText,
+  X,
 } from 'lucide-react';
 import {
-  fetchAdminOrders,
   updateAdminOrderStatus,
   formatPrice,
   fetchFulfillmentConfig,
   refreshFulfillmentTracking,
+  adminUpdateOrderNotes,
 } from '../../lib/api';
 import { OrderResponse, FulfillmentConfig } from '../../types/order';
 import { FulfillmentModal } from '../../components/FulfillmentModal';
 
 export const AdminOrders: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status') || 'ALL';
+
   const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+
+  // Filters
+  const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus);
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<string>('ALL');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [dateFilter, setDateFilter] = useState<string>('');
+
+  // Expandable row state
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
 
   // Fulfillment configuration and modal state
@@ -38,12 +48,16 @@ export const AdminOrders: React.FC = () => {
   const [activeFulfillOrder, setActiveFulfillOrder] = useState<OrderResponse | null>(null);
   const [refreshingOrderId, setRefreshingOrderId] = useState<number | null>(null);
 
-  // Manual shipping state (fallback)
-  const [shippingOrderId, setShippingOrderId] = useState<number | null>(null);
-  const [courierName, setCourierName] = useState('Delhivery');
-  const [trackingUrl, setTrackingUrl] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Cancellation Confirmation Modal
+  const [cancelModalOrder, setCancelModalOrder] = useState<OrderResponse | null>(null);
+
+  // Note editing state
+  const [editingNotesOrderId, setEditingNotesOrderId] = useState<number | null>(null);
+  const [noteText, setNoteText] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   const token = localStorage.getItem('royal_libas_admin_token') || '';
 
@@ -51,13 +65,27 @@ export const AdminOrders: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+      const params = new URLSearchParams();
+      if (selectedStatus && selectedStatus !== 'ALL') params.append('status', selectedStatus);
+      if (selectedPaymentStatus && selectedPaymentStatus !== 'ALL') params.append('payment_status', selectedPaymentStatus);
+      if (selectedPaymentMethod && selectedPaymentMethod !== 'ALL') params.append('payment_method', selectedPaymentMethod);
+      if (searchQuery.trim()) params.append('search', searchQuery.trim());
+      if (dateFilter) params.append('date', dateFilter);
+
+      const query = params.toString() ? `?${params.toString()}` : '';
       const [res, cfg] = await Promise.all([
-        fetchAdminOrders(token, selectedStatus),
+        fetch(`${API_BASE_URL}/admin/orders${query}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then((r) => {
+          if (!r.ok) throw new Error('Failed to load orders');
+          return r.json();
+        }),
         fetchFulfillmentConfig(token).catch(() => null),
       ]);
+
       setOrders(res);
       if (cfg) setFulfillmentConfig(cfg);
-      // Auto-expand first order if none expanded
       if (res.length > 0 && expandedOrderId === null) {
         setExpandedOrderId(res[0].id);
       }
@@ -70,7 +98,17 @@ export const AdminOrders: React.FC = () => {
 
   useEffect(() => {
     loadOrders();
-  }, [token, selectedStatus]);
+  }, [token, selectedStatus, selectedPaymentStatus, selectedPaymentMethod, dateFilter]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    loadOrders();
+  };
+
+  const handleStatusFilterChange = (status: string) => {
+    setSelectedStatus(status);
+    setSearchParams(status === 'ALL' ? {} : { status });
+  };
 
   const handleRefreshTracking = async (orderId: number) => {
     setRefreshingOrderId(orderId);
@@ -101,12 +139,8 @@ export const AdminOrders: React.FC = () => {
         tracking_url: trackLink,
       });
 
-      // Update in local state
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? updated : o))
-      );
-      setShippingOrderId(null);
-      setTrackingUrl('');
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      setCancelModalOrder(null);
     } catch (err: any) {
       setActionError(err.message || 'Failed to update order status');
     } finally {
@@ -114,479 +148,494 @@ export const AdminOrders: React.FC = () => {
     }
   };
 
-  const statusFilters = [
-    { label: 'All Orders', value: 'ALL' },
-    { label: 'Needs Packing', value: 'PLACED' },
-    { label: 'Packed', value: 'PACKED' },
-    { label: 'Shipped', value: 'SHIPPED' },
-    { label: 'Delivered', value: 'DELIVERED' },
-    { label: 'Cancelled', value: 'CANCELLED' },
+  const handleSaveNotes = async (orderId: number) => {
+    setIsSavingNote(true);
+    try {
+      const updated = await adminUpdateOrderNotes(token, orderId, noteText);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      setEditingNotesOrderId(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save notes');
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const statusPills = [
+    { id: 'ALL', label: 'All Orders' },
+    { id: 'PLACED', label: 'Placed (New)' },
+    { id: 'CONFIRMED', label: 'Confirmed' },
+    { id: 'PACKED', label: 'Packed' },
+    { id: 'SHIPPED', label: 'Shipped' },
+    { id: 'DELIVERED', label: 'Delivered' },
+    { id: 'CANCELLED', label: 'Cancelled' },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#B58A3C]/20 pb-4">
         <div>
-          <span className="text-xs uppercase tracking-widest font-bold text-[#B58A3C]">
-            Fulfillment Queue
-          </span>
-          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
-            Customer Orders
-          </h1>
+          <h1 className="text-2xl font-serif font-bold text-[#5E1224]">Orders & Fulfillment</h1>
+          <p className="text-xs text-gray-600 mt-1">
+            Track and process boutique customer orders, Shiprocket logistics, and status mutations.
+          </p>
         </div>
-        <span className="text-xs text-gray-500 font-medium">
-          Showing {orders.length} {orders.length === 1 ? 'order' : 'orders'}
-        </span>
+        <button
+          onClick={loadOrders}
+          className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-[#B58A3C]/40 text-[#5E1224] hover:bg-[#FCF8F0] text-xs font-semibold rounded shadow-sm self-start sm:self-auto"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Refresh Queue</span>
+        </button>
       </div>
 
-      {/* Filter Tabs (Horizontal Scroll on Mobile) */}
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-        {statusFilters.map((tab) => (
+      {actionError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button onClick={() => setActionError(null)} className="text-red-600 hover:text-red-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ========================================================
+          SEARCH AND ADVANCED FILTERS BAR
+          ======================================================== */}
+      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm space-y-3">
+        <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by Order ID (RL-2026-...), Customer Name, or Phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
+            />
+          </div>
           <button
-            key={tab.value}
+            type="submit"
+            className="px-4 py-2 bg-[#5E1224] text-white hover:bg-[#4A0E1C] text-xs font-semibold rounded shrink-0"
+          >
+            Search
+          </button>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setTimeout(loadOrders, 0);
+              }}
+              className="px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs rounded shrink-0"
+            >
+              Clear
+            </button>
+          )}
+        </form>
+
+        {/* Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-500 font-medium">Payment State:</span>
+            <select
+              value={selectedPaymentStatus}
+              onChange={(e) => setSelectedPaymentStatus(e.target.value)}
+              className="border border-gray-300 rounded px-2.5 py-1 text-xs bg-white focus:outline-none focus:border-[#5E1224]"
+            >
+              <option value="ALL">All States</option>
+              <option value="PAID">Paid Only</option>
+              <option value="PENDING">Pending Only</option>
+              <option value="FAILED">Failed</option>
+              <option value="REFUNDED">Refunded</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-500 font-medium">Payment Method:</span>
+            <select
+              value={selectedPaymentMethod}
+              onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+              className="border border-gray-300 rounded px-2.5 py-1 text-xs bg-white focus:outline-none focus:border-[#5E1224]"
+            >
+              <option value="ALL">All Methods</option>
+              <option value="PREPAID">Prepaid (Gateway)</option>
+              <option value="COD">Cash on Delivery (COD)</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-500 font-medium">Date:</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:border-[#5E1224]"
+            />
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => setDateFilter('')}
+                className="text-[10px] text-gray-500 hover:text-black underline"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Status Filter Tabs */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+        {statusPills.map((pill) => (
+          <button
+            key={pill.id}
             type="button"
-            onClick={() => setSelectedStatus(tab.value)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${
-              selectedStatus === tab.value
-                ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-sm'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+            onClick={() => handleStatusFilterChange(pill.id)}
+            className={`px-3 py-1.5 rounded-full font-semibold transition-all shrink-0 ${
+              selectedStatus === pill.id
+                ? 'bg-[#5E1224] text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-[#FCF8F0]'
             }`}
           >
-            {tab.label}
+            {pill.label}
           </button>
         ))}
       </div>
 
-      {actionError && (
-        <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-          <span>{actionError}</span>
-        </div>
-      )}
-
+      {/* Orders List / Cards */}
       {loading ? (
-        <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
+        <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-2">
           <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
-          <p className="text-xs text-gray-500 font-serif">Loading order details...</p>
+          <p className="text-xs text-gray-500">Loading order queue...</p>
         </div>
       ) : error ? (
-        <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-center space-y-3">
-          <p className="text-xs sm:text-sm text-red-800 font-semibold">{error}</p>
-          <button
-            onClick={loadOrders}
-            className="px-4 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold"
-          >
+        <div className="p-8 bg-red-50 border border-red-200 rounded-lg text-center space-y-3">
+          <p className="text-xs text-red-700">{error}</p>
+          <button onClick={loadOrders} className="px-4 py-1.5 bg-[#5E1224] text-white rounded text-xs">
             Retry
           </button>
         </div>
       ) : orders.length === 0 ? (
-        <div className="bg-white p-10 rounded-xl border border-[#E8DFD0] text-center space-y-2">
-          <Package className="w-10 h-10 text-gray-400 mx-auto" />
-          <h3 className="font-serif font-bold text-gray-900 text-base">No orders found</h3>
-          <p className="text-xs text-gray-500">
-            No orders match the selected filter criteria.
+        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center space-y-3">
+          <Package className="w-12 h-12 text-gray-300 mx-auto" />
+          <h3 className="font-serif font-bold text-gray-800 text-base">No orders match these criteria</h3>
+          <p className="text-xs text-gray-500 max-w-sm mx-auto">
+            Try resetting your filters or clearing search terms to inspect all orders.
           </p>
+          <button
+            onClick={() => {
+              setSelectedStatus('ALL');
+              setSelectedPaymentStatus('ALL');
+              setSelectedPaymentMethod('ALL');
+              setSearchQuery('');
+              setDateFilter('');
+            }}
+            className="px-4 py-1.5 bg-[#5E1224] text-white text-xs font-semibold rounded"
+          >
+            Reset All Filters
+          </button>
         </div>
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => {
-            const isExpanded = expandedOrderId === order.id;
-            const isCOD = order.payment_method === 'COD';
-            const isPaid = order.payment_status === 'PAID';
+          {orders.map((o) => {
+            const isExpanded = expandedOrderId === o.id;
+            const isPrepaid = o.payment_method === 'PREPAID';
+            const isPaid = o.payment_status === 'PAID';
+            const cleanPhone = o.phone.replace(/\D/g, '').slice(-10);
 
             return (
               <div
-                key={order.id}
-                className="bg-white rounded-xl border border-[#E8DFD0] shadow-sm overflow-hidden transition-all duration-200"
+                key={o.id}
+                className="bg-white rounded-lg border border-gray-200 hover:border-[#B58A3C]/60 shadow-sm overflow-hidden transition-all"
               >
-                {/* Order Summary Row (Always Visible) */}
+                {/* Order Summary Bar */}
                 <div
-                  onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer bg-white select-none"
+                  onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}
                 >
-                  <div className="flex items-start sm:items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#FCF8F0] border border-[#E8DFD0] flex items-center justify-center text-[#5E1224] shrink-0 font-serif font-bold text-sm">
-                      {order.id}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-sm text-[#5E1224]">
-                          {order.order_code}
-                        </span>
-                        <span className="text-xs font-semibold text-gray-900">
-                          {order.customer_name}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2">
-                        <span>{new Date(order.created_at).toLocaleDateString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}</span>
-                        <span>•</span>
-                        <span>{order.items.length} {order.items.length === 1 ? 'item' : 'items'}</span>
-                        <span>•</span>
-                        <span className="font-semibold text-gray-800">{formatPrice(order.total)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-mono font-bold text-sm text-[#5E1224]">
+                      {o.order_code}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(o.created_at).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </span>
                     <span
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border ${
-                        order.status === 'DELIVERED'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : order.status === 'SHIPPED'
-                          ? 'bg-blue-50 text-blue-800 border-blue-200'
-                          : order.status === 'PACKED'
-                          ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                          : order.status === 'CANCELLED'
-                          ? 'bg-red-50 text-red-800 border-red-200'
-                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        isPaid
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : isPrepaid
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-blue-50 text-blue-800 border border-blue-200'
                       }`}
                     >
-                      {order.status}
+                      {o.payment_method} &bull; {o.payment_status}
                     </span>
-
-                    <Link
-                      to={`/admin/orders/${order.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#5E1224]/5 hover:bg-[#5E1224]/10 text-[#5E1224] text-xs font-semibold transition-colors"
-                      title="Open dedicated order page"
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        o.status === 'DELIVERED'
+                          ? 'bg-emerald-100 text-emerald-900'
+                          : o.status === 'SHIPPED'
+                          ? 'bg-blue-100 text-blue-900'
+                          : o.status === 'CANCELLED'
+                          ? 'bg-red-100 text-red-900'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}
                     >
-                      <span>Full Page</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </Link>
-
-                    <span className="text-gray-400">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {o.status}
                     </span>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-4">
+                    <div className="text-right">
+                      <div className="text-xs font-semibold text-gray-900">{o.customer_name}</div>
+                      <div className="text-sm font-mono font-bold text-[#5E1224]">
+                        {formatPrice(o.total)}
+                      </div>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
                   </div>
                 </div>
 
-                {/* Expanded Details Drawer */}
+                {/* Expanded Details Panel */}
                 {isExpanded && (
-                  <div className="px-4 pb-5 sm:px-6 pt-2 border-t border-gray-100 bg-[#FCF8F0]/30 space-y-5">
-                    {/* Customer Contact & Quick Actions */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                      {/* Customer Info */}
-                      <div className="bg-white p-4 rounded-lg border border-[#E8DFD0] space-y-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-900">Customer Details</span>
-                          <div className="flex items-center gap-1">
-                            {/* Quick WhatsApp button for Tanya */}
-                            <a
-                              href={`https://wa.me/91${order.phone.replace(/\D/g, '')}?text=Hello%20${encodeURIComponent(
-                                order.customer_name
-                              )},%20this%20is%20Tanya%20from%20Royal%20Libas%20regarding%20your%20order%20${order.order_code}.`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors flex items-center gap-1 font-semibold text-[11px]"
-                              title="Chat on WhatsApp"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                              <span>WhatsApp</span>
-                            </a>
-
-                            <a
-                              href={`tel:+91${order.phone.replace(/\D/g, '')}`}
-                              className="p-1.5 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors flex items-center gap-1 font-semibold text-[11px]"
-                              title="Call customer"
-                            >
-                              <Phone className="w-3.5 h-3.5" />
-                              <span>Call</span>
-                            </a>
-                          </div>
-                        </div>
-
-                        <p className="font-semibold text-gray-800">{order.customer_name}</p>
-                        <p className="text-gray-600">Phone: +91 {order.phone}</p>
-
-                        {order.address && (
-                          <div className="pt-2 border-t border-gray-100 flex items-start gap-1.5 text-gray-600">
-                            <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+                  <div className="border-t border-gray-100 p-4 sm:p-6 bg-[#FCF8F0]/30 space-y-5">
+                    {/* Items Purchased with Size & Color */}
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
+                        Purchased Items ({o.items?.length || 0})
+                      </h4>
+                      <div className="space-y-2 bg-white rounded border border-gray-200 p-3">
+                        {o.items?.map((it) => (
+                          <div
+                            key={it.id}
+                            className="flex items-center justify-between text-xs py-1.5 border-b border-gray-100 last:border-0"
+                          >
                             <div>
-                              <p className="font-medium text-gray-800">
-                                {order.address.line1}
-                                {order.address.line2 ? `, ${order.address.line2}` : ''}
-                              </p>
-                              <p>
-                                {order.address.city}, {order.address.state} — {order.address.pincode}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Payment & Courier Status */}
-                      <div className="bg-white p-4 rounded-lg border border-[#E8DFD0] space-y-2 text-xs">
-                        <span className="font-bold text-gray-900 block">Payment & Logistics</span>
-                        <div className="space-y-1 text-gray-600">
-                          <div className="flex justify-between">
-                            <span>Payment Method:</span>
-                            <span className="font-semibold text-gray-800">
-                              {isCOD ? 'Cash on Delivery (COD)' : 'Online Prepaid'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Payment Status:</span>
-                            <span className={`font-bold ${isPaid ? 'text-emerald-700' : 'text-amber-700'}`}>
-                              {order.payment_status}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Total Amount:</span>
-                            <span className="font-bold text-[#5E1224]">{formatPrice(order.total)}</span>
-                          </div>
-
-                          {order.awb_code && (
-                            <div className="pt-2 border-t border-gray-100 space-y-1">
-                              <div className="flex justify-between items-center">
-                                <span className="text-[11px] text-gray-500 font-medium">AWB Code:</span>
-                                <span className="font-mono font-bold text-gray-900 bg-gray-100 px-1.5 py-0.5 rounded text-[11px]">
-                                  {order.awb_code}
-                                </span>
-                              </div>
-                              {order.pickup_status && (
-                                <div className="flex justify-between items-center text-[11px]">
-                                  <span className="text-gray-500">Pickup Status:</span>
-                                  <span className="font-semibold text-indigo-700">{order.pickup_status}</span>
-                                </div>
-                              )}
-                              <div className="flex flex-wrap items-center gap-2 pt-1">
-                                {order.label_url && (
-                                  <a
-                                    href={order.label_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5E1224] hover:underline"
-                                  >
-                                    <FileText className="w-3 h-3" />
-                                    <span>Label PDF</span>
-                                  </a>
-                                )}
-                                {order.manifest_url && (
-                                  <a
-                                    href={order.manifest_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5E1224] hover:underline"
-                                  >
-                                    <FileText className="w-3 h-3" />
-                                    <span>Manifest PDF</span>
-                                  </a>
-                                )}
-                                <button
-                                  type="button"
-                                  disabled={refreshingOrderId === order.id}
-                                  onClick={() => handleRefreshTracking(order.id)}
-                                  className="inline-flex items-center gap-1 text-[11px] text-indigo-700 hover:text-indigo-900 font-semibold ml-auto disabled:opacity-50"
-                                >
-                                  <RefreshCw className={`w-3 h-3 ${refreshingOrderId === order.id ? 'animate-spin' : ''}`} />
-                                  <span>Refresh tracking</span>
-                                </button>
+                              <span className="font-bold text-gray-900">{it.product_name_snapshot}</span>
+                              <div className="text-[11px] text-gray-500 mt-0.5">
+                                Size: <strong className="text-gray-800">{it.size_snapshot}</strong>
+                                {it.colour_snapshot && ` • Shade: ${it.colour_snapshot}`}
+                                {` • Qty: ${it.quantity}`}
                               </div>
                             </div>
-                          )}
-
-                          {order.tracking_url && (
-                            <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                              <span className="text-[11px] text-gray-500">
-                                {order.courier_name || 'Courier'}:
-                              </span>
-                              <a
-                                href={order.tracking_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-[#5E1224] font-semibold hover:underline flex items-center gap-1"
-                              >
-                                <span>Track Shipment</span>
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Ordered Items List */}
-                    <div className="bg-white p-4 rounded-lg border border-[#E8DFD0] space-y-2 text-xs">
-                      <span className="font-bold text-gray-900 block">Items in Order</span>
-                      <div className="divide-y divide-gray-100">
-                        {order.items.map((item) => (
-                          <div key={item.id} className="py-2 flex items-center justify-between">
-                            <div>
-                              <p className="font-semibold text-gray-800">{item.product_name_snapshot}</p>
-                              <p className="text-[11px] text-gray-500">
-                                Size: <strong>{item.size_snapshot}</strong>
-                                {item.colour_snapshot ? ` | Colour: ${item.colour_snapshot}` : ''} | Qty: {item.quantity}
-                              </p>
-                            </div>
-                            <span className="font-bold text-[#5E1224]">
-                              {formatPrice(item.line_total)}
+                            <span className="font-mono font-semibold text-gray-900">
+                              {formatPrice(it.line_total)}
                             </span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* Shipping Modal / Input Box (when Tanya clicks "Mark as Shipped") */}
-                    {shippingOrderId === order.id && (
-                      <div className="bg-white p-4 rounded-lg border-2 border-[#5E1224] space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-serif font-bold text-xs sm:text-sm text-[#5E1224] flex items-center gap-1.5">
-                            <Truck className="w-4 h-4 text-[#B58A3C]" />
-                            <span>Add Shipping Details for {order.order_code}</span>
-                          </span>
+                    {/* Customer & Address Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      <div className="bg-white p-3.5 rounded border border-gray-200 space-y-1.5">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                          Customer Contact
+                        </span>
+                        <p className="font-bold text-gray-900">{o.customer_name}</p>
+                        <p className="font-mono text-gray-700">{o.phone}</p>
+                        <div className="flex items-center gap-2 pt-1">
+                          <a
+                            href={`tel:${cleanPhone}`}
+                            className="inline-flex items-center gap-1 text-[11px] text-gray-600 hover:text-black font-semibold bg-gray-100 px-2 py-1 rounded"
+                          >
+                            <Phone className="w-3 h-3" />
+                            <span>Call</span>
+                          </a>
+                          <a
+                            href={`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(
+                              `Hello ${o.customer_name}! Update regarding your Royal Libas order ${o.order_code}.`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-emerald-800 hover:text-emerald-950 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-1 rounded"
+                          >
+                            <MessageCircle className="w-3 h-3" />
+                            <span>WhatsApp</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded border border-gray-200 space-y-1">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                          Delivery Address
+                        </span>
+                        {o.address ? (
+                          <div className="text-gray-700 leading-snug">
+                            <p className="font-semibold text-gray-900">{o.address.name}</p>
+                            <p>{o.address.line1}</p>
+                            {o.address.line2 && <p>{o.address.line2}</p>}
+                            <p>
+                              {o.address.city}, {o.address.state} -{' '}
+                              <strong className="font-mono">{o.address.pincode}</strong>
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-gray-400">Address snapshot not found.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Logistics & Tracking info if present */}
+                    {(o.courier_name || o.awb_code) && (
+                      <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-indigo-950">
+                            Fulfillment: {o.courier_name || 'Assigned Courier'}
+                          </div>
+                          {o.awb_code && (
+                            <div className="text-[11px] font-mono text-indigo-900 mt-0.5">
+                              AWB: <strong>{o.awb_code}</strong>
+                              {o.pickup_status && ` • Status: ${o.pickup_status}`}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {o.tracking_url && (
+                            <a
+                              href={o.tracking_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-indigo-800 hover:underline font-semibold"
+                            >
+                              <span>Track Live</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
                           <button
                             type="button"
-                            onClick={() => setShippingOrderId(null)}
-                            className="text-xs text-gray-400 hover:text-gray-700"
+                            disabled={refreshingOrderId === o.id}
+                            onClick={() => handleRefreshTracking(o.id)}
+                            className="inline-flex items-center gap-1 text-[11px] bg-white border border-indigo-300 text-indigo-900 px-2.5 py-1 rounded shadow-sm hover:bg-indigo-50 font-medium"
                           >
-                            Cancel
+                            <RefreshCw
+                              className={`w-3 h-3 ${refreshingOrderId === o.id ? 'animate-spin' : ''}`}
+                            />
+                            <span>Refresh tracking</span>
                           </button>
                         </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          <div>
-                            <label className="block font-semibold text-gray-700 mb-1">
-                              Courier Partner <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              placeholder="e.g. Delhivery / BlueDart / DTDC"
-                              value={courierName}
-                              onChange={(e) => setCourierName(e.target.value)}
-                              className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:border-[#5E1224]"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block font-semibold text-gray-700 mb-1">
-                              Tracking URL / AWB Link <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="url"
-                              required
-                              placeholder="https://delhivery.com/track/..."
-                              value={trackingUrl}
-                              onChange={(e) => setTrackingUrl(e.target.value)}
-                              className="w-full px-3 py-2 rounded border border-gray-300 focus:outline-none focus:border-[#5E1224]"
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={isUpdating || !trackingUrl.trim()}
-                          onClick={() =>
-                            handleStatusChange(
-                              order.id,
-                              'SHIPPED',
-                              courierName.trim(),
-                              trackingUrl.trim()
-                            )
-                          }
-                          className="w-full py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white font-semibold text-xs uppercase tracking-wider rounded transition-colors shadow flex items-center justify-center gap-2"
-                        >
-                          {isUpdating ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <Truck className="w-4 h-4" />
-                              <span>Confirm Shipment & Notify Tracking</span>
-                            </>
-                          )}
-                        </button>
                       </div>
                     )}
 
-                    {/* Action Bar */}
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-                      {order.status === 'PLACED' && (
-                        <button
-                          type="button"
-                          disabled={isUpdating}
-                          onClick={() => handleStatusChange(order.id, 'PACKED')}
-                          className="px-3.5 py-2 bg-indigo-700 hover:bg-indigo-800 text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Package className="w-3.5 h-3.5" />
-                          <span>Mark as Packed</span>
-                        </button>
-                      )}
-
-                      {(order.status === 'PLACED' || order.status === 'PACKED') && (
-                        <>
-                          <div className="relative group">
+                    {/* Staff Notes section */}
+                    <div className="bg-white p-3.5 rounded border border-gray-200 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Internal Staff Notes
+                        </span>
+                        {editingNotesOrderId !== o.id && (
+                          <button
+                            onClick={() => {
+                              setEditingNotesOrderId(o.id);
+                              setNoteText(o.admin_notes || '');
+                            }}
+                            className="text-[11px] text-[#5E1224] hover:underline font-medium"
+                          >
+                            {o.admin_notes ? 'Edit Notes' : '+ Add Note'}
+                          </button>
+                        )}
+                      </div>
+                      {editingNotesOrderId === o.id ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={noteText}
+                            onChange={(e) => setNoteText(e.target.value)}
+                            placeholder="Add internal notes (e.g., custom hem requested, buyer phoned to confirm)..."
+                            className="w-full p-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224] h-20"
+                          />
+                          <div className="flex justify-end gap-2">
                             <button
                               type="button"
-                              disabled={!fulfillmentConfig?.is_configured}
-                              onClick={() => {
-                                if (fulfillmentConfig?.is_configured) {
-                                  setActiveFulfillOrder(order);
-                                }
-                              }}
-                              title={
-                                !fulfillmentConfig?.is_configured
-                                  ? (fulfillmentConfig?.disabled_reason || '')
-                                  : ''
-                              }
-                              className="px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-200 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed border border-[#5E1224] text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                              onClick={() => setEditingNotesOrderId(null)}
+                              className="px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
                             >
-                              <Truck className="w-3.5 h-3.5 text-[#B58A3C]" />
-                              <span>{fulfillmentConfig?.button_label || 'Ship Parcel'}</span>
+                              Cancel
                             </button>
-                            {!fulfillmentConfig?.is_configured && (
-                              <span className="hidden group-hover:block absolute bottom-full left-0 mb-1 z-30 px-2.5 py-1 bg-gray-900 text-white text-[10px] rounded shadow-lg whitespace-nowrap">
-                                {fulfillmentConfig?.disabled_reason || 'Fulfillment service not configured — use manual tracking'}
-                              </span>
-                            )}
+                            <button
+                              type="button"
+                              disabled={isSavingNote}
+                              onClick={() => handleSaveNotes(o.id)}
+                              className="px-3 py-1 bg-[#5E1224] text-white text-xs font-semibold rounded hover:bg-[#4A0E1C]"
+                            >
+                              {isSavingNote ? 'Saving...' : 'Save Notes'}
+                            </button>
                           </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-700 whitespace-pre-line">
+                          {o.admin_notes || <span className="text-gray-400 italic">No staff notes recorded.</span>}
+                        </p>
+                      )}
+                    </div>
 
+                    {/* Action Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {o.status === 'PLACED' && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setShippingOrderId(order.id);
-                              setTrackingUrl(order.tracking_url || '');
-                            }}
-                            className="px-3.5 py-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                            disabled={isUpdating}
+                            onClick={() => handleStatusChange(o.id, 'PACKED')}
+                            className="px-3.5 py-1.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded text-xs font-semibold"
                           >
-                            <Truck className="w-3.5 h-3.5 text-gray-500" />
-                            <span>Manual Tracking Entry</span>
+                            Mark Packed
                           </button>
-                        </>
-                      )}
+                        )}
 
-                      {order.status === 'SHIPPED' && (
-                        <button
-                          type="button"
-                          disabled={isUpdating}
-                          onClick={() => handleStatusChange(order.id, 'DELIVERED')}
-                          className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Mark as Delivered</span>
-                        </button>
-                      )}
+                        {(o.status === 'PLACED' || o.status === 'CONFIRMED' || o.status === 'PACKED') && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveFulfillOrder(o)}
+                            className="px-3.5 py-1.5 bg-[#B58A3C] hover:bg-[#9E7632] text-white rounded text-xs font-semibold inline-flex items-center gap-1.5"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            <span>Ship via Shiprocket</span>
+                          </button>
+                        )}
 
-                      {order.status !== 'CANCELLED' && order.status !== 'DELIVERED' && (
-                        <button
-                          type="button"
-                          disabled={isUpdating}
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to cancel order ${order.order_code}?`)) {
-                              handleStatusChange(order.id, 'CANCELLED');
-                            }
-                          }}
-                          className="px-3 py-2 text-gray-500 hover:text-red-700 hover:bg-red-50 rounded text-xs font-semibold transition-colors flex items-center gap-1 ml-auto"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span>Cancel Order</span>
-                        </button>
-                      )}
+                        {o.status === 'SHIPPED' && (
+                          <button
+                            type="button"
+                            disabled={isUpdating}
+                            onClick={() => handleStatusChange(o.id, 'DELIVERED')}
+                            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold inline-flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Mark Delivered</span>
+                          </button>
+                        )}
+
+                        {o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
+                          <button
+                            type="button"
+                            onClick={() => setCancelModalOrder(o)}
+                            className="px-3 py-1.5 border border-red-300 text-red-700 hover:bg-red-50 rounded text-xs font-semibold"
+                          >
+                            Cancel Order...
+                          </button>
+                        )}
+                      </div>
+
+                      <Link
+                        to={`/admin/orders/${o.id}`}
+                        className="text-xs text-[#5E1224] font-semibold hover:underline flex items-center gap-1 ml-auto"
+                      >
+                        <span>Full Order Dossier</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </Link>
                     </div>
                   </div>
                 )}
@@ -596,6 +645,43 @@ export const AdminOrders: React.FC = () => {
         </div>
       )}
 
+      {/* Cancellation Confirmation Modal */}
+      {cancelModalOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-gray-200">
+            <div className="flex items-center gap-3 text-red-600">
+              <AlertCircle className="w-6 h-6" />
+              <h3 className="text-base font-serif font-bold text-gray-900">
+                Cancel Order {cancelModalOrder.order_code}?
+              </h3>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              This action will mark the order as <strong>CANCELLED</strong>. All reserved garments will be
+              automatically and atomically restocked back to available inventory. If a Shiprocket consignment
+              exists and has not been picked up, it will be cancelled via the Shiprocket API.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancelModalOrder(null)}
+                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded text-xs font-medium"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => handleStatusChange(cancelModalOrder.id, 'CANCELLED')}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold"
+              >
+                {isUpdating ? 'Cancelling...' : 'Confirm Cancellation & Restock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shiprocket Fulfillment Modal */}
       {activeFulfillOrder && (
         <FulfillmentModal
           order={activeFulfillOrder}
@@ -612,4 +698,3 @@ export const AdminOrders: React.FC = () => {
     </div>
   );
 };
-
