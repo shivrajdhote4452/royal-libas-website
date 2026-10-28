@@ -20,7 +20,7 @@ export const MobileBottomNav: React.FC = () => {
       <NavLink
         to="/"
         className={({ isActive }) =>
-          `flex flex-col items-center justify-center py-1 px-3 text-[10px] font-semibold tracking-wider uppercase transition-colors ${
+          `flex flex-col items-center justify-center py-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors min-h-[44px] min-w-[48px] ${
             isActive ? 'text-[#5E1224]' : 'text-gray-500 hover:text-[#5E1224]'
           }`
         }
@@ -32,7 +32,7 @@ export const MobileBottomNav: React.FC = () => {
       <NavLink
         to="/shop"
         className={({ isActive }) =>
-          `flex flex-col items-center justify-center py-1 px-3 text-[10px] font-semibold tracking-wider uppercase transition-colors ${
+          `flex flex-col items-center justify-center py-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors min-h-[44px] min-w-[48px] ${
             isActive ? 'text-[#5E1224]' : 'text-gray-500 hover:text-[#5E1224]'
           }`
         }
@@ -44,7 +44,7 @@ export const MobileBottomNav: React.FC = () => {
       <NavLink
         to="/shop?wishlist=true"
         className={({ isActive }) =>
-          `relative flex flex-col items-center justify-center py-1 px-3 text-[10px] font-semibold tracking-wider uppercase transition-colors ${
+          `relative flex flex-col items-center justify-center py-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors min-h-[44px] min-w-[48px] ${
             isActive ? 'text-[#5E1224]' : 'text-gray-500 hover:text-[#5E1224]'
           }`
         }
@@ -63,7 +63,7 @@ export const MobileBottomNav: React.FC = () => {
       <NavLink
         to="/track-order"
         className={({ isActive }) =>
-          `flex flex-col items-center justify-center py-1 px-3 text-[10px] font-semibold tracking-wider uppercase transition-colors ${
+          `flex flex-col items-center justify-center py-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors min-h-[44px] min-w-[48px] ${
             isActive ? 'text-[#5E1224]' : 'text-gray-500 hover:text-[#5E1224]'
           }`
         }

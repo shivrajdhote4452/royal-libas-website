@@ -199,7 +199,7 @@ export const AdminInventory: React.FC = () => {
       </div>
 
       {/* Summary KPI Pills */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
             Total Tracked Stock
@@ -297,7 +297,7 @@ export const AdminInventory: React.FC = () => {
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[640px] text-left text-xs">
               <thead className="bg-[#FCF8F0] border-b border-gray-200 text-gray-600 uppercase font-semibold text-[10px] tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Garment & SKU</th>

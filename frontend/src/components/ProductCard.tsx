@@ -72,6 +72,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const inWishlist = isInWishlist(product.id);
   const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
 
+  // Concise fabric description avoiding tiny text & excessive truncation on narrow cards
+  const conciseFabric = product.fabric
+    ? product.fabric.replace(/\s+(?:with|paired with|featuring).*$/i, '').trim()
+    : null;
+
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -181,16 +186,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <button
           type="button"
           onClick={handleWishlistClick}
-          className={`absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] ${
+          className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 z-20 w-9 h-9 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] active:scale-95 ${
             inWishlist
               ? 'bg-white text-[#5E1224] shadow-md scale-105'
-              : 'bg-white/90 text-gray-700 hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
+              : 'bg-white/95 text-gray-700 hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
           }`}
           aria-label={inWishlist ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
           data-testid={`wishlist-btn-${product.id}`}
         >
           <Heart
-            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+            className={`w-4 h-4 sm:w-3.5 sm:h-3.5 transition-transform duration-200 ${
               inWishlist ? 'fill-[#5E1224] stroke-[#5E1224] animate-heart-pop' : 'stroke-current'
             }`}
           />
@@ -228,13 +233,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           ======================================================== */}
       <div className="p-3.5 sm:p-4 bg-white flex-1 flex flex-col justify-between">
         <div>
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#B58A3C] truncate">
-              {product.fabric || product.category || 'Atelier Collection'}
+          <div className="flex items-center justify-between gap-1.5 mb-1 text-[10.5px] sm:text-[11px] font-medium tracking-wide">
+            <span className="font-semibold text-[#B58A3C] uppercase tracking-wider truncate">
+              {product.category || conciseFabric || 'Atelier Collection'}
             </span>
-            {product.category && (
-              <span className="text-[10px] text-gray-400 font-medium tracking-wider uppercase">
-                {product.category}
+            {conciseFabric && product.category && (
+              <span className="hidden sm:inline text-gray-400 uppercase tracking-normal truncate max-w-[50%]">
+                {conciseFabric}
               </span>
             )}
           </div>
@@ -242,7 +247,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {/* Accessible Title Link (Sibling, NOT nesting buttons!) */}
           <h3
             id={`product-title-${product.id}`}
-            className="font-serif text-sm sm:text-base font-semibold text-[#2B1B1E] group-hover:text-[#5E1224] transition-colors line-clamp-1"
+            className="font-serif text-xs sm:text-sm md:text-base font-semibold text-[#2B1B1E] group-hover:text-[#5E1224] transition-colors line-clamp-2 leading-snug min-h-[2.4rem] sm:min-h-[2.6rem]"
           >
             <Link
               to={`/product/${product.slug}`}
@@ -297,13 +302,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Price Row & Mobile Quick Add Button */}
-        <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between">
-          <div className="flex items-baseline gap-2 flex-wrap no-motion">
-            <span className="price-display text-sm sm:text-base font-bold text-[#5E1224]">
+        <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap no-motion min-w-0">
+            <span className="price-display text-sm sm:text-base font-bold text-[#5E1224] tracking-tight">
               {formatPrice(sellingPrice)}
             </span>
             {mrp && mrp > sellingPrice && (
-              <span className="price-display text-xs text-gray-400 line-through">
+              <span className="price-display text-[11px] sm:text-xs text-gray-400 line-through">
                 {formatPrice(mrp)}
               </span>
             )}
@@ -314,11 +319,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             <button
               type="button"
               onClick={handleQuickAddClick}
-              className="sm:hidden w-8 h-8 rounded-full bg-[#5E1224] hover:bg-[#3A080F] text-[#FCF8F0] flex items-center justify-center shadow-md active:scale-90 transition-transform shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C]"
+              className="sm:hidden w-9 h-9 rounded-full bg-[#5E1224] hover:bg-[#3A080F] text-[#FCF8F0] flex items-center justify-center shadow-md active:scale-90 transition-transform shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C]"
               aria-label={`Quick add ${product.name} to bag`}
               data-testid={`mobile-quickadd-btn-${product.id}`}
             >
-              <ShoppingBag className="w-3.5 h-3.5 text-[#D4AF67]" />
+              <ShoppingBag className="w-4 h-4 text-[#D4AF67]" />
             </button>
           )}
 

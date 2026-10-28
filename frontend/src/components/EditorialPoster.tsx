@@ -94,14 +94,14 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
       )}
 
       {/* Foreground Content Container */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 sm:pt-16 lg:pt-24 pb-10 sm:pb-16 lg:pb-24 min-h-[580px] sm:min-h-[620px] lg:min-h-[600px] flex items-end lg:items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-16 lg:pt-24 pb-8 sm:pb-16 lg:pb-24 min-h-[520px] sm:min-h-[600px] lg:min-h-[600px] flex items-end lg:items-center">
         <div
-          className={`w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center ${
+          className={`w-full grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-center ${
             layout === 'content-right' ? 'lg:justify-items-end' : ''
           }`}
         >
           <div
-            className={`lg:col-span-6 xl:col-span-5 space-y-5 text-left p-6 sm:p-8 lg:p-0 ${
+            className={`lg:col-span-6 xl:col-span-5 space-y-4 sm:space-y-5 text-left p-5 sm:p-8 lg:p-0 ${
               isEveryday
                 ? 'bg-[#FAF5EC]/85 lg:bg-transparent backdrop-blur-[2px] lg:backdrop-blur-none border border-[#B58A3C]/25 lg:border-0 shadow-md lg:shadow-none'
                 : 'bg-[#16060A]/80 lg:bg-transparent backdrop-blur-[2px] lg:backdrop-blur-none border border-[#B58A3C]/35 lg:border-0 shadow-md lg:shadow-none'
@@ -113,7 +113,7 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
             <div className="poster-seq-item poster-seq-1 flex items-center gap-2.5">
               <span className="w-5 h-[1px] bg-[#B58A3C]" />
               <span
-                className={`text-[10.5px] sm:text-xs uppercase tracking-[0.3em] font-semibold ${kickerColor}`}
+                className={`text-[10px] sm:text-xs uppercase tracking-[0.26em] sm:tracking-[0.3em] font-semibold ${kickerColor}`}
               >
                 {kicker}
               </span>
@@ -121,7 +121,7 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
 
             {/* Main Heading */}
             <h2
-              className={`poster-seq-item poster-seq-2 font-serif text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold tracking-tight leading-[1.08] ${headingColor}`}
+              className={`poster-seq-item poster-seq-2 font-serif text-2xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold tracking-tight leading-[1.1] ${headingColor}`}
             >
               {heading}
             </h2>
@@ -131,16 +131,16 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
 
             {/* Subtitle */}
             <p
-              className={`poster-seq-item poster-seq-3 text-sm sm:text-base lg:text-lg font-light leading-relaxed max-w-md ${subtitleColor}`}
+              className={`poster-seq-item poster-seq-3 text-xs sm:text-base lg:text-lg font-light leading-relaxed max-w-md ${subtitleColor}`}
             >
               {subtitle}
             </p>
 
             {/* CTA Button with polished hover & keyboard focus */}
-            <div className="poster-seq-item poster-seq-4 pt-2">
+            <div className="poster-seq-item poster-seq-4 pt-1 sm:pt-2">
               <Link
                 to={ctaLink}
-                className={`luxury-btn-sheen inline-flex items-center justify-center gap-3 px-8 sm:px-10 py-4 text-xs sm:text-sm font-ui font-bold uppercase tracking-[0.24em] transition-all duration-300 group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${btnClasses}`}
+                className={`luxury-btn-sheen inline-flex items-center justify-center gap-2.5 sm:gap-3 px-6 sm:px-10 py-3.5 sm:py-4 text-xs sm:text-sm font-ui font-bold uppercase tracking-[0.2em] sm:tracking-[0.24em] transition-all duration-300 group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${btnClasses}`}
               >
                 <span>{ctaText}</span>
                 <span
@@ -154,7 +154,7 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
 
             {/* Sub-label Tagline - Clean brand mark without preview concept claims */}
             <div
-              className={`poster-seq-item poster-seq-5 pt-4 sm:pt-6 text-[10px] sm:text-[10.5px] uppercase tracking-[0.28em] font-medium flex items-center gap-2 ${taglineColor}`}
+              className={`poster-seq-item poster-seq-5 pt-3 sm:pt-6 text-[9.5px] sm:text-[10.5px] uppercase tracking-[0.25em] font-medium flex items-center gap-2 ${taglineColor}`}
             >
               <span>{tagline || 'ROYAL LIBAS'}</span>
               <span className="opacity-40">&bull;</span>

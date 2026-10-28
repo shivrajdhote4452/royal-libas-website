@@ -109,7 +109,7 @@ export const Cart: React.FC = () => {
         </div>
       </section>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-16 sm:pb-16">
         {/* Stock warning notification if any item is sold out or low */}
         {hasStockErrors && (
           <div className="mb-6 p-4 rounded bg-red-50 border border-red-200 text-red-800 text-xs sm:text-sm flex items-start gap-3">

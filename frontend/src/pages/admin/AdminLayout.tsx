@@ -234,10 +234,10 @@ export const AdminLayout: React.FC = () => {
                           to={item.to}
                           onClick={() => setMobileMenuOpen(false)}
                           className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2 text-xs font-medium ${
+                            `flex items-center gap-3 px-3.5 py-2.5 min-h-[40px] text-xs font-medium ${
                               isActive
                                 ? 'bg-[#4A0E1C] text-[#B58A3C] font-bold border-l-4 border-[#B58A3C]'
-                                : 'text-white/80 hover:text-white'
+                                : 'text-white/80 hover:text-white hover:bg-white/5'
                             }`
                           }
                         >
@@ -293,18 +293,18 @@ export const AdminLayout: React.FC = () => {
         </header>
 
         {/* Page Container */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-12">
+        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-[calc(6rem+env(safe-area-inset-bottom,0px))] lg:pb-12">
           <Outlet />
         </main>
       </div>
 
       {/* Mobile Bottom Quick-Access Bar */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#5E1224] border-t border-[#4A0E1C] z-40 px-2 py-1.5 shadow-2xl flex items-center justify-around">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#5E1224] border-t border-[#4A0E1C] z-40 px-2 py-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] shadow-2xl flex items-center justify-around font-sans">
         <NavLink
           to="/admin/dashboard"
           className={({ isActive }) =>
-            `flex flex-col items-center py-1 px-2 text-[10px] ${
-              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70'
+            `flex flex-col items-center justify-center py-1.5 px-2 min-w-[50px] min-h-[44px] text-[10px] ${
+              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70 hover:text-white'
             }`
           }
         >
@@ -314,8 +314,8 @@ export const AdminLayout: React.FC = () => {
         <NavLink
           to="/admin/orders"
           className={({ isActive }) =>
-            `flex flex-col items-center py-1 px-2 text-[10px] ${
-              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70'
+            `flex flex-col items-center justify-center py-1.5 px-2 min-w-[50px] min-h-[44px] text-[10px] ${
+              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70 hover:text-white'
             }`
           }
         >
@@ -325,8 +325,8 @@ export const AdminLayout: React.FC = () => {
         <NavLink
           to="/admin/payments"
           className={({ isActive }) =>
-            `flex flex-col items-center py-1 px-2 text-[10px] ${
-              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70'
+            `flex flex-col items-center justify-center py-1.5 px-2 min-w-[50px] min-h-[44px] text-[10px] ${
+              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70 hover:text-white'
             }`
           }
         >
@@ -336,8 +336,8 @@ export const AdminLayout: React.FC = () => {
         <NavLink
           to="/admin/inventory"
           className={({ isActive }) =>
-            `flex flex-col items-center py-1 px-2 text-[10px] ${
-              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70'
+            `flex flex-col items-center justify-center py-1.5 px-2 min-w-[50px] min-h-[44px] text-[10px] ${
+              isActive ? 'text-[#B58A3C] font-bold' : 'text-white/70 hover:text-white'
             }`
           }
         >
@@ -346,7 +346,7 @@ export const AdminLayout: React.FC = () => {
         </NavLink>
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="flex flex-col items-center py-1 px-2 text-[10px] text-[#B58A3C]"
+          className="flex flex-col items-center justify-center py-1.5 px-2 min-w-[50px] min-h-[44px] text-[10px] text-[#B58A3C] hover:text-[#E6C687]"
         >
           <Menu className="w-4 h-4 mb-0.5" />
           <span>More</span>

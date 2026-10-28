@@ -286,7 +286,7 @@ export const Checkout: React.FC = () => {
         </div>
       </section>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-[calc(4rem+env(safe-area-inset-bottom,0px))]">
         <div className="mb-6 flex items-center justify-between">
           <Link
             to="/cart"

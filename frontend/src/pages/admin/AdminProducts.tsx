@@ -622,7 +622,7 @@ export const AdminProducts: React.FC = () => {
                                       type="button"
                                       onClick={() => handleAdjustStock(v, -1)}
                                       disabled={v.stock <= 0}
-                                      className="px-2 py-0.5 hover:bg-gray-200 text-gray-700 font-bold disabled:opacity-40"
+                                      className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center hover:bg-gray-200 text-gray-700 font-bold text-sm disabled:opacity-40"
                                       title="Decrease stock by 1"
                                     >
                                       -
@@ -641,7 +641,7 @@ export const AdminProducts: React.FC = () => {
                                     <button
                                       type="button"
                                       onClick={() => handleAdjustStock(v, 1)}
-                                      className="px-2 py-0.5 hover:bg-gray-200 text-gray-700 font-bold"
+                                      className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center hover:bg-gray-200 text-gray-700 font-bold text-sm"
                                       title="Increase stock by 1"
                                     >
                                       +
@@ -656,7 +656,7 @@ export const AdminProducts: React.FC = () => {
                                     setEditPrice(String(v.selling_price));
                                     setEditStock(String(v.stock));
                                   }}
-                                  className="p-1.5 text-gray-500 hover:text-[#5E1224] rounded hover:bg-gray-100"
+                                  className="p-2 text-gray-500 hover:text-[#5E1224] rounded hover:bg-gray-100 min-w-[36px] min-h-[36px] flex items-center justify-center"
                                   title="Edit price or stock directly"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -684,7 +684,7 @@ export const AdminProducts: React.FC = () => {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-[11px] font-semibold text-gray-600 mb-1">
                               Size
@@ -804,29 +804,29 @@ export const AdminProducts: React.FC = () => {
                                   type="button"
                                   disabled={idx === 0}
                                   onClick={() => handleReorder(product.id, idx, idx - 1)}
-                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded text-xs"
+                                  className="p-2 sm:p-1.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[32px] min-h-[32px] flex items-center justify-center text-xs"
                                   title="Move earlier"
                                 >
-                                  <ArrowLeft className="w-3 h-3" />
+                                  <ArrowLeft className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                                 </button>
                                 <button
                                   type="button"
                                   disabled={idx === (photosMap[product.id]?.length || 0) - 1}
                                   onClick={() => handleReorder(product.id, idx, idx + 1)}
-                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded text-xs"
+                                  className="p-2 sm:p-1.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[32px] min-h-[32px] flex items-center justify-center text-xs"
                                   title="Move later"
                                 >
-                                  <ArrowRight className="w-3 h-3" />
+                                  <ArrowRight className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                                 </button>
                               </div>
 
                               <button
                                 type="button"
                                 onClick={() => handleRemoveImage(product.id, idx)}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                className="p-2 sm:p-1.5 text-red-600 hover:bg-red-50 rounded min-w-[32px] min-h-[32px] flex items-center justify-center"
                                 title="Remove image"
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                               </button>
                             </div>
                           </div>

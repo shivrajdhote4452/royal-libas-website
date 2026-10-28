@@ -33,7 +33,7 @@ export const Footer: React.FC = () => {
   };
 
   return (
-    <footer className="bg-[#5E1224] text-[#FCF8F0] pt-16 pb-12 border-t border-[#B58A3C]/30 font-sans">
+    <footer className="bg-[#5E1224] text-[#FCF8F0] pt-16 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] md:pb-12 border-t border-[#B58A3C]/30 font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 lg:gap-12 pb-14 border-b border-[#B58A3C]/20">
           {/* Brand Column (Col 1-4) */}

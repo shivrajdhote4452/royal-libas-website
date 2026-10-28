@@ -405,22 +405,22 @@ export const Home: React.FC = () => {
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[#180A0E]/95 via-[#180A0E]/80 to-transparent pointer-events-none" />
 
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 w-full">
-            <div className="editorial-motion-copy max-w-xl space-y-5 text-left">
-              <span className="text-[10px] uppercase tracking-[0.3em] text-[#D4AF67] font-semibold block">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-20 w-full">
+            <div className="editorial-motion-copy max-w-xl space-y-4 sm:space-y-5 text-left">
+              <span className="text-[9.5px] sm:text-[10px] uppercase tracking-[0.25em] sm:tracking-[0.3em] text-[#D4AF67] font-semibold block">
                 SPECIAL OCCASIONS
               </span>
-              <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-[#FCF8F0] leading-tight">
+              <h2 className="font-serif text-2xl sm:text-4xl lg:text-5xl font-bold text-[#FCF8F0] leading-tight">
                 THE FESTIVE COLLECTION
               </h2>
               <div className="w-12 h-[1px] bg-[#D4AF67]" />
-              <p className="text-sm sm:text-base text-[#FCF8F0]/90 leading-relaxed font-light">
+              <p className="text-xs sm:text-base text-[#FCF8F0]/90 leading-relaxed font-light">
                 For celebrations that become a part of your story. Tailored in pure chanderi silks, modal velvets, and delicate zardozi needlework.
               </p>
               <div className="pt-2">
                 <Link
                   to="/shop?collection=festive-edit"
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#D4AF67] via-[#C5A059] to-[#B58A3C] hover:from-[#E2C27F] hover:to-[#D4AF67] text-[#1A0B0E] font-ui font-bold text-xs tracking-[0.22em] uppercase transition-all shadow-[0_6px_20px_rgba(212,175,103,0.35)] border border-[#D4AF67]"
+                  className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3.5 sm:py-4 bg-gradient-to-r from-[#D4AF67] via-[#C5A059] to-[#B58A3C] hover:from-[#E2C27F] hover:to-[#D4AF67] text-[#1A0B0E] font-ui font-bold text-xs tracking-[0.2em] sm:tracking-[0.22em] uppercase transition-all shadow-[0_6px_20px_rgba(212,175,103,0.35)] border border-[#D4AF67]"
                 >
                   <span>EXPLORE FESTIVE COLLECTION</span>
                   <ArrowRight className="w-4 h-4" />
