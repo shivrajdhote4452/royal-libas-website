@@ -89,7 +89,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           >
             <Heart
               className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                inWishlist ? 'fill-[#5E1224] stroke-[#5E1224]' : 'stroke-current'
+                inWishlist ? 'fill-[#5E1224] stroke-[#5E1224] animate-heart-pop' : 'stroke-current'
               }`}
             />
           </button>

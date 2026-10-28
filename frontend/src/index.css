@@ -4,9 +4,11 @@
 
 :root {
   --motion-fast: 180ms;
-  --motion-standard: 280ms;
-  --motion-slow: 520ms;
-  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-standard: 260ms;
+  --motion-slow: 480ms;
+  --motion-hero: 700ms;
+  --ease-royal: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
   --maroon-primary: #5E1224;
   --maroon-dark: #3A080F;
   --gold-primary: #B58A3C;
@@ -17,10 +19,16 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     background-color: #FCF8F0;
     color: #2B1B1E;
     font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, .font-serif {
@@ -34,34 +42,34 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom luxury scrollbar */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: #FCF8F0;
 }
 ::-webkit-scrollbar-thumb {
   background: #B58A3C;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #8C6726;
 }
 
-/* Button click press scale (0.97) */
+/* Button micro-interactions with refined press feedback */
 button:active:not(:disabled),
 .btn-press:active:not(:disabled) {
-  transform: scale(0.97);
-  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform: scale(0.975);
+  transition: transform 100ms var(--ease-soft);
 }
 
-/* Page fade-in on route change (300-400ms ease-out) */
+/* Page fade-in on route change */
 @keyframes pageFadeIn {
   0% {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   100% {
     opacity: 1;
@@ -70,14 +78,14 @@ button:active:not(:disabled),
 }
 
 .page-enter {
-  animation: pageFadeIn 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: pageFadeIn 320ms var(--ease-royal) forwards;
 }
 
 /* Staggered card fade-in */
 @keyframes cardStagger {
   0% {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(14px);
   }
   100% {
     opacity: 1;
@@ -87,10 +95,68 @@ button:active:not(:disabled),
 
 .card-stagger {
   opacity: 0;
-  animation: cardStagger 360ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: cardStagger 360ms var(--ease-royal) forwards;
 }
 
-/* Gold shimmer gradient for hero */
+/* Dropdown Slide Animation */
+@keyframes dropdownSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-animated {
+  animation: dropdownSlide 220ms var(--ease-royal) forwards;
+}
+
+/* Heart Pop Animation for Wishlist Toggle */
+@keyframes heartPop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-heart-pop {
+  animation: heartPop 350ms var(--ease-soft) forwards;
+}
+
+/* Continuous Luxury Marquee */
+@keyframes marqueeContinuous {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marqueeContinuous 28s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-track:hover,
+.animate-marquee-track:focus-within {
+  animation-play-state: paused;
+}
+
+/* Gold shimmer gradient for hero accents */
 @keyframes goldShimmer {
   0% {
     background-position: -200% 0;
@@ -113,33 +179,13 @@ button:active:not(:disabled),
   animation: goldShimmer 7s infinite linear;
 }
 
-/* Gentle Marquee for trust strip */
-@keyframes marqueeScroll {
-  0% {
-    transform: translateX(0%);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-.animate-marquee-track {
-  display: flex;
-  width: 200%;
-  animation: marqueeScroll 32s linear infinite;
-}
-
-.animate-marquee-track:hover {
-  animation-play-state: paused;
-}
-
 /* Header cart badge bounce once */
 @keyframes cartBounceOnce {
   0% {
     transform: scale(1);
   }
   30% {
-    transform: scale(1.32) translateY(-2px);
+    transform: scale(1.3) translateY(-2px);
   }
   60% {
     transform: scale(0.95);
@@ -150,7 +196,7 @@ button:active:not(:disabled),
 }
 
 .animate-cart-bounce {
-  animation: cartBounceOnce 380ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: cartBounceOnce 360ms var(--ease-soft);
 }
 
 /* Checkmark SVG stroke draw animation */
@@ -166,15 +212,19 @@ button:active:not(:disabled),
 .animate-draw-check {
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: checkmarkStroke 450ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: checkmarkStroke 420ms var(--ease-soft) forwards;
 }
 
-/* Reserved 3/4 aspect ratio */
+/* Reserved aspect ratios to prevent Cumulative Layout Shift (CLS) */
 .aspect-3-4 {
   aspect-ratio: 3 / 4;
 }
 
-/* Price, stock, total numbers must never animate or shift */
+.aspect-4-5 {
+  aspect-ratio: 4 / 5;
+}
+
+/* Numerical price and stock indicators must not bounce or shift */
 .price-display,
 .stock-display,
 .total-display {
@@ -184,41 +234,7 @@ button:active:not(:disabled),
   transition: none !important;
 }
 
-/* Strict respect for prefers-reduced-motion: turn ALL animations off */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  .animate-marquee-track {
-    animation: none !important;
-    width: auto !important;
-    transform: none !important;
-  }
-
-  .gold-shimmer {
-    animation: none !important;
-  }
-
-  .page-enter,
-  .card-stagger {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-
-  .animate-cart-bounce,
-  .animate-draw-check {
-    animation: none !important;
-  }
-}
-
-/* Option C Editorial Fashion Utilities */
+/* Editorial Fashion Utilities */
 .arch-card {
   border-top-left-radius: 9999px;
   border-top-right-radius: 9999px;
@@ -241,9 +257,9 @@ button:active:not(:disabled),
 .btn-primary {
   background-color: #5E1224;
   color: #FCF8F0;
-  transition: background-color var(--motion-fast) var(--ease-premium),
-              transform var(--motion-fast) var(--ease-premium),
-              box-shadow var(--motion-fast) var(--ease-premium);
+  transition: background-color var(--motion-fast) var(--ease-royal),
+              transform var(--motion-fast) var(--ease-royal),
+              box-shadow var(--motion-fast) var(--ease-royal);
 }
 .btn-primary:hover:not(:disabled) {
   background-color: #3A080F;
@@ -255,7 +271,7 @@ button:active:not(:disabled),
   background-color: transparent;
   color: #5E1224;
   border: 1px solid #B58A3C;
-  transition: all var(--motion-fast) var(--ease-premium);
+  transition: all var(--motion-fast) var(--ease-royal);
 }
 .btn-secondary:hover:not(:disabled) {
   background-color: #5E1224;
@@ -267,7 +283,7 @@ button:active:not(:disabled),
 .btn-gold {
   background-color: #B58A3C;
   color: #FFFFFF;
-  transition: all var(--motion-fast) var(--ease-premium);
+  transition: all var(--motion-fast) var(--ease-royal);
 }
 .btn-gold:hover:not(:disabled) {
   background-color: #8C6726;
@@ -286,7 +302,7 @@ button:active:not(:disabled),
   background-size: 24px 24px;
 }
 
-/* Skeleton Shimmer Loading (Point 31) */
+/* Skeleton Shimmer Loading */
 @keyframes skeletonPulse {
   0% {
     background-position: -200% 0;
@@ -307,15 +323,84 @@ button:active:not(:disabled),
   animation: skeletonPulse 1.8s infinite ease-in-out;
 }
 
-/* Editorial Scroll Reveal (Point 22) */
+/* ========================================================
+   EDITORIAL SCROLL REVEAL & STAGGER SYSTEM
+   Content is visible by default so it never hides if JS fails
+   ======================================================== */
 .reveal-on-scroll {
   opacity: 0;
-  transform: translateY(16px);
-  transition: opacity var(--motion-slow) var(--ease-premium),
-              transform var(--motion-slow) var(--ease-premium);
+  transform: translateY(18px);
+  transition: opacity var(--motion-slow) var(--ease-royal),
+              transform var(--motion-slow) var(--ease-royal);
+  will-change: opacity, transform;
 }
+
 .reveal-on-scroll.is-revealed {
   opacity: 1;
   transform: translateY(0);
 }
 
+/* Stagger utilities for grids of cards */
+.stagger-1 { transition-delay: 60ms; }
+.stagger-2 { transition-delay: 120ms; }
+.stagger-3 { transition-delay: 180ms; }
+.stagger-4 { transition-delay: 240ms; }
+.stagger-5 { transition-delay: 300ms; }
+
+/* Product Card Luxury Elevation */
+.product-card-hover {
+  transition: transform var(--motion-standard) var(--ease-royal),
+              box-shadow var(--motion-standard) var(--ease-royal),
+              border-color var(--motion-standard) var(--ease-royal);
+}
+.product-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px -4px rgba(43, 27, 30, 0.1);
+  border-color: rgba(181, 138, 60, 0.6);
+}
+
+/* Strict respect for prefers-reduced-motion: disable all non-essential movement */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-marquee-track {
+    animation: none !important;
+    width: auto !important;
+    transform: none !important;
+  }
+
+  .gold-shimmer,
+  .skeleton-shimmer {
+    animation: none !important;
+  }
+
+  .page-enter,
+  .card-stagger,
+  .reveal-on-scroll,
+  .dropdown-animated {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .product-card-hover:hover {
+    transform: none !important;
+  }
+
+  .animate-cart-bounce,
+  .animate-draw-check,
+  .animate-heart-pop {
+    animation: none !important;
+  }
+}

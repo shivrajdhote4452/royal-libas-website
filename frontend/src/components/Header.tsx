@@ -31,6 +31,18 @@ export const Header: React.FC = () => {
     setSearchModalOpen(false);
   }, [location.pathname, location.search]);
 
+  // Support Escape to close open menus and modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+        setSearchModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Lock scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
@@ -104,67 +116,108 @@ export const Header: React.FC = () => {
               <div className="relative group">
                 <Link
                   to="/shop"
-                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] ${
+                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none ${
                     location.search.includes('category') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
+                  aria-haspopup="true"
                 >
                   <span>CATEGORIES</span>
-                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-200 group-hover:rotate-180" />
+                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out group-hover:rotate-180 group-focus-within:rotate-180" />
                 </Link>
 
-                {/* Categories Dropdown */}
-                <div className="absolute top-full left-0 w-52 bg-[#FCF8F0] rounded-none border border-[#E8DFD0] shadow-xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50">
+                {/* Categories Dropdown with luxury slide-down animation */}
+                <div className="absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 opacity-0 invisible -translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 transition-all duration-200 ease-out z-50">
+                  <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
+                    <span className="text-[9.5px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
+                      Explore By Silhouette
+                    </span>
+                  </div>
                   <Link
                     to="/shop?category=Kurti+Sets"
-                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    Kurti Sets (8)
+                    <span>Kurti Sets</span>
+                    <span className="text-[10px] text-gray-400 font-mono">8 Styles</span>
                   </Link>
                   <Link
                     to="/shop?category=Festive+Sets"
-                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    Festive Sets (4)
+                    <span>Festive Sets</span>
+                    <span className="text-[10px] text-gray-400 font-mono">4 Styles</span>
                   </Link>
                   <Link
                     to="/shop?category=Co-ord+Sets"
-                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    Co-ord Sets (4)
+                    <span>Co-ord Sets</span>
+                    <span className="text-[10px] text-gray-400 font-mono">4 Styles</span>
+                  </Link>
+                  <Link
+                    to="/shop?category=Anarkali"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Royal Anarkali</span>
+                    <span className="text-[10px] text-[#B58A3C] font-semibold">Couture</span>
+                  </Link>
+                  <Link
+                    to="/shop?category=Lehenga"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Bridal Lehengas</span>
+                    <span className="text-[10px] text-[#B58A3C] font-semibold">Heirloom</span>
                   </Link>
                 </div>
               </div>
+
               <div className="relative group">
                 <Link
                   to="/shop?collection=festive-edit"
-                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] ${
+                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none ${
                     location.search.includes('collection') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
+                  aria-haspopup="true"
                 >
                   <span>COLLECTIONS</span>
-                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-200 group-hover:rotate-180" />
+                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out group-hover:rotate-180 group-focus-within:rotate-180" />
                 </Link>
 
-                {/* Sub-menu Dropdown */}
-                <div className="absolute top-full left-0 w-56 bg-[#FCF8F0] rounded-none border border-[#E8DFD0] shadow-xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50">
+                {/* Collections Dropdown with luxury slide-down animation */}
+                <div className="absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 opacity-0 invisible -translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 transition-all duration-200 ease-out z-50">
+                  <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
+                    <span className="text-[9.5px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
+                      Curated Editions
+                    </span>
+                  </div>
                   <Link
                     to="/shop?collection=festive-edit"
-                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    Festive Edit
+                    <span>Festive Edit &apos;26</span>
+                    <span className="text-[10px] text-amber-700 font-semibold">New</span>
                   </Link>
                   <Link
                     to="/shop?collection=everyday-cotton"
-                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    Everyday Cotton
+                    <span>Everyday Cotton</span>
+                    <span className="text-[10px] text-gray-400">Pure Weave</span>
                   </Link>
                   <Link
                     to="/shop?collection=bestsellers"
-                    className="block px-3 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224]"
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    Bestsellers
+                    <span>Iconic Bestsellers</span>
+                    <span className="text-[10px] text-[#B58A3C]">★ Top Rated</span>
                   </Link>
+                  <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
+                    <Link
+                      to="/shop"
+                      className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
+                    >
+                      <span>Explore All Creations &rarr;</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
             </nav>

@@ -12,6 +12,7 @@ test_logo.py
 
 # Local references and docs (Do NOT commit phase-wise plan PDF)
 *.pdf
+*.mp4
 
 # Dependencies
 node_modules/

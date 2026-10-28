@@ -11,6 +11,7 @@ import {
 import { Product } from '../types/product';
 import { fetchProducts } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
+import { FeaturedSlider } from '../components/FeaturedSlider';
 
 export const Home: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -185,6 +186,33 @@ export const Home: React.FC = () => {
       </section>
 
       {/* ========================================================
+          CONTINUOUS LUXURY MARQUEE TICKER (Reference Motion Feature)
+          ======================================================== */}
+      <div className="bg-[#2B1B1E] text-[#FCF8F0] border-b border-[#B58A3C]/40 py-2.5 overflow-hidden select-none">
+        <div className="animate-marquee-track flex items-center text-[10.5px] font-semibold uppercase tracking-[0.25em]">
+          {[1, 2].map((group) => (
+            <div key={group} className="flex items-center space-x-8 px-4 shrink-0">
+              <span className="flex items-center gap-2">
+                <span className="text-[#B58A3C]">✦</span> COMPLIMENTARY SHIPPING ACROSS INDIA
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-[#B58A3C]">✦</span> HANDCRAFTED CHANDERI &amp; MODAL SILK
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-[#B58A3C]">✦</span> MASTER ARTISAN ZARI EMBROIDERY
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-[#B58A3C]">✦</span> HASSLE-FREE 7-DAY EXCHANGE
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-[#B58A3C]">✦</span> 100% AUTHENTIC ATELIER CRAFTSMANSHIP
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ========================================================
           3. SHOP BY CATEGORY (Real Catalog Categories & Edits)
           Kurti Sets, Festive Sets, Co-ord Sets & Everyday Cotton
           ======================================================== */}
@@ -235,7 +263,7 @@ export const Home: React.FC = () => {
             <Link
               key={idx}
               to={cat.href}
-              className="group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none"
+              className={`group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none stagger-${idx + 1}`}
             >
               <img
                 src={cat.image}
@@ -259,6 +287,20 @@ export const Home: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* ========================================================
+          FEATURED PRODUCT 3D SLIDER (Reference Motion Carousel)
+          Center-focused active card with peeking neighbors & smooth controls
+          ======================================================== */}
+      {products.length >= 3 && (
+        <div className="reveal-on-scroll">
+          <FeaturedSlider
+            products={products}
+            title="ICONIC ATELIER SILHOUETTES"
+            subtitle="Explore signature handcrafted pieces from our seasonal and festive collections."
+          />
+        </div>
+      )}
 
       {/* ========================================================
           4. THE FESTIVE COLLECTION (Handbook Section 03 & Visual PDF Page 3)
