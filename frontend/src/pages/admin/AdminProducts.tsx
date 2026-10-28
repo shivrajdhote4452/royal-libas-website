@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Image as ImageIcon,
   Check,
+  Play,
 } from 'lucide-react';
 import {
   fetchAdminProducts,
@@ -101,12 +102,16 @@ export const AdminProducts: React.FC = () => {
     setUploadingTarget(target);
     try {
       for (const file of Array.from(files)) {
-        const ext = file.name.split('.').pop()?.toLowerCase();
-        if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) {
-          throw new Error(`File ${file.name} is not an allowed image type (JPEG, PNG, WebP).`);
+        const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|ogg|mkv)$/i.test(file.name);
+        const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(file.name);
+        if (!isVideo && !isImage) {
+          throw new Error(`File ${file.name} is not an allowed format (JPEG, PNG, WebP, MP4, MOV, WebM).`);
         }
-        if (file.size > 10 * 1024 * 1024) {
-          throw new Error(`File ${file.name} exceeds the 10MB limit.`);
+        if (isImage && file.size > 15 * 1024 * 1024) {
+          throw new Error(`Photo ${file.name} exceeds 15MB limit.`);
+        }
+        if (isVideo && file.size > 60 * 1024 * 1024) {
+          throw new Error(`Video ${file.name} exceeds 60MB limit.`);
         }
         const uploaded = await adminUploadProductImage(token, file);
         if (uploaded && uploaded.url) {
@@ -121,7 +126,7 @@ export const AdminProducts: React.FC = () => {
         }
       }
     } catch (err: any) {
-      setActionError(err.message || 'Failed to upload product image');
+      setActionError(err.message || 'Failed to upload media');
     } finally {
       setUploadingTarget(null);
     }
@@ -719,7 +724,22 @@ export const AdminProducts: React.FC = () => {
                             className="relative group bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm flex flex-col"
                           >
                             <div className="aspect-[4/5] bg-gray-100 overflow-hidden relative">
-                              <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                              {(() => {
+                                const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(imgUrl);
+                                const pUrl = isVid ? imgUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : imgUrl;
+                                return (
+                                  <>
+                                    <img src={pUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                                    {isVid && (
+                                      <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <span className="w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center">
+                                          <Play className="w-3 h-3 fill-white ml-0.5" />
+                                        </span>
+                                      </span>
+                                    )}
+                                  </>
+                                );
+                              })()}
                               {idx === 0 && (
                                 <span className="absolute top-1.5 left-1.5 bg-[#5E1224] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
                                   Cover
@@ -779,7 +799,7 @@ export const AdminProducts: React.FC = () => {
                           <input
                             type="file"
                             multiple
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime"
                             disabled={uploadingTarget === product.id}
                             onChange={(e) => handleUploadFiles(e.target.files, product.id)}
                             className="hidden"
@@ -965,7 +985,7 @@ export const AdminProducts: React.FC = () => {
                     <input
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime"
                       disabled={uploadingTarget === 'new'}
                       onChange={(e) => handleUploadFiles(e.target.files, 'new')}
                       className="hidden"
@@ -995,7 +1015,22 @@ export const AdminProducts: React.FC = () => {
                         className="relative bg-white rounded border border-gray-200 overflow-hidden flex flex-col"
                       >
                         <div className="aspect-[4/5] bg-gray-100 relative">
-                          <img src={url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                          {(() => {
+                            const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url);
+                            const pUrl = isVid ? url.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : url;
+                            return (
+                              <>
+                                <img src={pUrl} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                                {isVid && (
+                                  <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <span className="w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center">
+                                      <Play className="w-3 h-3 fill-white ml-0.5" />
+                                    </span>
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
                           {idx === 0 && (
                             <span className="absolute top-1 left-1 bg-[#5E1224] text-white text-[8px] font-bold px-1 rounded">
                               Cover

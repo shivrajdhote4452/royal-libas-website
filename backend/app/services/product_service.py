@@ -1,3 +1,4 @@
+from app.services.cloudinary_service import get_video_poster_url
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from app.models import Product
@@ -63,11 +64,17 @@ def build_product_list_response(product: Product) -> ProductListResponse:
     min_price = min(prices) if prices else None
     max_price = max(prices) if prices else None
 
-    # Get primary image (sort_order == 0 or first image)
+    # Get primary image (prefers first image, or video poster if only videos exist)
     primary_img_url: Optional[str] = None
     if product.images:
         sorted_images = sorted(product.images, key=lambda img: img.sort_order)
-        primary_img_url = sorted_images[0].url
+        # Find first image
+        first_img = next((img for img in sorted_images if getattr(img, "resource_type", "image") == "image"), None)
+        if first_img:
+            primary_img_url = first_img.url
+        else:
+            # Fall back to video poster
+            primary_img_url = get_video_poster_url(sorted_images[0].url)
 
     collection_names = [c.name for c in product.collections]
     images_list = [
@@ -76,6 +83,11 @@ def build_product_list_response(product: Product) -> ProductListResponse:
             url=img.url,
             sort_order=img.sort_order,
             alt_text=img.alt_text,
+            resource_type=getattr(img, "resource_type", "image") or "image",
+            public_id=getattr(img, "public_id", None),
+            width=getattr(img, "width", None),
+            height=getattr(img, "height", None),
+            duration=float(img.duration) if getattr(img, "duration", None) is not None else None,
         )
         for img in (sorted(product.images, key=lambda i: i.sort_order) if product.images else [])
     ]
@@ -112,6 +124,11 @@ def build_product_detail_response(product: Product) -> ProductDetailResponse:
             url=img.url,
             sort_order=img.sort_order,
             alt_text=img.alt_text,
+            resource_type=getattr(img, "resource_type", "image") or "image",
+            public_id=getattr(img, "public_id", None),
+            width=getattr(img, "width", None),
+            height=getattr(img, "height", None),
+            duration=float(img.duration) if getattr(img, "duration", None) is not None else None,
         )
         for img in sorted_images
     ]

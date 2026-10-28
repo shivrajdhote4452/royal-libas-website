@@ -15,6 +15,50 @@ export interface ProductImage {
   url: string;
   sort_order: number;
   alt_text: string | null;
+  resource_type?: 'image' | 'video';
+  public_id?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
+}
+
+export interface MediaAssetProductUsage {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface MediaAsset {
+  id: number;
+  filename: string;
+  public_id?: string | null;
+  url: string;
+  secure_url?: string | null;
+  resource_type: 'image' | 'video';
+  format?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
+  file_size: number;
+  mime_type: string;
+  alt_text?: string | null;
+  folder?: string | null;
+  created_at: string;
+  used_in_products?: MediaAssetProductUsage[];
+}
+
+export interface MediaUploadFailure {
+  filename: string;
+  error: string;
+}
+
+export interface MediaUploadBatchResponse {
+  status: 'success' | 'partial' | 'failure';
+  uploaded: MediaAsset[];
+  failed: MediaUploadFailure[];
+  total: number;
+  success_count: number;
+  failure_count: number;
 }
 
 export interface Product {

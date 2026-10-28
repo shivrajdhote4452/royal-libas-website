@@ -17,12 +17,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [primaryError, setPrimaryError] = useState(false);
   const [secondaryError, setSecondaryError] = useState(false);
 
-  // Available image URLs
+  // Available image URLs: safely ensure photos or video posters are rendered
+  const toImageUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+    if (/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url)) {
+      return url.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg');
+    }
+    return url;
+  };
+
+  const pureImageUrls = (product.images || [])
+    .map((img) => img.url)
+    .filter((url) => !/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url));
+
   const rawPrimary =
-    product.primary_image ||
-    (product.images && product.images.length > 0 ? product.images[0].url : null);
+    toImageUrl(product.primary_image) ||
+    pureImageUrls[0] ||
+    (product.images && product.images.length > 0 ? toImageUrl(product.images[0].url) : null);
+
   const rawSecondary =
-    product.images && product.images.length > 1 ? product.images[1].url : null;
+    pureImageUrls.length > 1
+      ? pureImageUrls[1]
+      : (product.images && product.images.length > 1 ? toImageUrl(product.images[1].url) : null);
 
   // Graceful fallback: If primary failed to load, promote secondary to primary
   const primaryImage = primaryError ? rawSecondary : rawPrimary;

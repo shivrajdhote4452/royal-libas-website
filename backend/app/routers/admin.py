@@ -9,7 +9,7 @@ import string
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_admin, verify_password, hash_password, create_access_token, require_roles
@@ -71,6 +71,9 @@ from app.schemas import (
     SizeChartUpdate,
     SizeChartResponse,
     MediaAssetResponse,
+    MediaAssetProductUsage,
+    MediaUploadFailure,
+    MediaUploadBatchResponse,
     ContactInquiryDetail,
     ContactInquiryReply,
     PaymentRecordResponse,
@@ -78,6 +81,13 @@ from app.schemas import (
     ReportSummaryResponse,
 )
 from app.services import shiprocket
+from app.services.cloudinary_service import (
+    upload_to_cloudinary,
+    delete_from_cloudinary,
+    get_video_poster_url,
+    detect_resource_type,
+    is_cloudinary_configured,
+)
 from app.services.payment_service import sync_cashfree_payment_status
 from app.services.product_service import build_product_detail_response, build_variant_response
 
@@ -1666,154 +1676,352 @@ def admin_export_orders_csv(
 
 
 # ==========================================
-# Media Library & Image Uploads
+# Media Library & Cloudinary Uploads
 # ==========================================
+
+def _attach_product_usage(asset: MediaAsset, db: Session) -> List[MediaAssetProductUsage]:
+    """Helper to find all products that reference a media asset URL or public_id."""
+    filters = [ProductImage.url == asset.url]
+    if asset.public_id:
+        filters.append(ProductImage.public_id == asset.public_id)
+    
+    matches = (
+        db.query(Product.id, Product.name, Product.slug)
+        .join(ProductImage, ProductImage.product_id == Product.id)
+        .filter(or_(*filters))
+        .distinct()
+        .all()
+    )
+    return [MediaAssetProductUsage(id=m.id, name=m.name, slug=m.slug) for m in matches]
+
 
 @router.get("/media", response_model=List[MediaAssetResponse])
 def admin_list_media(
+    resource_type: Optional[str] = Query(None, description="Filter by resource type: 'image' or 'video'"),
+    search: Optional[str] = Query(None, description="Search by filename or alt text"),
+    product_id: Optional[int] = Query(None, description="Filter by product ID"),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """Retrieve all uploaded persistent media assets."""
-    return db.query(MediaAsset).order_by(MediaAsset.created_at.desc()).all()
+    """Retrieve all uploaded persistent media assets with filtering and product usage."""
+    query = db.query(MediaAsset)
+
+    if resource_type:
+        query = query.filter(MediaAsset.resource_type == resource_type.strip().lower())
+
+    if search:
+        pattern = f"%{search.strip().lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(MediaAsset.filename).like(pattern),
+                func.lower(MediaAsset.alt_text).like(pattern),
+                func.lower(MediaAsset.public_id).like(pattern),
+            )
+        )
+
+    if product_id is not None:
+        subq = db.query(ProductImage.url).filter(ProductImage.product_id == product_id)
+        query = query.filter(MediaAsset.url.in_(subq))
+
+    assets = query.order_by(MediaAsset.created_at.desc()).all()
+
+    results = []
+    for a in assets:
+        used_products = _attach_product_usage(a, db)
+        asset_dict = {
+            "id": a.id,
+            "filename": a.filename,
+            "public_id": a.public_id,
+            "url": a.url,
+            "secure_url": a.secure_url or a.url,
+            "resource_type": getattr(a, "resource_type", "image") or "image",
+            "format": a.format,
+            "width": a.width,
+            "height": a.height,
+            "duration": float(a.duration) if a.duration is not None else None,
+            "file_size": a.file_size or 0,
+            "mime_type": a.mime_type or "image/jpeg",
+            "alt_text": a.alt_text,
+            "folder": a.folder,
+            "created_at": a.created_at,
+            "used_in_products": used_products,
+        }
+        results.append(MediaAssetResponse(**asset_dict))
+
+    return results
+
+
+@router.post("/media/upload-batch", response_model=MediaUploadBatchResponse)
+async def admin_upload_media_batch(
+    files: List[UploadFile] = File(...),
+    folder: Optional[str] = Query("royal_libas/products"),
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Upload multiple photos or videos to Cloudinary in a single batch operation."""
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files provided for upload.")
+
+    uploaded: List[MediaAssetResponse] = []
+    failed: List[MediaUploadFailure] = []
+
+    for file in files:
+        filename = file.filename or "uploaded_media"
+        try:
+            contents = await file.read()
+            if not contents:
+                raise ValueError("File content is empty.")
+
+            res = upload_to_cloudinary(
+                file_bytes=contents,
+                original_filename=filename,
+                folder=folder or "royal_libas/products",
+            )
+
+            asset = MediaAsset(
+                filename=filename,
+                public_id=res["public_id"],
+                url=res["secure_url"],
+                secure_url=res["secure_url"],
+                resource_type=res["resource_type"],
+                format=res.get("format"),
+                width=res.get("width"),
+                height=res.get("height"),
+                duration=res.get("duration"),
+                file_size=res.get("file_size", len(contents)),
+                mime_type=file.content_type or ("video/mp4" if res["resource_type"] == "video" else "image/jpeg"),
+                alt_text=filename,
+                folder=res.get("folder", folder),
+            )
+            db.add(asset)
+            db.commit()
+            db.refresh(asset)
+
+            log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({res['resource_type']})")
+
+            uploaded.append(
+                MediaAssetResponse(
+                    id=asset.id,
+                    filename=asset.filename,
+                    public_id=asset.public_id,
+                    url=asset.url,
+                    secure_url=asset.secure_url,
+                    resource_type=asset.resource_type,
+                    format=asset.format,
+                    width=asset.width,
+                    height=asset.height,
+                    duration=float(asset.duration) if asset.duration is not None else None,
+                    file_size=asset.file_size,
+                    mime_type=asset.mime_type,
+                    alt_text=asset.alt_text,
+                    folder=asset.folder,
+                    created_at=asset.created_at,
+                    used_in_products=[],
+                )
+            )
+        except Exception as e:
+            failed.append(MediaUploadFailure(filename=filename, error=str(e)))
+
+    return MediaUploadBatchResponse(
+        status="success" if not failed else ("partial" if uploaded else "failure"),
+        uploaded=uploaded,
+        failed=failed,
+        total=len(files),
+        success_count=len(uploaded),
+        failure_count=len(failed),
+    )
 
 
 @router.post("/media/upload", response_model=MediaAssetResponse)
 async def admin_upload_media_asset(
     file: UploadFile = File(...),
+    folder: Optional[str] = Query("royal_libas/products"),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
-    """Upload product or editorial banner imagery to persistent storage."""
-    import secrets
-
-    allowed_types = {
-        "image/jpeg": ".jpg",
-        "image/jpg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-    }
-    content_type = file.content_type or ""
-    if content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid image format. Allowed formats: JPEG, PNG, WebP.",
-        )
-
+    """Upload a single product photo or video asset directly to Cloudinary."""
+    filename = file.filename or "media_upload"
     contents = await file.read()
-    if len(contents) > 10 * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File size exceeds maximum limit of 10MB.",
-        )
+    if not contents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File content is empty.")
 
-    ext = allowed_types[content_type]
-    random_token = secrets.token_hex(8)
-    filename = f"media_{int(datetime.now().timestamp())}_{random_token}{ext}"
-
-    base_uploads = Path(__file__).resolve().parent.parent.parent / "uploads" / "products"
-    base_uploads.mkdir(parents=True, exist_ok=True)
-    destination = base_uploads / filename
-
-    with open(destination, "wb") as f:
-        f.write(contents)
+    res = upload_to_cloudinary(
+        file_bytes=contents,
+        original_filename=filename,
+        folder=folder or "royal_libas/products",
+    )
 
     asset = MediaAsset(
         filename=filename,
-        url=f"/uploads/products/{filename}",
-        file_size=len(contents),
-        mime_type=content_type,
-        alt_text=file.filename or filename,
+        public_id=res["public_id"],
+        url=res["secure_url"],
+        secure_url=res["secure_url"],
+        resource_type=res["resource_type"],
+        format=res.get("format"),
+        width=res.get("width"),
+        height=res.get("height"),
+        duration=res.get("duration"),
+        file_size=res.get("file_size", len(contents)),
+        mime_type=file.content_type or ("video/mp4" if res["resource_type"] == "video" else "image/jpeg"),
+        alt_text=filename,
+        folder=res.get("folder", folder),
     )
     db.add(asset)
     db.commit()
     db.refresh(asset)
 
-    log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, filename)
-    return asset
+    log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({res['resource_type']})")
+    
+    return MediaAssetResponse(
+        id=asset.id,
+        filename=asset.filename,
+        public_id=asset.public_id,
+        url=asset.url,
+        secure_url=asset.secure_url,
+        resource_type=asset.resource_type,
+        format=asset.format,
+        width=asset.width,
+        height=asset.height,
+        duration=float(asset.duration) if asset.duration is not None else None,
+        file_size=asset.file_size,
+        mime_type=asset.mime_type,
+        alt_text=asset.alt_text,
+        folder=asset.folder,
+        created_at=asset.created_at,
+        used_in_products=[],
+    )
 
 
 @router.delete("/media/{id}")
 def admin_delete_media(
     id: int,
+    force: bool = Query(False, description="Force delete even if attached to products"),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER")),
 ):
-    """Remove a media asset from library."""
+    """Remove a media asset from library and Cloudinary storage with usage verification."""
     asset = db.query(MediaAsset).filter(MediaAsset.id == id).first()
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media asset not found.")
 
-    # Remove file from disk
-    file_path = Path(__file__).resolve().parent.parent.parent / "uploads" / "products" / asset.filename
-    if file_path.exists():
+    used_products = _attach_product_usage(asset, db)
+    if used_products and not force:
+        product_names = ", ".join(f"'{p.name}'" for p in used_products)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot delete asset because it is currently used in {len(used_products)} product(s): {product_names}. Remove it from the product gallery first, or confirm force deletion.",
+        )
+
+    if asset.public_id:
+        delete_from_cloudinary(asset.public_id, resource_type=getattr(asset, "resource_type", "image") or "image")
+
+    legacy_path = Path(__file__).resolve().parent.parent.parent / "uploads" / "products" / asset.filename
+    if legacy_path.exists():
         try:
-            file_path.unlink()
+            legacy_path.unlink()
         except Exception:
             pass
+
+    if force and used_products:
+        filters = [ProductImage.url == asset.url]
+        if asset.public_id:
+            filters.append(ProductImage.public_id == asset.public_id)
+        db.query(ProductImage).filter(or_(*filters)).delete(synchronize_session=False)
 
     db.delete(asset)
     db.commit()
     log_activity(db, current_admin, "MEDIA_DELETED", "media", id, asset.filename)
-    return {"status": "success", "message": "Media asset deleted successfully."}
+    return {"status": "success", "message": f"Media asset '{asset.filename}' deleted successfully."}
 
 
 @router.post("/products/upload-image")
 async def admin_upload_product_image(
     file: UploadFile = File(...),
+    folder: Optional[str] = Query("royal_libas/products"),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """Safely upload a product image to persistent storage, returning clean static URL."""
-    import secrets
-
-    allowed_types = {
-        "image/jpeg": ".jpg",
-        "image/jpg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-    }
-    content_type = file.content_type or ""
-    if content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid image format. Allowed formats: JPEG, PNG, WebP.",
-        )
-
+    """Safely upload a product photo or video directly to Cloudinary and register in media library."""
+    filename = file.filename or "product_media"
     contents = await file.read()
-    if len(contents) > 10 * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File size exceeds maximum limit of 10MB.",
-        )
+    if not contents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File content is empty.")
 
-    ext = allowed_types[content_type]
-    random_token = secrets.token_hex(8)
-    filename = f"prod_{int(datetime.now().timestamp())}_{random_token}{ext}"
+    res = upload_to_cloudinary(
+        file_bytes=contents,
+        original_filename=filename,
+        folder=folder or "royal_libas/products",
+    )
 
-    base_uploads = Path(__file__).resolve().parent.parent.parent / "uploads" / "products"
-    base_uploads.mkdir(parents=True, exist_ok=True)
-    destination = base_uploads / filename
-
-    with open(destination, "wb") as f:
-        f.write(contents)
-
-    # Persist in media library
     asset = MediaAsset(
         filename=filename,
-        url=f"/uploads/products/{filename}",
-        file_size=len(contents),
-        mime_type=content_type,
-        alt_text=file.filename or filename,
+        public_id=res["public_id"],
+        url=res["secure_url"],
+        secure_url=res["secure_url"],
+        resource_type=res["resource_type"],
+        format=res.get("format"),
+        width=res.get("width"),
+        height=res.get("height"),
+        duration=res.get("duration"),
+        file_size=res.get("file_size", len(contents)),
+        mime_type=file.content_type or ("video/mp4" if res["resource_type"] == "video" else "image/jpeg"),
+        alt_text=filename,
+        folder=res.get("folder", folder),
     )
     db.add(asset)
     db.commit()
+    db.refresh(asset)
 
     return {
         "status": "success",
-        "url": f"/uploads/products/{filename}",
+        "id": asset.id,
+        "url": asset.url,
+        "secure_url": asset.secure_url,
+        "public_id": asset.public_id,
+        "resource_type": asset.resource_type,
         "filename": filename,
+        "width": asset.width,
+        "height": asset.height,
+        "duration": float(asset.duration) if asset.duration is not None else None,
     }
+
+
+@router.post("/products/{id}/attach-media", response_model=ProductDetailResponse)
+def admin_attach_product_media(
+    id: int,
+    media_ids: List[int],
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Attach existing media assets from library to a product."""
+    product = db.query(Product).filter(Product.id == id).first()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+
+    assets = db.query(MediaAsset).filter(MediaAsset.id.in_(media_ids)).all()
+    if not assets:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid media assets found.")
+
+    max_order = max([img.sort_order for img in product.images], default=-1)
+    for asset in assets:
+        max_order += 1
+        new_img = ProductImage(
+            product_id=product.id,
+            url=asset.url,
+            sort_order=max_order,
+            alt_text=asset.alt_text or product.name,
+            resource_type=getattr(asset, "resource_type", "image") or "image",
+            public_id=asset.public_id,
+            width=asset.width,
+            height=asset.height,
+            duration=asset.duration,
+        )
+        product.images.append(new_img)
+
+    db.commit()
+    db.refresh(product)
+    log_activity(db, current_admin, "PRODUCT_UPDATED", "product", product.id, f"Attached {len(assets)} media assets")
+    return build_product_detail_response(product)
 
 
 # ==========================================
@@ -1968,10 +2176,18 @@ def admin_create_product(
 
     if payload.images:
         for idx, img in enumerate(payload.images):
+            r_type = getattr(img, "resource_type", "image") or "image"
+            if r_type == "image" and img.url and any(img.url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg")):
+                r_type = "video"
             image = ProductImage(
                 url=img.url,
                 sort_order=img.sort_order if img.sort_order is not None else idx,
                 alt_text=img.alt_text,
+                resource_type=r_type,
+                public_id=getattr(img, "public_id", None),
+                width=getattr(img, "width", None),
+                height=getattr(img, "height", None),
+                duration=getattr(img, "duration", None),
             )
             product.images.append(image)
 
@@ -2050,6 +2266,11 @@ def admin_update_product(
                 url=img.url,
                 sort_order=img.sort_order if img.sort_order is not None else idx + 1,
                 alt_text=img.alt_text,
+                resource_type="video" if (getattr(img, "resource_type", "image") == "video" or (img.url and any(img.url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg")))) else "image",
+                public_id=getattr(img, "public_id", None),
+                width=getattr(img, "width", None),
+                height=getattr(img, "height", None),
+                duration=getattr(img, "duration", None),
             )
             for idx, img in enumerate(payload.images)
         ]

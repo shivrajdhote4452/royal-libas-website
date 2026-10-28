@@ -91,15 +91,24 @@ def test_store_and_variants():
     print("  [OK] Admin PUT /admin/settings updates live store settings successfully")
 
     # 6. Test Admin image upload endpoint with file type validation
-    # Allowed image: dummy JPEG
+    from unittest.mock import patch
+    mock_upload = {
+        "public_id": "test_artisan_id",
+        "secure_url": "https://res.cloudinary.com/demo/image/upload/v1/test_artisan.jpg",
+        "url": "https://res.cloudinary.com/demo/image/upload/v1/test_artisan.jpg",
+        "resource_type": "image",
+        "format": "jpg",
+        "bytes": 50,
+    }
     dummy_jpeg = io.BytesIO(b"\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xFF\xDB")
     files = {"file": ("test_artisan.jpg", dummy_jpeg, "image/jpeg")}
-    resp = client.post("/admin/products/upload-image", files=files, headers=auth_header)
-    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
-    upload_res = resp.json()
-    assert upload_res["status"] == "success"
-    assert upload_res["url"].startswith("/uploads/products/")
-    print(f"  [OK] Admin POST /admin/products/upload-image returned valid path: {upload_res['url']}")
+    with patch("cloudinary.uploader.upload", return_value=mock_upload):
+        resp = client.post("/admin/products/upload-image", files=files, headers=auth_header)
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        upload_res = resp.json()
+        assert upload_res["status"] == "success"
+        assert upload_res["url"].startswith("/uploads/products/") or "cloudinary.com" in upload_res["url"]
+        print(f"  [OK] Admin POST /admin/products/upload-image returned valid path: {upload_res['url']}")
 
     # Disallowed file type: text/plain or executable
     bad_file = {"file": ("script.sh", io.BytesIO(b"echo 'malicious'"), "text/plain")}

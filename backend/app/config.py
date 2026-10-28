@@ -80,3 +80,36 @@ def is_shiprocket_configured() -> bool:
         and "placeholder" not in pwd.lower()
     )
 
+
+
+# ==========================================
+# Cloudinary Media Storage Configuration
+# ==========================================
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip()
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "").strip()
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "").strip()
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "").strip()
+
+
+def is_cloudinary_configured() -> bool:
+    """Check if valid non-placeholder Cloudinary credentials are provided."""
+    name = CLOUDINARY_CLOUD_NAME
+    key = CLOUDINARY_API_KEY
+    secret = CLOUDINARY_API_SECRET
+    has_keys = bool(
+        name
+        and key
+        and secret
+        and not name.startswith("YOUR_")
+        and not key.startswith("YOUR_")
+        and not secret.startswith("YOUR_")
+        and "placeholder" not in name.lower()
+        and "placeholder" not in key.lower()
+        and "placeholder" not in secret.lower()
+    )
+    has_url = bool(
+        CLOUDINARY_URL
+        and "YOUR_" not in CLOUDINARY_URL
+        and "placeholder" not in CLOUDINARY_URL.lower()
+    )
+    return has_keys or has_url

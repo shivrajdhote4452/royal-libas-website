@@ -1,4 +1,4 @@
-import { Product, Collection } from '../types/product';
+import { Product, Collection, MediaAsset, MediaUploadBatchResponse } from '../types/product';
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
 
@@ -490,10 +490,15 @@ export async function subscribeNewsletter(email: string): Promise<any> {
   return response.json();
 }
 
-export async function adminUploadProductImage(token: string, file: File): Promise<{ status: string; url: string; filename: string }> {
+export async function adminUploadProductImage(
+  token: string,
+  file: File,
+  folder?: string
+): Promise<{ status: string; id: number; url: string; secure_url: string; public_id: string; resource_type: 'image' | 'video'; filename: string; width?: number; height?: number; duration?: number }> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(`${API_BASE_URL}/admin/products/upload-image`, {
+  const q = folder ? `?folder=${encodeURIComponent(folder)}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/products/upload-image${q}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -756,8 +761,17 @@ export async function adminExportOrdersCsv(token: string): Promise<Blob> {
   return response.blob();
 }
 
-export async function adminListMedia(token: string): Promise<any[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/media`, {
+export async function adminListMedia(
+  token: string,
+  params?: { resource_type?: string; search?: string; product_id?: number }
+): Promise<MediaAsset[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.resource_type) searchParams.set('resource_type', params.resource_type);
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.product_id) searchParams.set('product_id', String(params.product_id));
+  const queryString = searchParams.toString();
+  const url = `${API_BASE_URL}/admin/media${queryString ? `?${queryString}` : ''}`;
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
@@ -766,10 +780,11 @@ export async function adminListMedia(token: string): Promise<any[]> {
   return response.json();
 }
 
-export async function adminUploadMedia(token: string, file: File): Promise<any> {
+export async function adminUploadMedia(token: string, file: File, folder?: string): Promise<MediaAsset> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(`${API_BASE_URL}/admin/media/upload`, {
+  const q = folder ? `?folder=${encodeURIComponent(folder)}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/media/upload${q}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
@@ -781,13 +796,61 @@ export async function adminUploadMedia(token: string, file: File): Promise<any> 
   return response.json();
 }
 
-export async function adminDeleteMedia(token: string, id: number): Promise<any> {
-  const response = await fetch(`${API_BASE_URL}/admin/media/${id}`, {
+export async function adminUploadMediaBatch(
+  token: string,
+  files: File[],
+  folder?: string
+): Promise<MediaUploadBatchResponse> {
+  const formData = new FormData();
+  for (const f of files) {
+    formData.append('files', f);
+  }
+  const q = folder ? `?folder=${encodeURIComponent(folder)}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/media/upload-batch${q}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to upload media batch');
+  }
+  return response.json();
+}
+
+export async function adminDeleteMedia(
+  token: string,
+  id: number,
+  force?: boolean
+): Promise<{ status: string; message: string }> {
+  const url = `${API_BASE_URL}/admin/media/${id}${force ? '?force=true' : ''}`;
+  const response = await fetch(url, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
-    throw new Error('Failed to delete media asset');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to delete media asset');
+  }
+  return response.json();
+}
+
+export async function adminAttachProductMedia(
+  token: string,
+  productId: number,
+  mediaIds: number[]
+): Promise<Product> {
+  const response = await fetch(`${API_BASE_URL}/admin/products/${productId}/attach-media`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(mediaIds),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to attach media to product');
   }
   return response.json();
 }

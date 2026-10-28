@@ -95,6 +95,11 @@ class ProductImageCreate(BaseModel):
     url: str
     sort_order: int = 0
     alt_text: Optional[str] = None
+    resource_type: Optional[str] = "image"
+    public_id: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
 
 
 class ProductImageResponse(BaseModel):
@@ -102,6 +107,11 @@ class ProductImageResponse(BaseModel):
     url: str
     sort_order: int
     alt_text: Optional[str] = None
+    resource_type: str = "image"
+    public_id: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -882,16 +892,45 @@ class SizeChartResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MediaAssetProductUsage(BaseModel):
+    id: int
+    name: str
+    slug: str
+
+
 class MediaAssetResponse(BaseModel):
     id: int
     filename: str
+    public_id: Optional[str] = None
     url: str
+    secure_url: Optional[str] = None
+    resource_type: str = "image"
+    format: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
     file_size: int
     mime_type: str
     alt_text: Optional[str] = None
+    folder: Optional[str] = None
     created_at: datetime
+    used_in_products: Optional[List[MediaAssetProductUsage]] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MediaUploadFailure(BaseModel):
+    filename: str
+    error: str
+
+
+class MediaUploadBatchResponse(BaseModel):
+    status: str = "success"
+    uploaded: List[MediaAssetResponse] = []
+    failed: List[MediaUploadFailure] = []
+    total: int
+    success_count: int
+    failure_count: int
 
 
 class ContactInquiryDetail(BaseModel):

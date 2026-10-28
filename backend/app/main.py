@@ -11,6 +11,8 @@ from app.services import shiprocket
 
 # Create any missing database tables safely
 Base.metadata.create_all(bind=engine)
+from app.migrations import run_migrations
+run_migrations(engine)
 
 app = FastAPI(
     title="Royal Libas by Tanya API",

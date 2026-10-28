@@ -171,7 +171,7 @@ class StockAdjustment(Base):
 
 
 class ProductImage(Base):
-    """Cloudinary / Persistent image URLs and sorting order for product gallery."""
+    """Cloudinary / Persistent image & video URLs and sorting order for product gallery."""
     __tablename__ = "product_images"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -184,6 +184,11 @@ class ProductImage(Base):
     url = Column(String(500), nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
     alt_text = Column(String(255), nullable=True)
+    resource_type = Column(String(20), default="image", nullable=False)  # 'image' or 'video'
+    public_id = Column(String(255), nullable=True)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    duration = Column(Numeric(10, 2), nullable=True)  # Video duration in seconds
 
     # Relationships
     product = relationship("Product", back_populates="images")
@@ -435,13 +440,21 @@ class ActivityLog(Base):
 
 
 class MediaAsset(Base):
-    """Persistent media asset storage metadata."""
+    """Persistent media asset storage metadata for photos and videos."""
     __tablename__ = "media_assets"
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String(255), nullable=False)
+    public_id = Column(String(255), nullable=True, index=True)
     url = Column(String(500), nullable=False)
-    file_size = Column(Integer, nullable=False)  # bytes
+    secure_url = Column(String(500), nullable=True)
+    resource_type = Column(String(20), default="image", nullable=False)  # 'image' or 'video'
+    format = Column(String(50), nullable=True)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    duration = Column(Numeric(10, 2), nullable=True)  # Video duration in seconds
+    file_size = Column(Integer, nullable=False, default=0)  # bytes
     mime_type = Column(String(100), nullable=False)
     alt_text = Column(String(255), nullable=True)
+    folder = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

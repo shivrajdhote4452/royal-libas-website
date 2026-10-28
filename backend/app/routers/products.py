@@ -162,11 +162,19 @@ def admin_create_product(
 
     # Attach images
     if payload.images:
-        for img in payload.images:
+        for idx, img in enumerate(payload.images):
+            r_type = getattr(img, "resource_type", "image") or "image"
+            if r_type == "image" and img.url and any(img.url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg")):
+                r_type = "video"
             image = ProductImage(
                 url=img.url,
-                sort_order=img.sort_order,
+                sort_order=img.sort_order if img.sort_order is not None else idx,
                 alt_text=img.alt_text,
+                resource_type=r_type,
+                public_id=getattr(img, "public_id", None),
+                width=getattr(img, "width", None),
+                height=getattr(img, "height", None),
+                duration=getattr(img, "duration", None),
             )
             product.images.append(image)
 
@@ -233,6 +241,11 @@ def admin_update_product(
                 url=img.url,
                 sort_order=img.sort_order if img.sort_order is not None else idx + 1,
                 alt_text=img.alt_text,
+                resource_type="video" if (getattr(img, "resource_type", "image") == "video" or (img.url and any(img.url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg")))) else "image",
+                public_id=getattr(img, "public_id", None),
+                width=getattr(img, "width", None),
+                height=getattr(img, "height", None),
+                duration=getattr(img, "duration", None),
             )
             for idx, img in enumerate(payload.images)
         ]

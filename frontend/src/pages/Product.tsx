@@ -17,6 +17,7 @@ import {
   Heart,
   Copy,
   Tag,
+  Play,
 } from 'lucide-react';
 import type { Product, ProductVariant } from '../types/product';
 import type { CouponPublic } from '../types/order';
@@ -354,15 +355,26 @@ export const ProductPage: React.FC = () => {
               className="relative aspect-[4/5] w-full bg-[#F0E9DF] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm group touch-pan-y"
             >
               {activeImageUrl ? (
-                <img
-                  key={activeImageUrl}
-                  src={activeImageUrl}
-                  alt={product.name}
-                  className="w-full h-full object-cover object-center transition-all duration-300 ease-out group-hover:scale-[1.03]"
-                  style={{
-                    transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                  }}
-                />
+                /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(activeImageUrl) ? (
+                  <video
+                    key={activeImageUrl}
+                    src={activeImageUrl}
+                    controls
+                    playsInline
+                    poster={activeImageUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg')}
+                    className="w-full h-full object-contain bg-black"
+                  />
+                ) : (
+                  <img
+                    key={activeImageUrl}
+                    src={activeImageUrl}
+                    alt={product.name}
+                    className="w-full h-full object-cover object-center transition-all duration-300 ease-out group-hover:scale-[1.03]"
+                    style={{
+                      transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                    }}
+                  />
+                )
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#5B111A] text-white p-8 text-center">
                   <span className="font-serif text-3xl font-bold mb-2">RL</span>
@@ -439,20 +451,31 @@ export const ProductPage: React.FC = () => {
             {/* Desktop Thumbnails (Point 14: subtle 180-250ms crossfade) */}
             {galleryImages.length > 1 && (
               <div className="hidden sm:grid grid-cols-5 gap-3">
-                {galleryImages.map((imgUrl, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setActiveImageIndex(idx)}
-                    className={`aspect-[4/5] rounded-none overflow-hidden border-2 transition-all duration-200 ${
-                      activeImageIndex === idx
-                        ? 'border-[#5E1224] shadow-md ring-1 ring-[#5E1224]'
-                        : 'border-[#E8DFD0] hover:border-[#B58A3C] opacity-80 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
-                  </button>
-                ))}
+                {galleryImages.map((imgUrl, idx) => {
+                  const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(imgUrl);
+                  const thumbUrl = isVid ? imgUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : imgUrl;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveImageIndex(idx)}
+                      className={`relative aspect-[4/5] rounded-none overflow-hidden border-2 transition-all duration-200 ${
+                        activeImageIndex === idx
+                          ? 'border-[#5E1224] shadow-md ring-1 ring-[#5E1224]'
+                          : 'border-[#E8DFD0] hover:border-[#B58A3C] opacity-80 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={thumbUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                      {isVid && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
+                          <span className="w-6 h-6 rounded-full bg-white/90 text-[#5E1224] flex items-center justify-center shadow">
+                            <Play className="w-3 h-3 fill-current ml-0.5" />
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
