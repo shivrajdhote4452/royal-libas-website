@@ -313,7 +313,7 @@ export const Home: React.FC = () => {
           FEATURED PRODUCT 3D SLIDER (Reference Motion Carousel)
           Center-focused active card with peeking neighbors & smooth controls
           ======================================================== */}
-      {products.length >= 3 && (
+      {products.length > 0 && (
         <div className="reveal-on-scroll">
           <FeaturedSlider
             products={products}

@@ -31,6 +31,9 @@ def reset_test_invariants():
         conn = sqlite3.connect("royal_libas.db")
         c = conn.cursor()
         c.execute("UPDATE product_variants SET stock = 0 WHERE size = 'S' AND product_id IN (SELECT id FROM products WHERE slug = 'chandni-raat-modal-silk-co-ord')")
+        c.execute("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE status = 'PENDING')")
+        c.execute("DELETE FROM orders WHERE status = 'PENDING'")
+        c.execute("UPDATE product_variants SET stock = 10 WHERE product_id IN (SELECT id FROM products WHERE slug = 'noorani-chanderi-kurti-set')")
         conn.commit()
         conn.close()
     except Exception:

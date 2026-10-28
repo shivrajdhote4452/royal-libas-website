@@ -108,13 +108,28 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
   if (total < 3) {
     if (total === 0) return null;
     return (
-      <section className="py-14 sm:py-20 bg-[#FAF7F2] border-y border-[#E8DFD0]">
+      <section
+        data-testid="featured-slider-fallback"
+        className="py-14 sm:py-20 bg-[#FAF7F2] border-y border-[#E8DFD0]"
+      >
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 space-y-2">
-            <h2 className="font-serif text-3xl font-bold text-[#5E1224]">{title}</h2>
-            <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">{subtitle}</p>
+            <div className="inline-flex items-center justify-center gap-2">
+              <span className="w-8 h-[1px] bg-[#B58A3C]" />
+              <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.28em] text-[#B58A3C] font-semibold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#B58A3C]" />
+                CURATED MASTERPIECES
+              </span>
+              <span className="w-8 h-[1px] bg-[#B58A3C]" />
+            </div>
+            <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#5E1224] tracking-tight">{title}</h2>
+            <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto font-light leading-relaxed">{subtitle}</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <div
+            className={`grid gap-6 mx-auto ${
+              total === 1 ? 'max-w-sm grid-cols-1' : 'max-w-2xl grid-cols-1 sm:grid-cols-2'
+            }`}
+          >
             {validProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
@@ -245,9 +260,27 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
             const cardStyle = getCardStyle(offset);
             const imageSrc = product.primary_image || product.images?.[0]?.url;
 
-            // Calculate actual in-stock size count from verified database variant data
-            const inStockVariants = (product.variants || []).filter((v) => v.stock > 0);
-            const inStockCount = inStockVariants.length;
+            // Calculate unique in-stock size values from actual variant data
+            const hasVariantData = Array.isArray(product.variants) && product.variants.length > 0;
+            const uniqueInStockSizes = hasVariantData
+              ? Array.from(
+                  new Set(
+                    product.variants
+                      .filter(
+                        (v) =>
+                          typeof v.stock === 'number' &&
+                          v.stock > 0 &&
+                          typeof v.size === 'string' &&
+                          v.size.trim().length > 0
+                      )
+                      .map((v) => v.size.trim().toUpperCase())
+                  )
+                )
+              : [];
+            const inStockSizeCount = uniqueInStockSizes.length;
+            const isSoldOut =
+              (hasVariantData && inStockSizeCount === 0) ||
+              (!hasVariantData && typeof product.total_stock === 'number' && product.total_stock === 0);
 
             return (
               <div
@@ -281,11 +314,11 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                     loading={isCenter ? 'eager' : 'lazy'}
                   />
 
-                  {/* Gradient Overlay */}
+                  {/* Gradient Overlay: Deep gradient ensuring legible 2-line title and details */}
                   <div
                     className={`absolute inset-0 transition-opacity ${
                       isCenter
-                        ? 'bg-gradient-to-t from-black/85 via-black/20 to-transparent'
+                        ? 'bg-gradient-to-t from-black/95 via-black/45 to-transparent'
                         : 'bg-black/35 group-hover:bg-black/20'
                     }`}
                   />
@@ -331,33 +364,33 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
 
                   {/* Center Card Editorial Details */}
                   {isCenter ? (
-                    <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6 text-left space-y-2 z-20">
-                      <div className="flex items-center justify-between text-[#D4AF67] text-[10px] font-semibold tracking-[0.2em] uppercase">
+                    <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-left space-y-1.5 sm:space-y-2 z-20">
+                      <div className="flex items-center justify-between text-[#D4AF67] text-[10px] sm:text-xs font-semibold tracking-[0.18em] sm:tracking-[0.2em] uppercase">
                         <span>{product.fabric || product.category || 'Pure Silk'}</span>
-                        <span className="font-mono text-white text-xs">
+                        <span className="font-mono text-white text-xs sm:text-sm font-bold">
                           {formatPrice(product.min_price)}
                         </span>
                       </div>
 
-                      <h3 className="font-serif text-lg sm:text-xl font-bold text-white group-hover:text-[#D4AF67] transition-colors leading-snug line-clamp-1 drop-shadow-md">
+                      <h3 className="font-serif text-base sm:text-xl font-bold text-white group-hover:text-[#D4AF67] transition-colors leading-snug line-clamp-2 drop-shadow-md">
                         {product.name}
                       </h3>
 
-                      <div className="pt-2 flex items-center justify-between">
+                      <div className="pt-1 sm:pt-2 flex items-center justify-between gap-2">
                         <Link
                           to={`/product/${product.slug}`}
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#FCF8F0] hover:text-[#D4AF67] group-hover:underline tracking-wider uppercase font-ui"
+                          className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-semibold text-[#FCF8F0] hover:text-[#D4AF67] group-hover:underline tracking-wider uppercase font-ui shrink-0"
                           aria-label={`Explore piece ${product.name}`}
                         >
                           <span>Explore Piece</span>
                           <ArrowRight className="w-3.5 h-3.5 text-[#B58A3C] group-hover:translate-x-1 transition-transform" />
                         </Link>
-                        {inStockCount > 0 ? (
-                          <span className="text-[10px] text-[#FCF8F0]/80 font-mono tracking-wider">
-                            {inStockCount} {inStockCount === 1 ? 'size' : 'sizes'} in stock
+                        {hasVariantData && inStockSizeCount > 0 ? (
+                          <span className="text-[9.5px] sm:text-[10px] text-[#FCF8F0]/80 font-mono tracking-wider shrink-0">
+                            {inStockSizeCount} {inStockSizeCount === 1 ? 'size' : 'sizes'} in stock
                           </span>
-                        ) : product.total_stock === 0 ? (
-                          <span className="text-[10px] text-amber-200 font-mono tracking-wider uppercase font-semibold">
+                        ) : isSoldOut ? (
+                          <span className="text-[9.5px] sm:text-[10px] text-amber-200 font-mono tracking-wider uppercase font-semibold shrink-0">
                             Sold out
                           </span>
                         ) : null}
