@@ -1,0 +1,208 @@
+diff --git a/frontend/src/components/BrandLogo.tsx b/frontend/src/components/BrandLogo.tsx
+index d8089d1..cabc282 100644
+--- a/frontend/src/components/BrandLogo.tsx
++++ b/frontend/src/components/BrandLogo.tsx
+@@ -298,7 +298,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
+       <div className={`flex flex-col items-center text-center leading-none ${className}`}>
+         {renderEmblem(size, 'mb-0.5')}
+         <span
+-          className="font-serif font-bold text-base sm:text-xl tracking-[0.15em] uppercase transition-colors"
++          className="font-serif font-bold text-sm sm:text-xl tracking-[0.1em] sm:tracking-[0.15em] whitespace-nowrap uppercase transition-colors"
+           style={{ color: textRoyal }}
+         >
+           ROYAL LIBAS
+diff --git a/frontend/src/components/Header.tsx b/frontend/src/components/Header.tsx
+index 0ec68cb..60d7eac 100644
+--- a/frontend/src/components/Header.tsx
++++ b/frontend/src/components/Header.tsx
+@@ -77,7 +77,7 @@ export const Header: React.FC = () => {
+   return (
+     <>
+       <header
+-        className={`sticky top-0 z-40 bg-[#FCF8F0]/98 backdrop-blur-md transition-all duration-250 ease-out ${
++        className={`sticky top-0 z-40 bg-[#FCF8F0]/95 backdrop-blur-md transition-all duration-250 ease-out ${
+           isScrolled
+             ? 'shadow-[0_2px_14px_rgba(43,27,30,0.08)] border-b border-[#E8DFD0]'
+             : 'border-b border-[#E8DFD0]'
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index 5b09d73..5a21fc2 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -328,6 +328,29 @@ button:active:not(:disabled),
+    Content is visible by default so it never hides if JS fails
+    Only elements primed below the viewport animate when reached
+    ======================================================== */
++@keyframes campaignCopyEnter {
++  from { opacity: 0; transform: translateY(18px); }
++  to { opacity: 1; transform: translateY(0); }
++}
++
++@keyframes campaignImageEnter {
++  from { opacity: 0; transform: scale(1.045); }
++  to { opacity: 1; transform: scale(1); }
++}
++
++@media (prefers-reduced-motion: no-preference) {
++  .hero-motion-copy > * {
++    animation: campaignCopyEnter 700ms var(--ease-royal) both;
++  }
++  .hero-motion-copy > :nth-child(2) { animation-delay: 100ms; }
++  .hero-motion-copy > :nth-child(3) { animation-delay: 180ms; }
++  .hero-motion-copy > :nth-child(4) { animation-delay: 260ms; }
++  .hero-motion-copy > :nth-child(5) { animation-delay: 320ms; }
++  .hero-motion-image {
++    animation: campaignImageEnter 950ms var(--ease-royal);
++  }
++}
++
+ .reveal-on-scroll {
+   opacity: 1;
+   transform: none;
+@@ -346,12 +369,48 @@ button:active:not(:disabled),
+   transform: translateY(0);
+ }
+ 
++/* Animate individual cards when their section is actually reached. */
++.reveal-on-scroll.reveal-primed .reveal-card {
++  opacity: 0;
++  transform: translateY(24px);
++  transition: opacity 600ms var(--ease-royal), transform 600ms var(--ease-royal);
++}
++.reveal-on-scroll.reveal-primed.is-revealed .reveal-card {
++  opacity: 1;
++  transform: translateY(0);
++}
++.reveal-on-scroll.reveal-primed .editorial-motion-image {
++  transform: scale(1.06);
++  transition: transform 1100ms var(--ease-royal);
++}
++.reveal-on-scroll.reveal-primed.is-revealed .editorial-motion-image {
++  transform: scale(1);
++}
++.reveal-on-scroll.reveal-primed .editorial-motion-copy > * {
++  opacity: 0;
++  transform: translateY(18px);
++  transition: opacity 650ms var(--ease-royal), transform 650ms var(--ease-royal);
++}
++.reveal-on-scroll.reveal-primed.is-revealed .editorial-motion-copy > * {
++  opacity: 1;
++  transform: translateY(0);
++}
++.editorial-motion-copy > :nth-child(2) { transition-delay: 80ms !important; }
++.editorial-motion-copy > :nth-child(3) { transition-delay: 150ms !important; }
++.editorial-motion-copy > :nth-child(4) { transition-delay: 220ms !important; }
++.editorial-motion-copy > :nth-child(5) { transition-delay: 290ms !important; }
++
+ /* Stagger utilities for grids of cards */
+ .stagger-1 { transition-delay: 60ms; }
+ .stagger-2 { transition-delay: 120ms; }
+ .stagger-3 { transition-delay: 180ms; }
+ .stagger-4 { transition-delay: 240ms; }
+ .stagger-5 { transition-delay: 300ms; }
++.reveal-on-scroll .reveal-card.stagger-1 { transition-delay: 60ms; }
++.reveal-on-scroll .reveal-card.stagger-2 { transition-delay: 120ms; }
++.reveal-on-scroll .reveal-card.stagger-3 { transition-delay: 180ms; }
++.reveal-on-scroll .reveal-card.stagger-4 { transition-delay: 240ms; }
++.reveal-on-scroll .reveal-card.stagger-5 { transition-delay: 300ms; }
+ 
+ /* Product Card Luxury Elevation */
+ .product-card-hover {
+@@ -400,6 +459,20 @@ button:active:not(:disabled),
+     transform: none !important;
+   }
+ 
++  .reveal-card,
++  .editorial-motion-copy > *,
++  .hero-motion-copy > * {
++    animation: none !important;
++    opacity: 1 !important;
++    transform: none !important;
++  }
++
++  .editorial-motion-image,
++  .hero-motion-image {
++    animation: none !important;
++    transform: none !important;
++  }
++
+   .product-card-hover:hover {
+     transform: none !important;
+   }
+diff --git a/frontend/src/pages/Home.tsx b/frontend/src/pages/Home.tsx
+index 0eab42f..d97197a 100644
+--- a/frontend/src/pages/Home.tsx
++++ b/frontend/src/pages/Home.tsx
+@@ -96,7 +96,7 @@ export const Home: React.FC = () => {
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
+           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+             {/* Left Column: High-Fashion Editorial Narrative */}
+-            <div className="lg:col-span-5 z-10 flex flex-col justify-center space-y-6 text-center lg:text-left">
++            <div className="hero-motion-copy lg:col-span-5 z-10 flex flex-col justify-center space-y-6 text-center lg:text-left">
+               <div className="inline-flex items-center justify-center lg:justify-start gap-2.5">
+                 <span className="w-8 h-[1px] bg-[#B58A3C]" />
+                 <span className="text-[11px] uppercase tracking-[0.28em] text-[#B58A3C] font-semibold">
+@@ -143,7 +143,7 @@ export const Home: React.FC = () => {
+                 <img
+                   src="/images/products/noorani_maroon_front.jpg"
+                   alt="Royal Libas Noorani Embroidered Ensemble"
+-                  className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 ease-out"
++                  className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 ease-out"
+                 />
+                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+ 
+@@ -284,7 +284,7 @@ export const Home: React.FC = () => {
+             <Link
+               key={idx}
+               to={cat.href}
+-              className={`group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none stagger-${idx + 1}`}
++              className={`reveal-card group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none stagger-${idx + 1}`}
+             >
+               <img
+                 src={cat.image}
+@@ -327,18 +327,18 @@ export const Home: React.FC = () => {
+           4. THE FESTIVE COLLECTION (Handbook Section 03 & Visual PDF Page 3)
+           Full-Width Editorial Campaign Banner
+           ======================================================== */}
+-      <section className="relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
++      <section className="reveal-on-scroll relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
+         <div className="relative min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] flex items-center">
+           <img
+             src="/images/products/dastaan_wine_front.jpg"
+             alt="The Festive Collection Campaign"
+-            className="absolute inset-0 w-full h-full object-cover object-top opacity-60"
++            className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-top opacity-60"
+             loading="lazy"
+           />
+           <div className="absolute inset-0 bg-gradient-to-r from-[#2B1B1E]/95 via-[#2B1B1E]/75 to-transparent pointer-events-none" />
+ 
+           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 w-full">
+-            <div className="max-w-xl space-y-5 text-left">
++            <div className="editorial-motion-copy max-w-xl space-y-5 text-left">
+               <span className="text-[10px] uppercase tracking-[0.3em] text-[#B58A3C] font-semibold block">
+                 SPECIAL OCCASIONS
+               </span>
+@@ -402,7 +402,7 @@ export const Home: React.FC = () => {
+         ) : (
+           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+             {curatedProducts.map((product, idx) => (
+-              <div key={product.id} className="card-stagger" style={{ animationDelay: `${idx * 40}ms` }}>
++              <div key={product.id} className={`reveal-card stagger-${idx + 1}`}>
+                 <ProductCard product={product} />
+               </div>
+             ))}
+@@ -420,13 +420,13 @@ export const Home: React.FC = () => {
+             <img
+               src="/images/products/riwayat_plum_front.jpg"
+               alt="Artisan Craftsmanship at Royal Libas Atelier"
+-              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
++              className="editorial-motion-image w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
+               loading="lazy"
+             />
+           </div>
+ 
+           {/* Right Column: Editorial Narrative */}
+-          <div className="lg:col-span-6 bg-[#FCF8F0] border border-[#B58A3C]/30 p-8 sm:p-12 lg:p-14 space-y-6 text-left shadow-sm">
++          <div className="editorial-motion-copy lg:col-span-6 bg-[#FCF8F0] border border-[#B58A3C]/30 p-8 sm:p-12 lg:p-14 space-y-6 text-left shadow-sm">
+             <div className="inline-flex items-center gap-2">
+               <span className="w-6 h-[1px] bg-[#B58A3C]" />
+               <span className="text-[10.5px] uppercase tracking-[0.3em] text-[#B58A3C] font-semibold">
