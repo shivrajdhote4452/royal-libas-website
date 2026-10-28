@@ -798,13 +798,28 @@ export async function adminUploadMedia(token: string, file: File, folder?: strin
 
 export async function adminUploadMediaBatch(
   token: string,
-  files: File[],
+  items: File[] | Array<{ file: File; clientId: string }>,
   folder?: string
 ): Promise<MediaUploadBatchResponse> {
   const formData = new FormData();
-  for (const f of files) {
-    formData.append('files', f);
+  const clientIds: string[] = [];
+  let hasClientIds = false;
+
+  for (const item of items) {
+    if ('file' in item && 'clientId' in item) {
+      formData.append('files', item.file);
+      formData.append('client_ids', item.clientId);
+      clientIds.push(item.clientId);
+      hasClientIds = true;
+    } else {
+      formData.append('files', item as File);
+    }
   }
+
+  if (hasClientIds) {
+    formData.append('client_ids_json', JSON.stringify(clientIds));
+  }
+
   const q = folder ? `?folder=${encodeURIComponent(folder)}` : '';
   const response = await fetch(`${API_BASE_URL}/admin/media/upload-batch${q}`, {
     method: 'POST',

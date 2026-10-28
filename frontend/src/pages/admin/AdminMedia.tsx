@@ -15,13 +15,6 @@ import {
   Tag,
   CheckCircle2,
   AlertTriangle,
-  Play,
-  Film,
-  AlertCircle,
-  ExternalLink,
-  Tag,
-  CheckCircle2,
-  AlertTriangle,
 } from 'lucide-react';
 import {
   adminListMedia,
@@ -178,25 +171,44 @@ export const AdminMedia: React.FC = () => {
     );
 
     try {
-      const filesToUpload = pendingItems.map((i) => i.file);
-      const batchRes = await adminUploadMediaBatch(token, filesToUpload);
+      const itemsToUpload = pendingItems.map((i) => ({ file: i.file, clientId: i.id }));
+      const batchRes = await adminUploadMediaBatch(token, itemsToUpload);
 
-      // Map results back to queue items
-      const successFilenames = new Set(batchRes.uploaded.map((u) => u.filename));
+      // Map results back to queue items using clientId first for precise duplicate handling
+      const successCids = new Set(
+        batchRes.uploaded
+          .map((u) => u.client_id)
+          .filter((cid): cid is string => Boolean(cid))
+      );
       const failureMap = new Map<string, string>();
-      batchRes.failed.forEach((f) => failureMap.set(f.filename, f.error));
+      batchRes.failed.forEach((f) => {
+        if (f.client_id) {
+          failureMap.set(f.client_id, f.error);
+        } else {
+          failureMap.set(f.filename, f.error);
+        }
+      });
+
+      const successFilenames = new Set(batchRes.uploaded.map((u) => u.filename));
 
       setUploadQueue((prev) =>
         prev.map((item) => {
           if (item.status === 'uploading') {
-            if (successFilenames.has(item.file.name)) {
+            if (successCids.has(item.id)) {
+              return { ...item, status: 'success' };
+            }
+            if (failureMap.has(item.id)) {
+              return { ...item, status: 'error', error: failureMap.get(item.id) };
+            }
+            // Fallback to filename matching if server did not echo client_id
+            if (successFilenames.has(item.file.name) && !failureMap.has(item.file.name)) {
               return { ...item, status: 'success' };
             }
             if (failureMap.has(item.file.name)) {
               return { ...item, status: 'error', error: failureMap.get(item.file.name) };
             }
-            // If response succeeded overall without specific mapping
-            return { ...item, status: 'success' };
+            // Never assume success if result could not be confirmed
+            return { ...item, status: 'error', error: 'Upload status unconfirmed by server.' };
           }
           return item;
         })

@@ -16,6 +16,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   const [primaryError, setPrimaryError] = useState(false);
   const [secondaryError, setSecondaryError] = useState(false);
+  const [secondaryLoaded, setSecondaryLoaded] = useState(false);
 
   // Available image URLs: safely ensure photos or video posters are rendered
   const toImageUrl = (url: string | null | undefined): string | null => {
@@ -54,7 +55,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
 
   // Crossfade is ONLY enabled on desktop when both primary and secondary images are valid and loaded
-  const canCrossfade = Boolean(primaryImage && secondaryImage && !primaryError && !secondaryError);
+  const canCrossfade = Boolean(primaryImage && secondaryImage && !primaryError && !secondaryError && secondaryLoaded);
 
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -126,6 +127,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             <img
               src={secondaryImage}
               alt={`${product.name} alternate view`}
+              onLoad={() => setSecondaryLoaded(true)}
               onError={() => setSecondaryError(true)}
               className="product-card-image-secondary hidden sm:block absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-300 ease-out pointer-events-none"
               loading="lazy"

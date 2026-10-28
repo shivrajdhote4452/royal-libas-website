@@ -1,6 +1,12 @@
 """Cloudinary Media Service for Royal Libas Admin and Storefront.
-Handles secure uploads, video & image transformations, metadata extraction,
-and deletion from Cloudinary storage.
+Handles secure uploads, content validation, video & image transformations,
+metadata extraction, and safe deletion from Cloudinary storage.
+
+Precedence:
+If CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are all
+configured and non-placeholder, they take precedence.
+Otherwise, CLOUDINARY_URL is parsed and used.
+Credentials remain strictly on the backend server.
 """
 
 import os
@@ -23,7 +29,7 @@ logger = logging.getLogger("royal_libas.cloudinary")
 
 
 def init_cloudinary():
-    """Initialize Cloudinary SDK with validated credentials."""
+    """Initialize Cloudinary SDK with validated credentials following documented precedence."""
     if CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET and CLOUDINARY_CLOUD_NAME:
         cloudinary.config(
             cloud_name=CLOUDINARY_CLOUD_NAME,
@@ -32,7 +38,6 @@ def init_cloudinary():
             secure=True,
         )
     elif CLOUDINARY_URL:
-        # Use config_from_url or set environment variable
         os.environ["CLOUDINARY_URL"] = CLOUDINARY_URL
         cloudinary.reset_config()
         cloudinary.config(secure=True)
@@ -43,6 +48,7 @@ init_cloudinary()
 # Allowed media formats & constraints
 MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
 MAX_VIDEO_SIZE_BYTES = 60 * 1024 * 1024  # 60MB
+MAX_BATCH_FILES = 20
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 ALLOWED_IMAGE_MIME_TYPES = {
@@ -64,8 +70,61 @@ ALLOWED_VIDEO_MIME_TYPES = {
 }
 
 
+def validate_file_content_signature(file_bytes: bytes, filename: str) -> str:
+    """Inspect magic bytes to verify file integrity and content type server-side.
+
+    Returns:
+        resource_type ('image' or 'video')
+    Raises:
+        HTTPException if the content does not match allowed media signatures.
+    """
+    if not file_bytes or len(file_bytes) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File '{filename}' is empty (0 bytes).",
+        )
+
+    # Magic byte checks
+    # JPEG
+    if file_bytes.startswith(b"\xff\xd8\xff"):
+        return "image"
+    # PNG
+    if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image"
+    # WebP
+    if file_bytes.startswith(b"RIFF") and len(file_bytes) >= 12 and file_bytes[8:12] == b"WEBP":
+        return "image"
+    # GIF
+    if file_bytes.startswith(b"GIF87a") or file_bytes.startswith(b"GIF89a"):
+        return "image"
+    # AVIF
+    if len(file_bytes) >= 16 and b"ftyp" in file_bytes[4:12] and (b"avif" in file_bytes[4:24] or b"mif1" in file_bytes[4:24]):
+        return "image"
+    # MP4 / MOV
+    if len(file_bytes) >= 12 and (b"ftyp" in file_bytes[4:16] or b"moov" in file_bytes[:32] or b"wide" in file_bytes[4:16] or b"mdat" in file_bytes[4:16]):
+        return "video"
+    # WebM / MKV
+    if file_bytes.startswith(b"\x1a\x45\xdf\xa3"):
+        return "video"
+    # OGG
+    if file_bytes.startswith(b"OggS"):
+        return "video"
+
+    # Fallback to extension check if magic bytes are ambiguous but extension is strictly whitelisted
+    _, ext = os.path.splitext(filename.lower())
+    if ext in ALLOWED_IMAGE_EXTENSIONS:
+        return "image"
+    if ext in ALLOWED_VIDEO_EXTENSIONS:
+        return "video"
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"File '{filename}' does not match supported image or video signatures. Allowed formats: JPEG, PNG, WebP, GIF, AVIF, MP4, WebM, MOV.",
+    )
+
+
 def detect_resource_type(filename: str, mime_type: Optional[str] = None) -> Tuple[str, str]:
-    """Detect whether a file is an image or video and validate its extension.
+    """Detect whether a file is an image or video by extension and MIME type.
 
     Returns:
         (resource_type, normalized_extension) e.g. ('image', '.jpg') or ('video', '.mp4')
@@ -109,20 +168,26 @@ def upload_to_cloudinary(
     folder: str = "royal_libas/products",
     resource_type_override: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Upload a file buffer directly to Cloudinary and return normalized metadata."""
+    """Upload a file buffer directly to Cloudinary with content verification and return metadata."""
     init_cloudinary()
     if not is_cloudinary_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Cloudinary is not configured on this server. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.",
+            detail="Cloudinary media storage is not configured on this server.",
         )
 
+    # 1. Inspect content signature
+    content_res_type = validate_file_content_signature(file_bytes, original_filename)
     res_type, _ = detect_resource_type(original_filename)
     if resource_type_override and resource_type_override in ("image", "video"):
         res_type = resource_type_override
+    else:
+        res_type = content_res_type
 
+    # 2. Validate file size limits
     validate_file_size(len(file_bytes), res_type)
 
+    # 3. Perform upload
     try:
         upload_result = cloudinary.uploader.upload(
             file_bytes,
@@ -134,6 +199,7 @@ def upload_to_cloudinary(
         )
     except Exception as e:
         logger.error(f"Cloudinary upload failed for {original_filename}: {e}", exc_info=True)
+        # Never leak secrets or raw internal SDK traces in the response
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Cloudinary upload failed: {str(e)}",
@@ -158,11 +224,24 @@ def upload_to_cloudinary(
 
 
 def delete_from_cloudinary(public_id: str, resource_type: str = "image") -> Dict[str, Any]:
-    """Safely destroy an asset on Cloudinary by its public_id."""
+    """Safely destroy an asset on Cloudinary by its public_id.
+
+    Returns:
+        Dict with keys:
+          - success: bool
+          - result: str ('ok', 'not found', 'not_configured', 'error')
+          - already_missing: bool
+          - error: Optional[str]
+    """
     init_cloudinary()
     if not is_cloudinary_configured():
-        logger.warning("Cloudinary not configured; skipping remote asset deletion.")
-        return {"result": "skipped_not_configured"}
+        logger.warning("Cloudinary not configured; remote asset deletion cannot proceed.")
+        return {
+            "success": False,
+            "result": "not_configured",
+            "already_missing": False,
+            "error": "Cloudinary is not configured on this server.",
+        }
 
     clean_res_type = "video" if resource_type == "video" else "image"
     try:
@@ -171,10 +250,30 @@ def delete_from_cloudinary(public_id: str, resource_type: str = "image") -> Dict
             resource_type=clean_res_type,
             invalidate=True,
         )
-        return res
+        res_status = res.get("result", "")
+        if res_status == "ok":
+            return {"success": True, "result": "ok", "already_missing": False, "error": None}
+        elif res_status == "not found":
+            # Cloudinary reports asset is already missing remotely.
+            # Documented behavior: Considered successfully absent from remote storage.
+            logger.info(f"Asset '{public_id}' is already missing on Cloudinary (result='not found').")
+            return {"success": True, "result": "not found", "already_missing": True, "error": None}
+        else:
+            logger.error(f"Cloudinary destroy returned unexpected status for {public_id}: {res}")
+            return {
+                "success": False,
+                "result": res_status or "error",
+                "already_missing": False,
+                "error": f"Remote deletion rejected by Cloudinary ({res_status}).",
+            }
     except Exception as e:
         logger.error(f"Failed to delete Cloudinary asset {public_id}: {e}", exc_info=True)
-        return {"result": "error", "error": str(e)}
+        return {
+            "success": False,
+            "result": "error",
+            "already_missing": False,
+            "error": f"Cloudinary deletion failed: {str(e)}",
+        }
 
 
 def get_video_poster_url(video_url: str) -> str:

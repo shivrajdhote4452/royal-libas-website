@@ -901,6 +901,7 @@ class MediaAssetProductUsage(BaseModel):
 class MediaAssetResponse(BaseModel):
     id: int
     filename: str
+    client_id: Optional[str] = None
     public_id: Optional[str] = None
     url: str
     secure_url: Optional[str] = None
@@ -920,6 +921,7 @@ class MediaAssetResponse(BaseModel):
 
 
 class MediaUploadFailure(BaseModel):
+    client_id: Optional[str] = None
     filename: str
     error: str
 

@@ -26,6 +26,17 @@ import {
 } from '../../lib/api';
 import { Product, ProductVariant } from '../../types/product';
 
+interface ProductMediaItem {
+  id?: number;
+  url: string;
+  public_id?: string | null;
+  resource_type?: 'image' | 'video';
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
+  alt_text?: string | null;
+}
+
 export const AdminProducts: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,13 +67,13 @@ export const AdminProducts: React.FC = () => {
   const [editStock, setEditStock] = useState('');
 
   // Image Gallery State for Existing Products
-  const [photosMap, setPhotosMap] = useState<Record<number, string[]>>({});
+  const [photosMap, setPhotosMap] = useState<Record<number, ProductMediaItem[]>>({});
   const [photoUrlInput, setPhotoUrlInput] = useState<Record<number, string>>({});
   const [isSavingGallery, setIsSavingGallery] = useState<number | null>(null);
   const [uploadingTarget, setUploadingTarget] = useState<'new' | number | null>(null);
 
   // Image State for New Product Modal
-  const [newImages, setNewImages] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<ProductMediaItem[]>([]);
   const [newImageUrlInput, setNewImageUrlInput] = useState('');
 
   const [actionLoading, setActionLoading] = useState(false);
@@ -76,9 +87,18 @@ export const AdminProducts: React.FC = () => {
     try {
       const res = await fetchAdminProducts(token);
       setProducts(res);
-      const initialMap: Record<number, string[]> = {};
+      const initialMap: Record<number, ProductMediaItem[]> = {};
       res.forEach((p) => {
-        initialMap[p.id] = (p.images || []).map((img) => img.url);
+        initialMap[p.id] = (p.images || []).map((img) => ({
+          id: img.id,
+          url: img.url,
+          public_id: img.public_id,
+          resource_type: img.resource_type || (img.url.match(/\.(mp4|webm|mov|ogg|mkv)/i) ? 'video' : 'image'),
+          width: img.width,
+          height: img.height,
+          duration: img.duration,
+          alt_text: img.alt_text,
+        }));
       });
       setPhotosMap(initialMap);
       if (res.length > 0 && expandedProductId === null) {
@@ -115,12 +135,21 @@ export const AdminProducts: React.FC = () => {
         }
         const uploaded = await adminUploadProductImage(token, file);
         if (uploaded && uploaded.url) {
+          const mediaObj: ProductMediaItem = {
+            url: uploaded.secure_url || uploaded.url,
+            public_id: uploaded.public_id,
+            resource_type: uploaded.resource_type || (isVideo ? 'video' : 'image'),
+            width: uploaded.width,
+            height: uploaded.height,
+            duration: uploaded.duration,
+            alt_text: file.name,
+          };
           if (target === 'new') {
-            setNewImages((prev) => [...prev, uploaded.url]);
+            setNewImages((prev) => [...prev, mediaObj]);
           } else {
             setPhotosMap((prev) => ({
               ...prev,
-              [target]: [...(prev[target] || []), uploaded.url],
+              [target]: [...(prev[target] || []), mediaObj],
             }));
           }
         }
@@ -141,7 +170,8 @@ export const AdminProducts: React.FC = () => {
         setActionError('Base64 data strings cannot be stored in database. Please upload the image file directly.');
         return;
       }
-      setNewImages((prev) => [...prev, url]);
+      const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url);
+      setNewImages((prev) => [...prev, { url, resource_type: isVid ? 'video' : 'image' }]);
       setNewImageUrlInput('');
     } else {
       const url = (photoUrlInput[target] || '').trim();
@@ -150,9 +180,10 @@ export const AdminProducts: React.FC = () => {
         setActionError('Base64 data strings cannot be stored in database. Please upload the image file directly.');
         return;
       }
+      const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url);
       setPhotosMap((prev) => ({
         ...prev,
-        [target]: [...(prev[target] || []), url],
+        [target]: [...(prev[target] || []), { url, resource_type: isVid ? 'video' : 'image' }],
       }));
       setPhotoUrlInput((prev) => ({ ...prev, [target]: '' }));
     }
@@ -192,13 +223,19 @@ export const AdminProducts: React.FC = () => {
     setIsSavingGallery(productId);
     setActionError(null);
     try {
-      const urls = photosMap[productId] || [];
-      if (urls.some((u) => u.startsWith('data:image/'))) {
+      const items = photosMap[productId] || [];
+      if (items.some((u) => u.url.startsWith('data:image/'))) {
         throw new Error('Base64 data URLs cannot be saved. Please remove them and upload images directly.');
       }
-      const imagePayload = urls.map((url, idx) => ({
-        url,
+      const imagePayload = items.map((item, idx) => ({
+        url: item.url,
         sort_order: idx + 1,
+        public_id: item.public_id || null,
+        resource_type: item.resource_type || (item.url.match(/\.(mp4|webm|mov|ogg|mkv)/i) ? 'video' : 'image'),
+        width: item.width || null,
+        height: item.height || null,
+        duration: item.duration || null,
+        alt_text: item.alt_text || null,
       }));
       await adminUpdateProduct(token, productId, { images: imagePayload });
       await loadProducts();
@@ -246,7 +283,16 @@ export const AdminProducts: React.FC = () => {
         { size: 'M', selling_price: priceNum, mrp: mrpNum, stock: 12 },
         { size: 'L', selling_price: priceNum, mrp: mrpNum, stock: 6 },
       ],
-      images: newImages.map((url, idx) => ({ url, sort_order: idx + 1 })),
+      images: newImages.map((item, idx) => ({
+        url: item.url,
+        sort_order: idx + 1,
+        public_id: item.public_id || null,
+        resource_type: item.resource_type || (item.url.match(/\.(mp4|webm|mov|ogg|mkv)/i) ? 'video' : 'image'),
+        width: item.width || null,
+        height: item.height || null,
+        duration: item.duration || null,
+        alt_text: item.alt_text || null,
+      })),
     };
 
     try {
@@ -718,7 +764,9 @@ export const AdminProducts: React.FC = () => {
 
                       {/* Photo Thumbnails with Reorder & Remove */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                        {(photosMap[product.id] || []).map((imgUrl, idx) => (
+                        {(photosMap[product.id] || []).map((item, idx) => {
+                        const imgUrl = item.url;
+                        return (
                           <div
                             key={idx}
                             className="relative group bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm flex flex-col"
@@ -782,7 +830,8 @@ export const AdminProducts: React.FC = () => {
                               </button>
                             </div>
                           </div>
-                        ))}
+                        );
+                      })}
                       </div>
 
                       {/* Add Image Inputs */}
@@ -1009,7 +1058,9 @@ export const AdminProducts: React.FC = () => {
 
                 {newImages.length > 0 && (
                   <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-gray-100">
-                    {newImages.map((url, idx) => (
+                    {newImages.map((item, idx) => {
+                      const url = item.url;
+                      return (
                       <div
                         key={idx}
                         className="relative bg-white rounded border border-gray-200 overflow-hidden flex flex-col"
@@ -1065,7 +1116,8 @@ export const AdminProducts: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                   </div>
                 )}
               </div>

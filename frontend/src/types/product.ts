@@ -31,6 +31,7 @@ export interface MediaAssetProductUsage {
 export interface MediaAsset {
   id: number;
   filename: string;
+  client_id?: string | null;
   public_id?: string | null;
   url: string;
   secure_url?: string | null;
@@ -49,6 +50,7 @@ export interface MediaAsset {
 
 export interface MediaUploadFailure {
   filename: string;
+  client_id?: string | null;
   error: string;
 }
 
