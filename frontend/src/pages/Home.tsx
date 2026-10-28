@@ -43,11 +43,15 @@ export const Home: React.FC = () => {
     };
   }, []);
 
-  // Editorial Scroll Reveal Observer
+  // Editorial Scroll Reveal Observer — Viewport-triggered with no premature timers
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion || !('IntersectionObserver' in window)) {
-      document.querySelectorAll('.reveal-on-scroll').forEach((el) => el.classList.add('is-revealed'));
+      // Content remains fully visible with no animations
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => {
+        el.classList.remove('reveal-primed');
+        el.classList.add('is-revealed');
+      });
       return;
     }
 
@@ -60,28 +64,24 @@ export const Home: React.FC = () => {
           }
         });
       },
-      { rootMargin: '120px 0px 60px 0px', threshold: 0.05 }
+      { rootMargin: '0px 0px -40px 0px', threshold: 0.06 }
     );
 
     const elements = document.querySelectorAll('.reveal-on-scroll');
     elements.forEach((el) => {
       const rect = el.getBoundingClientRect();
-      if (rect.top < window.innerHeight + 150) {
-        el.classList.add('is-revealed');
-      } else {
+      if (rect.top >= window.innerHeight - 30) {
+        // Below initial viewport: prime for scroll reveal when reached
+        el.classList.add('reveal-primed');
         observer.observe(el);
+      } else {
+        // Above or in initial viewport: render immediately without delayed animation
+        el.classList.remove('reveal-primed');
+        el.classList.add('is-revealed');
       }
     });
 
-    // Safety guarantee: Ensure all content is revealed within 1.2s so no section stays hidden
-    const safetyTimer = setTimeout(() => {
-      document.querySelectorAll('.reveal-on-scroll').forEach((el) => el.classList.add('is-revealed'));
-    }, 1200);
-
-    return () => {
-      observer.disconnect();
-      clearTimeout(safetyTimer);
-    };
+    return () => observer.disconnect();
   }, [loading]);
 
   const curatedProducts = products.slice(0, 4);

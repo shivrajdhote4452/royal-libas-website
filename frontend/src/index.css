@@ -326,16 +326,22 @@ button:active:not(:disabled),
 /* ========================================================
    EDITORIAL SCROLL REVEAL & STAGGER SYSTEM
    Content is visible by default so it never hides if JS fails
+   Only elements primed below the viewport animate when reached
    ======================================================== */
 .reveal-on-scroll {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal-on-scroll.reveal-primed {
   opacity: 0;
-  transform: translateY(18px);
+  transform: translateY(22px);
   transition: opacity var(--motion-slow) var(--ease-royal),
               transform var(--motion-slow) var(--ease-royal);
   will-change: opacity, transform;
 }
 
-.reveal-on-scroll.is-revealed {
+.reveal-on-scroll.reveal-primed.is-revealed {
   opacity: 1;
   transform: translateY(0);
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ShoppingBag, Menu, X, Search, Heart, ChevronDown, User } from 'lucide-react';
 import { useCart } from '../context/CartContext';
@@ -15,6 +15,22 @@ export const Header: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [collectionsAccordionOpen, setCollectionsAccordionOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<'categories' | 'collections' | null>(null);
+  const closeDropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleDropdownEnter = (type: 'categories' | 'collections') => {
+    if (closeDropdownTimerRef.current) {
+      clearTimeout(closeDropdownTimerRef.current);
+      closeDropdownTimerRef.current = null;
+    }
+    setActiveDropdown(type);
+  };
+
+  const handleDropdownLeave = () => {
+    closeDropdownTimerRef.current = setTimeout(() => {
+      setActiveDropdown(null);
+    }, 160);
+  };
 
   // Scroll detection (Point 9: reduce height smoothly after 60-100px)
   useEffect(() => {
@@ -25,18 +41,21 @@ export const Header: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close mobile menu on route change
+  // Close mobile menu and dropdowns on route change
   useEffect(() => {
     setMobileMenuOpen(false);
     setSearchModalOpen(false);
+    setActiveDropdown(null);
   }, [location.pathname, location.search]);
 
-  // Support Escape to close open menus and modals
+  // Support Escape to close open menus, dropdowns, and modals
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setActiveDropdown(null);
         setMobileMenuOpen(false);
         setSearchModalOpen(false);
+        (document.activeElement as HTMLElement)?.blur();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -113,20 +132,37 @@ export const Header: React.FC = () => {
               >
                 SHOP
               </Link>
-              <div className="relative group">
+              {/* Categories Navigation with Smooth Dropdown */}
+              <div
+                className="relative"
+                onMouseEnter={() => handleDropdownEnter('categories')}
+                onMouseLeave={handleDropdownLeave}
+              >
                 <Link
                   to="/shop"
+                  onFocus={() => handleDropdownEnter('categories')}
                   className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none ${
                     location.search.includes('category') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
                   aria-haspopup="true"
+                  aria-expanded={activeDropdown === 'categories'}
                 >
                   <span>CATEGORIES</span>
-                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out group-hover:rotate-180 group-focus-within:rotate-180" />
+                  <ChevronDown
+                    className={`w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out ${
+                      activeDropdown === 'categories' ? 'rotate-180' : ''
+                    }`}
+                  />
                 </Link>
 
-                {/* Categories Dropdown with luxury slide-down animation */}
-                <div className="absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 opacity-0 invisible -translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 transition-all duration-200 ease-out z-50">
+                {/* Categories Dropdown with smooth opacity and slide-down transition */}
+                <div
+                  className={`absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
+                    activeDropdown === 'categories'
+                      ? 'opacity-100 visible translate-y-0 pointer-events-auto'
+                      : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+                  }`}
+                >
                   <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
                     <span className="text-[9.5px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
                       Explore By Silhouette
@@ -134,6 +170,7 @@ export const Header: React.FC = () => {
                   </div>
                   <Link
                     to="/shop?category=Kurti+Sets"
+                    onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
                     <span>Kurti Sets</span>
@@ -141,6 +178,7 @@ export const Header: React.FC = () => {
                   </Link>
                   <Link
                     to="/shop?category=Festive+Sets"
+                    onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
                     <span>Festive Sets</span>
@@ -148,42 +186,55 @@ export const Header: React.FC = () => {
                   </Link>
                   <Link
                     to="/shop?category=Co-ord+Sets"
+                    onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
                     <span>Co-ord Sets</span>
                     <span className="text-[10px] text-gray-400 font-mono">4 Styles</span>
                   </Link>
-                  <Link
-                    to="/shop?category=Anarkali"
-                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
-                  >
-                    <span>Royal Anarkali</span>
-                    <span className="text-[10px] text-[#B58A3C] font-semibold">Couture</span>
-                  </Link>
-                  <Link
-                    to="/shop?category=Lehenga"
-                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
-                  >
-                    <span>Bridal Lehengas</span>
-                    <span className="text-[10px] text-[#B58A3C] font-semibold">Heirloom</span>
-                  </Link>
+                  <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
+                    <Link
+                      to="/shop"
+                      onClick={() => setActiveDropdown(null)}
+                      className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
+                    >
+                      <span>Explore All Silhouettes &rarr;</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
 
-              <div className="relative group">
+              {/* Collections Navigation with Smooth Dropdown */}
+              <div
+                className="relative"
+                onMouseEnter={() => handleDropdownEnter('collections')}
+                onMouseLeave={handleDropdownLeave}
+              >
                 <Link
                   to="/shop?collection=festive-edit"
+                  onFocus={() => handleDropdownEnter('collections')}
                   className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none ${
                     location.search.includes('collection') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
                   aria-haspopup="true"
+                  aria-expanded={activeDropdown === 'collections'}
                 >
                   <span>COLLECTIONS</span>
-                  <ChevronDown className="w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out group-hover:rotate-180 group-focus-within:rotate-180" />
+                  <ChevronDown
+                    className={`w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out ${
+                      activeDropdown === 'collections' ? 'rotate-180' : ''
+                    }`}
+                  />
                 </Link>
 
-                {/* Collections Dropdown with luxury slide-down animation */}
-                <div className="absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 opacity-0 invisible -translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 transition-all duration-200 ease-out z-50">
+                {/* Collections Dropdown with smooth opacity and slide-down transition */}
+                <div
+                  className={`absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
+                    activeDropdown === 'collections'
+                      ? 'opacity-100 visible translate-y-0 pointer-events-auto'
+                      : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+                  }`}
+                >
                   <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
                     <span className="text-[9.5px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
                       Curated Editions
@@ -191,6 +242,7 @@ export const Header: React.FC = () => {
                   </div>
                   <Link
                     to="/shop?collection=festive-edit"
+                    onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
                     <span>Festive Edit &apos;26</span>
@@ -198,6 +250,7 @@ export const Header: React.FC = () => {
                   </Link>
                   <Link
                     to="/shop?collection=everyday-cotton"
+                    onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
                     <span>Everyday Cotton</span>
@@ -205,6 +258,7 @@ export const Header: React.FC = () => {
                   </Link>
                   <Link
                     to="/shop?collection=bestsellers"
+                    onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
                     <span>Iconic Bestsellers</span>
@@ -213,9 +267,10 @@ export const Header: React.FC = () => {
                   <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
                     <Link
                       to="/shop"
+                      onClick={() => setActiveDropdown(null)}
                       className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
                     >
-                      <span>Explore All Creations &rarr;</span>
+                      <span>Explore All Editions &rarr;</span>
                     </Link>
                   </div>
                 </div>
