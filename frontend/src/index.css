@@ -479,6 +479,96 @@ button:active:not(:disabled),
   }
 }
 
+/* ========================================================
+   CINEMATIC EDITORIAL POSTER SYSTEM (Occasion, Everyday, Craft)
+   ======================================================== */
+.poster-motion-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.poster-image-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.poster-motion-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.06);
+  transition: transform 1200ms var(--ease-royal);
+  will-change: transform;
+}
+
+/* Precise focal point alignment per concept */
+.poster-img-occasion {
+  object-position: 78% center;
+}
+.poster-img-everyday {
+  object-position: 22% center;
+}
+.poster-img-story {
+  object-position: 75% center;
+}
+
+@media (max-width: 639px) {
+  .poster-img-occasion {
+    object-position: 80% 12%;
+  }
+  .poster-img-everyday {
+    object-position: 20% 10%;
+  }
+  .poster-img-story {
+    object-position: 75% 20%;
+  }
+}
+
+/* Viewport reveal integration */
+.reveal-on-scroll.reveal-primed .poster-motion-img {
+  transform: scale(1.08);
+}
+.reveal-on-scroll.reveal-primed.is-revealed .poster-motion-img {
+  transform: scale(1);
+}
+
+/* Coordinated sequence of editorial text items */
+.reveal-on-scroll.reveal-primed .poster-seq-item {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 650ms var(--ease-royal), transform 650ms var(--ease-royal);
+}
+.reveal-on-scroll.reveal-primed.is-revealed .poster-seq-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.poster-seq-1 { transition-delay: 80ms !important; }
+.poster-seq-2 { transition-delay: 160ms !important; }
+.poster-seq-3 { transition-delay: 240ms !important; }
+.poster-seq-4 { transition-delay: 320ms !important; }
+.poster-seq-5 { transition-delay: 400ms !important; }
+
+/* Everyday Edit (Light Ivory) has soft horizontal drift */
+.poster-theme-everyday.reveal-on-scroll.reveal-primed .poster-seq-item {
+  transform: translate3d(16px, 12px, 0);
+}
+.poster-theme-everyday.reveal-on-scroll.reveal-primed.is-revealed .poster-seq-item {
+  transform: translate3d(0, 0, 0);
+}
+
+/* Craft Story glides with slower tactile scale settling */
+.poster-theme-story .poster-motion-img {
+  transform: scale(1.10);
+  transition: transform 1500ms var(--ease-royal);
+}
+.poster-theme-story.reveal-on-scroll.reveal-primed.is-revealed .poster-motion-img {
+  transform: scale(1);
+}
+
 /* Strict respect for prefers-reduced-motion: disable all non-essential movement */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -492,6 +582,14 @@ button:active:not(:disabled),
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .poster-motion-img,
+  .poster-seq-item {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
   }
 
   .animate-marquee-track {
