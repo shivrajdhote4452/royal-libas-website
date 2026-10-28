@@ -280,6 +280,44 @@ def run_isolated_media_safety_tests():
                     assert "rolled back" in b_data["failed"][0]["error"]
         print("  [PASS] Batch upload safely continues across files; handles duplicate filenames via client_id")
 
+        # 2.5 Post-Commit Error (db.refresh failure after successful commit must NOT delete Cloudinary asset)
+        destroy_refresh_mock = MagicMock(return_value={"result": "ok"})
+        with patch("cloudinary.uploader.upload", return_value=dict(mock_cloudinary_upload, public_id="royal_libas/refresh_safe_asset")):
+            with patch("cloudinary.uploader.destroy", destroy_refresh_mock):
+                with patch.object(Session, "refresh", side_effect=Exception("Connection drop on refresh")):
+                    refresh_fail_resp = client.post(
+                        "/admin/media/upload",
+                        headers=headers,
+                        files={"file": ("refresh_safe.jpg", valid_jpeg, "image/jpeg")},
+                    )
+                    # Upload must succeed with HTTP 200 because DB commit was already successful!
+                    assert refresh_fail_resp.status_code == 200, f"Expected 200 but got {refresh_fail_resp.status_code}"
+                    resp_json = refresh_fail_resp.json()
+                    assert resp_json["public_id"] == "royal_libas/refresh_safe_asset"
+                    assert not destroy_refresh_mock.called, "Cloudinary asset MUST NOT be deleted when post-commit refresh fails!"
+
+                    # Verify record exists in DB
+                    verify_sess = TestingSessionLocal()
+                    committed_record = verify_sess.query(MediaAsset).filter(MediaAsset.public_id == "royal_libas/refresh_safe_asset").first()
+                    assert committed_record is not None, "Database record must be preserved!"
+                    verify_sess.close()
+        print("  [PASS] Post-commit refresh error does NOT delete committed Cloudinary asset and preserves DB record")
+
+        # 2.6 Product Image Upload: Post-commit refresh failure preserves Cloudinary and DB record
+        destroy_prod_refresh_mock = MagicMock(return_value={"result": "ok"})
+        with patch("cloudinary.uploader.upload", return_value=dict(mock_cloudinary_upload, public_id="royal_libas/prod_refresh_safe")):
+            with patch("cloudinary.uploader.destroy", destroy_prod_refresh_mock):
+                with patch.object(Session, "refresh", side_effect=Exception("DB cursor reset")):
+                    prod_upload_resp = client.post(
+                        "/admin/products/upload-image",
+                        headers=headers,
+                        files={"file": ("product_shot.jpg", valid_jpeg, "image/jpeg")},
+                    )
+                    assert prod_upload_resp.status_code == 200
+                    assert prod_upload_resp.json()["public_id"] == "royal_libas/prod_refresh_safe"
+                    assert not destroy_prod_refresh_mock.called, "Product asset MUST NOT be deleted when post-commit refresh fails!"
+        print("  [PASS] Product image post-commit refresh error preserves Cloudinary and DB record")
+
         # -------------------------------------------------------------
         # SUITE 3: SAFE DELETION & METADATA PRESERVATION
         # -------------------------------------------------------------

@@ -1854,7 +1854,6 @@ async def admin_upload_media_batch(
             )
             db.add(asset)
             db.commit()
-            db.refresh(asset)
         except Exception as db_err:
             db.rollback()
             admin_media_logger.error(
@@ -1879,7 +1878,14 @@ async def admin_upload_media_batch(
             failed.append(MediaUploadFailure(client_id=cid, filename=filename, error=error_msg))
             continue
 
-        # 4. Post-commit operations (MUST NOT delete remote asset if these fail!)
+        # 4. Post-commit operations (asset IS COMMITTED: MUST NOT delete remote asset if these fail!)
+        try:
+            db.refresh(asset)
+        except Exception as ref_err:
+            admin_media_logger.warning(
+                f"Post-commit refresh failed for media asset {asset.id} ('{filename}', public_id: {c_res['public_id']}): {ref_err}"
+            )
+
         try:
             log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({c_res['resource_type']})")
         except Exception as log_err:
@@ -1956,7 +1962,6 @@ async def admin_upload_media_asset(
         )
         db.add(asset)
         db.commit()
-        db.refresh(asset)
     except Exception as db_err:
         db.rollback()
         admin_media_logger.error(f"Database registration failure for '{filename}': {db_err}", exc_info=True)
@@ -1976,6 +1981,14 @@ async def admin_upload_media_asset(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database registration failed and remote asset cleanup could not be confirmed. Asset ID '{c_res['public_id']}' may require manual cleanup.",
             )
+
+    # Post-commit operations (asset IS COMMITTED: MUST NOT delete remote asset if these fail!)
+    try:
+        db.refresh(asset)
+    except Exception as ref_err:
+        admin_media_logger.warning(
+            f"Post-commit refresh failed for media asset {asset.id} ('{filename}', public_id: {c_res['public_id']}): {ref_err}"
+        )
 
     try:
         log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({c_res['resource_type']})")
@@ -2114,7 +2127,6 @@ async def admin_upload_product_image(
         )
         db.add(asset)
         db.commit()
-        db.refresh(asset)
     except Exception as db_err:
         db.rollback()
         admin_media_logger.error(f"Database registration failure for product upload '{filename}': {db_err}", exc_info=True)
@@ -2134,6 +2146,14 @@ async def admin_upload_product_image(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database registration failed and remote asset cleanup could not be confirmed. Asset ID '{c_res['public_id']}' may require manual cleanup.",
             )
+
+    # Post-commit operations (asset IS COMMITTED: MUST NOT delete remote asset if these fail!)
+    try:
+        db.refresh(asset)
+    except Exception as ref_err:
+        admin_media_logger.warning(
+            f"Post-commit refresh failed for product media asset {asset.id} ('{filename}', public_id: {c_res['public_id']}): {ref_err}"
+        )
 
     return {
         "status": "success",

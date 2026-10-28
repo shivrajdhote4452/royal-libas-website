@@ -530,9 +530,11 @@ button:active:not(:disabled),
 /* Viewport reveal integration */
 .reveal-on-scroll.reveal-primed .poster-motion-img {
   transform: scale(1.08);
+  filter: brightness(0.94);
 }
 .reveal-on-scroll.reveal-primed.is-revealed .poster-motion-img {
   transform: scale(1);
+  filter: brightness(1);
 }
 
 /* Coordinated sequence of editorial text items */
@@ -563,10 +565,15 @@ button:active:not(:disabled),
 /* Craft Story glides with slower tactile scale settling */
 .poster-theme-story .poster-motion-img {
   transform: scale(1.10);
-  transition: transform 1500ms var(--ease-royal);
+  transition: transform 1600ms var(--ease-royal), filter 1400ms var(--ease-royal);
+}
+.poster-theme-story.reveal-on-scroll.reveal-primed .poster-motion-img {
+  transform: scale(1.10);
+  filter: brightness(0.92);
 }
 .poster-theme-story.reveal-on-scroll.reveal-primed.is-revealed .poster-motion-img {
   transform: scale(1);
+  filter: brightness(1);
 }
 
 /* Strict respect for prefers-reduced-motion: disable all non-essential movement */

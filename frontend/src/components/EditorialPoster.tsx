@@ -27,7 +27,7 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
   imageWebp,
   imageJpg,
   imageAlt,
-  tagline = 'ROYAL LIBAS / DESIGN CONCEPT',
+  tagline,
   layout = theme === 'everyday' ? 'content-right' : 'content-left',
 }) => {
   const isEveryday = theme === 'everyday';
@@ -136,7 +136,7 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
               {subtitle}
             </p>
 
-            {/* CTA Button */}
+            {/* CTA Button with polished hover & keyboard focus */}
             <div className="poster-seq-item poster-seq-4 pt-2">
               <Link
                 to={ctaLink}
@@ -145,23 +145,21 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
                 <span>{ctaText}</span>
                 <span
                   aria-hidden="true"
-                  className="transform group-hover:translate-x-1.5 transition-transform duration-300 font-serif text-sm sm:text-base"
+                  className="transform group-hover:translate-x-2 group-focus-visible:translate-x-2 transition-transform duration-300 font-serif text-sm sm:text-base"
                 >
                   &gt;
                 </span>
               </Link>
             </div>
 
-            {/* Sub-label Tagline */}
-            {tagline && (
-              <div
-                className={`poster-seq-item poster-seq-5 pt-4 sm:pt-6 text-[10px] sm:text-[10.5px] uppercase tracking-[0.28em] font-medium flex items-center gap-2 ${taglineColor}`}
-              >
-                <span>ROYAL LIBAS</span>
-                <span className="opacity-40">/</span>
-                <span>DESIGN CONCEPT</span>
-              </div>
-            )}
+            {/* Sub-label Tagline - Clean brand mark without preview concept claims */}
+            <div
+              className={`poster-seq-item poster-seq-5 pt-4 sm:pt-6 text-[10px] sm:text-[10.5px] uppercase tracking-[0.28em] font-medium flex items-center gap-2 ${taglineColor}`}
+            >
+              <span>{tagline || 'ROYAL LIBAS'}</span>
+              <span className="opacity-40">&bull;</span>
+              <span>{isEveryday ? 'EVERYDAY EDIT' : isStory ? 'ATELIER HERITAGE' : 'FESTIVE EDIT'}</span>
+            </div>
           </div>
         </div>
       </div>

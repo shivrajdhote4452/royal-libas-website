@@ -350,7 +350,7 @@ export const Home: React.FC = () => {
         ctaLink="/shop?collection=festive-edit"
         imageWebp="/images/posters/royal_occasion.webp"
         imageJpg="/images/posters/royal_occasion.jpg"
-        imageAlt="The Occasion Edit by Royal Libas"
+        imageAlt="Festive occasion wear concept silhouette"
         layout="content-left"
       />
 
@@ -387,12 +387,60 @@ export const Home: React.FC = () => {
         ctaLink="/shop?collection=everyday-cotton"
         imageWebp="/images/posters/everyday_elegance.webp"
         imageJpg="/images/posters/everyday_elegance.jpg"
-        imageAlt="The Everyday Edit by Royal Libas"
+        imageAlt="Everyday contemporary ethnic wear concept silhouette"
         layout="content-right"
       />
 
       {/* ========================================================
-          7. CURATED FOR YOU / NEW ARRIVALS (Handbook Section 03)
+          7. THE FESTIVE COLLECTION (Restored Original Campaign Banner)
+          Full-width deep maroon velvet campaign editorial
+          ======================================================== */}
+      <section className="reveal-on-scroll relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
+        <div className="relative min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] flex items-center">
+          <img
+            src="/images/editorial/festive_banner.jpg"
+            alt="The Festive Collection Campaign"
+            className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-center opacity-70"
+            loading="lazy"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#180A0E]/95 via-[#180A0E]/80 to-transparent pointer-events-none" />
+
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 w-full">
+            <div className="editorial-motion-copy max-w-xl space-y-5 text-left">
+              <span className="text-[10px] uppercase tracking-[0.3em] text-[#D4AF67] font-semibold block">
+                SPECIAL OCCASIONS
+              </span>
+              <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-[#FCF8F0] leading-tight">
+                THE FESTIVE COLLECTION
+              </h2>
+              <div className="w-12 h-[1px] bg-[#D4AF67]" />
+              <p className="text-sm sm:text-base text-[#FCF8F0]/90 leading-relaxed font-light">
+                For celebrations that become a part of your story. Tailored in pure chanderi silks, modal velvets, and delicate zardozi needlework.
+              </p>
+              <div className="pt-2">
+                <Link
+                  to="/shop?collection=festive-edit"
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#D4AF67] via-[#C5A059] to-[#B58A3C] hover:from-[#E2C27F] hover:to-[#D4AF67] text-[#1A0B0E] font-ui font-bold text-xs tracking-[0.22em] uppercase transition-all shadow-[0_6px_20px_rgba(212,175,103,0.35)] border border-[#D4AF67]"
+                >
+                  <span>EXPLORE FESTIVE COLLECTION</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+
+              <div className="pt-4 flex flex-wrap gap-3 sm:gap-4 text-[10px] tracking-[0.22em] uppercase text-[#B58A3C]">
+                <span>RICH VELVETS</span>
+                <span>&bull;</span>
+                <span>TIMELESS SILHOUETTES</span>
+                <span>&bull;</span>
+                <span>MODERN ELEGANCE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================
+          8. CURATED FOR YOU / NEW ARRIVALS (Handbook Section 03)
           ======================================================== */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 w-full reveal-on-scroll">
         <div className="flex items-end justify-between mb-10 pb-3 border-b border-[#E8DFD0]">
@@ -431,7 +479,7 @@ export const Home: React.FC = () => {
       </section>
 
       {/* ========================================================
-          8. EDITORIAL POSTER 3: THE ROYAL LIBAS STORY (Visual Concept Page 3)
+          9. EDITORIAL POSTER 3: THE ROYAL LIBAS STORY (Visual Concept Page 3)
           Tactile crimson velvet & gold embroidery, hands on right, content on left
           ======================================================== */}
       <EditorialPoster
@@ -449,7 +497,7 @@ export const Home: React.FC = () => {
         ctaLink="/about"
         imageWebp="/images/posters/crafted_with_care.webp"
         imageJpg="/images/posters/crafted_with_care.jpg"
-        imageAlt="Master Artisan Embroidery Craftsmanship at Royal Libas"
+        imageAlt="Intricate zardozi and gold thread embroidery textile concept"
         layout="content-left"
       />
     </div>
