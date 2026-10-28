@@ -70,6 +70,15 @@ def build_product_list_response(product: Product) -> ProductListResponse:
         primary_img_url = sorted_images[0].url
 
     collection_names = [c.name for c in product.collections]
+    images_list = [
+        ProductImageResponse(
+            id=img.id,
+            url=img.url,
+            sort_order=img.sort_order,
+            alt_text=img.alt_text,
+        )
+        for img in (sorted(product.images, key=lambda i: i.sort_order) if product.images else [])
+    ]
 
     return ProductListResponse(
         id=product.id,
@@ -85,6 +94,7 @@ def build_product_list_response(product: Product) -> ProductListResponse:
         total_stock=total_stock,
         badges=derive_badges(product, total_stock),
         primary_image=primary_img_url,
+        images=images_list,
         collections=collection_names,
         variants=variants,
     )

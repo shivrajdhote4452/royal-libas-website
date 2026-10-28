@@ -180,6 +180,7 @@ class ProductListResponse(BaseModel):
     total_stock: int
     badges: List[str] = []
     primary_image: Optional[str] = None
+    images: List[ProductImageResponse] = []
     collections: List[str] = []
     variants: List[ProductVariantResponse] = []
 

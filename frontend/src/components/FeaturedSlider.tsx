@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Pause, Play, Heart, Sparkles, ArrowRight } f
 import { Product } from '../types/product';
 import { formatPrice } from '../lib/api';
 import { useWishlist } from '../context/WishlistContext';
+import { ProductCard } from './ProductCard';
 
 interface FeaturedSliderProps {
   products: Product[];
@@ -103,9 +104,24 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     setIsManuallyPaused((prev) => !prev);
   };
 
-  // Fallback: if fewer than 3 items, do not render a broken slider
+  // Fallback: if fewer than 3 items, render clean responsive grid
   if (total < 3) {
-    return null;
+    if (total === 0) return null;
+    return (
+      <section className="py-14 sm:py-20 bg-[#FAF7F2] border-y border-[#E8DFD0]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 space-y-2">
+            <h2 className="font-serif text-3xl font-bold text-[#5E1224]">{title}</h2>
+            <p className="text-xs sm:text-sm text-gray-600 max-w-md mx-auto">{subtitle}</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
+            {validProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
   }
 
   // Calculate shortest circular offset for each card
@@ -116,16 +132,17 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     return diff;
   };
 
-  // Dynamic 3D transform positioning for smooth card gliding
+  // Dynamic 3D transform positioning for smooth card gliding across any screen width
   const getCardStyle = (offset: number) => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-    const spacing = isMobile ? 310 : 400;
-    const dragOffset = offset === 0 ? touchDeltaX : touchDeltaX * 0.4;
+    const isTablet = typeof window !== 'undefined' && window.innerWidth >= 640 && window.innerWidth < 1024;
+    const spacing = isMobile ? 290 : isTablet ? 340 : 380;
+    const dragOffset = offset === 0 ? touchDeltaX : touchDeltaX * 0.35;
     const translateX = offset * spacing + dragOffset;
 
     if (offset === 0) {
       return {
-        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 1.0 : 1.05})`,
+        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 1.0 : 1.04})`,
         zIndex: 30,
         opacity: 1,
         filter: 'none',
@@ -134,19 +151,19 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     }
     if (offset === 1) {
       return {
-        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 0.86 : 0.88})`,
+        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 0.85 : 0.88})`,
         zIndex: 20,
         opacity: isMobile ? 0.45 : 0.65,
-        filter: 'blur(0.5px)',
+        filter: 'blur(0.4px)',
         pointerEvents: 'auto' as const,
       };
     }
     if (offset === -1) {
       return {
-        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 0.86 : 0.88})`,
+        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 0.85 : 0.88})`,
         zIndex: 20,
         opacity: isMobile ? 0.45 : 0.65,
-        filter: 'blur(0.5px)',
+        filter: 'blur(0.4px)',
         pointerEvents: 'auto' as const,
       };
     }
@@ -208,7 +225,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
         {/* Carousel Stage: Smooth 3D Track with Physically Moving Cards */}
         <div
           data-testid="featured-slider-stage"
-          className="relative min-h-[470px] sm:min-h-[530px] overflow-hidden flex items-center justify-center"
+          className="relative min-h-[460px] sm:min-h-[520px] overflow-hidden flex items-center justify-center"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -228,6 +245,10 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
             const cardStyle = getCardStyle(offset);
             const imageSrc = product.primary_image || product.images?.[0]?.url;
 
+            // Calculate actual in-stock size count from verified database variant data
+            const inStockVariants = (product.variants || []).filter((v) => v.stock > 0);
+            const inStockCount = inStockVariants.length;
+
             return (
               <div
                 key={product.id}
@@ -236,7 +257,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                   if (isLeft) prevSlide();
                   if (isRight) nextSlide();
                 }}
-                className={`absolute top-1/2 left-1/2 w-[280px] sm:w-[350px] lg:w-[390px] aspect-[3/4] bg-white border cursor-pointer select-none ${
+                className={`absolute top-1/2 left-1/2 w-[270px] sm:w-[320px] lg:w-[360px] aspect-[3/4] bg-white border cursor-pointer select-none ${
                   isCenter
                     ? 'border-[#B58A3C] shadow-2xl cursor-default'
                     : 'border-[#E8DFD0] shadow-md hover:border-[#B58A3C]/70'
@@ -331,9 +352,15 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                           <span>Explore Piece</span>
                           <ArrowRight className="w-3.5 h-3.5 text-[#B58A3C] group-hover:translate-x-1 transition-transform" />
                         </Link>
-                        <span className="text-[10px] text-[#FCF8F0]/70 font-mono">
-                          {product.variants?.length || 1} sizes available
-                        </span>
+                        {inStockCount > 0 ? (
+                          <span className="text-[10px] text-[#FCF8F0]/80 font-mono tracking-wider">
+                            {inStockCount} {inStockCount === 1 ? 'size' : 'sizes'} in stock
+                          </span>
+                        ) : product.total_stock === 0 ? (
+                          <span className="text-[10px] text-amber-200 font-mono tracking-wider uppercase font-semibold">
+                            Sold out
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   ) : (
@@ -422,3 +449,4 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     </section>
   );
 };
+export default FeaturedSlider;

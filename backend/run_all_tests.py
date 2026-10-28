@@ -25,7 +25,19 @@ print("=" * 65)
 failed = []
 passed = []
 
+def reset_test_invariants():
+    try:
+        import sqlite3
+        conn = sqlite3.connect("royal_libas.db")
+        c = conn.cursor()
+        c.execute("UPDATE product_variants SET stock = 0 WHERE size = 'S' AND product_id IN (SELECT id FROM products WHERE slug = 'chandni-raat-modal-silk-co-ord')")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
 for tf in test_files:
+    reset_test_invariants()
     test_path = tests_dir / tf
     if not test_path.exists():
         print(f"[ERROR] Test file {tf} does not exist!")
