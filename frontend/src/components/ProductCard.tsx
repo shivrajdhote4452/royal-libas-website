@@ -17,12 +17,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [primaryError, setPrimaryError] = useState(false);
   const [secondaryError, setSecondaryError] = useState(false);
 
-  // Images
-  const primaryImage =
+  // Available image URLs
+  const rawPrimary =
     product.primary_image ||
     (product.images && product.images.length > 0 ? product.images[0].url : null);
-  const secondaryImage =
+  const rawSecondary =
     product.images && product.images.length > 1 ? product.images[1].url : null;
+
+  // Graceful fallback: If primary failed to load, promote secondary to primary
+  const primaryImage = primaryError ? rawSecondary : rawPrimary;
+  const secondaryImage = primaryError ? null : rawSecondary;
 
   // Prices and stock
   const firstVariant = product.variants && product.variants.length > 0 ? product.variants[0] : null;
@@ -32,6 +36,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   const inWishlist = isInWishlist(product.id);
   const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
+
+  // Crossfade is ONLY enabled on desktop when both primary and secondary images are valid and loaded
+  const canCrossfade = Boolean(primaryImage && secondaryImage && !primaryError && !secondaryError);
 
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -46,119 +53,143 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   return (
-    <div
+    <article
       className={`product-card-hover group relative bg-white rounded-none border border-[#E8DFD0] hover:border-[#B58A3C]/50 shadow-sm hover:shadow-[0_8px_24px_rgba(43,27,30,0.08)] transition-all duration-300 ease-out flex flex-col justify-between ${
         isSoldOut ? 'opacity-90' : ''
       }`}
       style={{
         transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
       }}
+      aria-labelledby={`product-title-${product.id}`}
+      data-testid={`product-card-${product.id}`}
     >
-      <Link to={`/product/${product.slug}`} className="block">
-        {/* Image container with 4:5 aspect ratio (Handbook Section 04) */}
-        <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#F6F1EA]">
-          {/* Primary Luxury Badge */}
-          {primaryBadge && (
-            <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
-              <span
-                className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-none text-[9.5px] font-semibold tracking-[0.16em] uppercase shadow-sm ${
-                  primaryBadge === 'Sold Out'
-                    ? 'bg-[#2B1B1E] text-white'
-                    : primaryBadge === 'Low Stock'
-                    ? 'bg-[#8C6F5B] text-white'
-                    : primaryBadge === 'Bestseller'
-                    ? 'bg-[#B58A3C] text-white'
-                    : 'bg-[#5E1224] text-[#FCF8F0]'
-                }`}
-              >
-                {primaryBadge}
-              </span>
-            </div>
-          )}
-
-          {/* Wishlist Heart Icon */}
-          <button
-            type="button"
-            onClick={handleWishlistClick}
-            className={`absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ${
-              inWishlist
-                ? 'bg-white text-[#5E1224] shadow-md scale-105'
-                : 'bg-white/90 text-gray-700 hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
-            }`}
-            aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-          >
-            <Heart
-              className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                inWishlist ? 'fill-[#5E1224] stroke-[#5E1224] animate-heart-pop' : 'stroke-current'
+      {/* ========================================================
+          IMAGE CONTAINER (Aspect 4:5)
+          Non-nested DOM: Main link wraps visual canvas; buttons are siblings.
+          ======================================================== */}
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#F6F1EA]">
+        {/* Main Product Link (Visual click / tap area) */}
+        <Link
+          to={`/product/${product.slug}`}
+          className="absolute inset-0 z-0 block focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#B58A3C]"
+          aria-label={`View ${product.name}`}
+        >
+          {primaryImage ? (
+            <img
+              src={primaryImage}
+              alt={product.name}
+              onError={() => {
+                if (!primaryError) setPrimaryError(true);
+                else setSecondaryError(true);
+              }}
+              className={`product-card-image-primary absolute inset-0 w-full h-full object-cover object-top transition-all duration-500 ease-out sm:group-hover:scale-[1.03] ${
+                canCrossfade ? 'has-crossfade sm:group-hover:opacity-0' : 'opacity-100'
               }`}
+              loading="lazy"
+              style={{
+                transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
             />
-          </button>
-
-          {/* Sold Out Overlay */}
-          {isSoldOut && (
-            <div className="absolute inset-0 bg-[#FCF8F0]/70 backdrop-blur-[1px] z-[5] pointer-events-none flex items-center justify-center">
-              <span className="bg-[#2B1B1E] text-white text-[11px] sm:text-xs font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 shadow">
-                Sold Out
+          ) : (
+            /* Graceful Placeholder when no images exist or both fail */
+            <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center select-none bg-[#5E1224] text-[#FCF8F0]">
+              <div className="w-10 h-10 rounded-full border border-[#D4AF67]/40 flex items-center justify-center mb-2">
+                <span className="font-serif text-base font-bold text-[#D4AF67]">RL</span>
+              </div>
+              <p className="font-serif font-semibold text-xs line-clamp-2 px-2 text-[#FCF8F0]">
+                {product.name}
+              </p>
+              <span className="text-[9px] uppercase tracking-[0.2em] text-[#D4AF67] mt-1 font-ui">
+                Royal Libas Atelier
               </span>
             </div>
           )}
 
-          {/* Image with Secondary Crossfade & Soft Scale */}
-          <div className="relative w-full h-full overflow-hidden">
-            {primaryImage && !primaryError ? (
-              <img
-                src={primaryImage}
-                alt={product.name}
-                onError={() => setPrimaryError(true)}
-                className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-500 ease-out group-hover:scale-[1.03] ${
-                  secondaryImage && !secondaryError ? 'group-hover:opacity-0' : ''
-                }`}
-                loading="lazy"
-                style={{
-                  transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                }}
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center select-none bg-[#5E1224] text-[#FCF8F0]">
-                <div className="w-10 h-10 rounded-full border border-white/30 flex items-center justify-center mb-2">
-                  <span className="font-serif text-base font-bold">RL</span>
-                </div>
-                <p className="font-serif font-semibold text-sm line-clamp-2">{product.name}</p>
-              </div>
-            )}
-
-            {/* Secondary image for soft crossfade on desktop hover */}
-            {secondaryImage && !secondaryError && (
-              <img
-                src={secondaryImage}
-                alt={`${product.name} alternate view`}
-                onError={() => setSecondaryError(true)}
-                className="hidden sm:block absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-300 ease-out"
-                loading="lazy"
-                style={{
-                  transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                }}
-              />
-            )}
-          </div>
-
-          {/* Desktop Hover Quick Add Button (Reference Video at 1:14 & Handoff) */}
-          {!isSoldOut && (
-            <div className="hidden sm:block absolute inset-x-3 bottom-3 z-20 opacity-0 group-hover:opacity-100 focus-within:opacity-100 translate-y-2 group-hover:translate-y-0 focus-within:translate-y-0 transition-all duration-250 ease-out pointer-events-none group-hover:pointer-events-auto focus-within:pointer-events-auto">
-              <button
-                type="button"
-                onClick={handleQuickAddClick}
-                className="w-full py-2.5 px-3 bg-[#5E1224]/95 hover:bg-[#3A080F] text-[#FCF8F0] text-xs font-ui font-semibold rounded-none border border-[#B58A3C]/60 shadow-lg backdrop-blur-sm tracking-[0.16em] uppercase flex items-center justify-center gap-1.5 transition-all duration-200"
-              >
-                <Plus className="w-3.5 h-3.5 text-[#D4AF67]" />
-                <span>Quick Add</span>
-              </button>
-            </div>
+          {/* Secondary image for desktop-only hover crossfade */}
+          {canCrossfade && secondaryImage && (
+            <img
+              src={secondaryImage}
+              alt={`${product.name} alternate view`}
+              onError={() => setSecondaryError(true)}
+              className="product-card-image-secondary hidden sm:block absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-300 ease-out pointer-events-none"
+              loading="lazy"
+              style={{
+                transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            />
           )}
-        </div>
+        </Link>
 
-        {/* Details Container */}
-        <div className="p-3.5 sm:p-4 bg-white">
+        {/* Primary Luxury Badge */}
+        {primaryBadge && (
+          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-none text-[9.5px] font-semibold tracking-[0.16em] uppercase shadow-sm ${
+                primaryBadge === 'Sold Out'
+                  ? 'bg-[#2B1B1E] text-white'
+                  : primaryBadge === 'Low Stock'
+                  ? 'bg-[#8C6F5B] text-white'
+                  : primaryBadge === 'Bestseller'
+                  ? 'bg-[#B58A3C] text-white'
+                  : 'bg-[#5E1224] text-[#FCF8F0]'
+              }`}
+            >
+              {primaryBadge}
+            </span>
+          </div>
+        )}
+
+        {/* Wishlist Heart Button (z-20 sibling, NOT nested in <a>!) */}
+        <button
+          type="button"
+          onClick={handleWishlistClick}
+          className={`absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] ${
+            inWishlist
+              ? 'bg-white text-[#5E1224] shadow-md scale-105'
+              : 'bg-white/90 text-gray-700 hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
+          }`}
+          aria-label={inWishlist ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+          data-testid={`wishlist-btn-${product.id}`}
+        >
+          <Heart
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+              inWishlist ? 'fill-[#5E1224] stroke-[#5E1224] animate-heart-pop' : 'stroke-current'
+            }`}
+          />
+        </button>
+
+        {/* Sold Out Overlay */}
+        {isSoldOut && (
+          <div className="absolute inset-0 bg-[#FCF8F0]/70 backdrop-blur-[1px] z-10 pointer-events-none flex items-center justify-center">
+            <span className="bg-[#2B1B1E] text-white text-[11px] sm:text-xs font-semibold tracking-[0.2em] uppercase px-3.5 py-1.5 shadow">
+              Sold Out
+            </span>
+          </div>
+        )}
+
+        {/* Desktop Quick Add Button (z-20 sibling, NOT nested in <a>!) */}
+        {!isSoldOut && (
+          <div className="hidden sm:block absolute inset-x-3 bottom-3 z-20 opacity-0 group-hover:opacity-100 focus-within:opacity-100 translate-y-2 group-hover:translate-y-0 focus-within:translate-y-0 transition-all duration-250 ease-out pointer-events-none group-hover:pointer-events-auto focus-within:pointer-events-auto">
+            <button
+              type="button"
+              onClick={handleQuickAddClick}
+              aria-label={`Quick add ${product.name} to bag`}
+              data-testid={`desktop-quickadd-btn-${product.id}`}
+              className="w-full py-2.5 px-3 bg-[#5E1224]/95 hover:bg-[#3A080F] text-[#FCF8F0] text-xs font-ui font-semibold rounded-none border border-[#B58A3C]/60 shadow-lg backdrop-blur-sm tracking-[0.16em] uppercase flex items-center justify-center gap-1.5 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C]"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#D4AF67]" />
+              <span>Quick Add</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================
+          DETAILS CONTAINER
+          Title link is a separate accessible anchor; price & mobile actions are clean.
+          ======================================================== */}
+      <div className="p-3.5 sm:p-4 bg-white flex-1 flex flex-col justify-between">
+        <div>
           <div className="flex items-center justify-between gap-1 mb-1">
             <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#B58A3C] truncate">
               {product.fabric || product.category || 'Atelier Collection'}
@@ -170,8 +201,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             )}
           </div>
 
-          <h3 className="font-serif text-sm sm:text-base font-semibold text-[#2B1B1E] group-hover:text-[#5E1224] transition-colors line-clamp-1">
-            {product.name}
+          {/* Accessible Title Link (Sibling, NOT nesting buttons!) */}
+          <h3
+            id={`product-title-${product.id}`}
+            className="font-serif text-sm sm:text-base font-semibold text-[#2B1B1E] group-hover:text-[#5E1224] transition-colors line-clamp-1"
+          >
+            <Link
+              to={`/product/${product.slug}`}
+              className="hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] rounded-xs"
+            >
+              {product.name}
+            </Link>
           </h3>
 
           {/* Color dots preview dynamically derived from product variants */}
@@ -216,52 +256,54 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               </div>
             );
           })()}
+        </div>
 
-          <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between">
-            <div className="flex items-baseline gap-2 flex-wrap no-motion">
-              <span className="price-display text-sm sm:text-base font-bold text-[#5E1224]">
-                {formatPrice(sellingPrice)}
+        {/* Price Row & Mobile Quick Add Button */}
+        <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between">
+          <div className="flex items-baseline gap-2 flex-wrap no-motion">
+            <span className="price-display text-sm sm:text-base font-bold text-[#5E1224]">
+              {formatPrice(sellingPrice)}
+            </span>
+            {mrp && mrp > sellingPrice && (
+              <span className="price-display text-xs text-gray-400 line-through">
+                {formatPrice(mrp)}
               </span>
-              {mrp && mrp > sellingPrice && (
-                <span className="price-display text-xs text-gray-400 line-through">
-                  {formatPrice(mrp)}
-                </span>
-              )}
-            </div>
-
-            {/* Mobile Circular Quick-Add Action (Handoff Page 12) */}
-            {!isSoldOut && (
-              <button
-                type="button"
-                onClick={handleQuickAddClick}
-                className="sm:hidden w-8 h-8 rounded-full bg-[#5E1224] hover:bg-[#3A080F] text-[#FCF8F0] flex items-center justify-center shadow-md active:scale-90 transition-transform shrink-0 focus:outline-none focus:ring-1 focus:ring-[#B58A3C]"
-                aria-label={`Quick add ${product.name}`}
-              >
-                <ShoppingBag className="w-3.5 h-3.5 text-[#D4AF67]" />
-              </button>
-            )}
-
-            {/* Sizes available preview for desktop */}
-            {product.variants && product.variants.length > 0 && (
-              <div className="hidden sm:flex gap-1 no-motion">
-                {product.variants.slice(0, 4).map((v) => (
-                  <span
-                    key={v.id}
-                    className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-medium border ${
-                      v.stock > 0
-                        ? 'bg-[#FCF8F0] text-gray-700 border-[#E8DFD0]'
-                        : 'bg-gray-100 text-gray-400 line-through border-gray-200'
-                    }`}
-                    title={`${v.size}: ${v.stock > 0 ? `${v.stock} in stock` : 'Sold out'}`}
-                  >
-                    {v.size}
-                  </span>
-                ))}
-              </div>
             )}
           </div>
+
+          {/* Mobile Circular Quick-Add Action (Handoff Page 12 - Sibling button, NOT in <a>) */}
+          {!isSoldOut && (
+            <button
+              type="button"
+              onClick={handleQuickAddClick}
+              className="sm:hidden w-8 h-8 rounded-full bg-[#5E1224] hover:bg-[#3A080F] text-[#FCF8F0] flex items-center justify-center shadow-md active:scale-90 transition-transform shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C]"
+              aria-label={`Quick add ${product.name} to bag`}
+              data-testid={`mobile-quickadd-btn-${product.id}`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-[#D4AF67]" />
+            </button>
+          )}
+
+          {/* Sizes available preview for desktop */}
+          {product.variants && product.variants.length > 0 && (
+            <div className="hidden sm:flex gap-1 no-motion">
+              {product.variants.slice(0, 4).map((v) => (
+                <span
+                  key={v.id}
+                  className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-medium border ${
+                    v.stock > 0
+                      ? 'bg-[#FCF8F0] text-gray-700 border-[#E8DFD0]'
+                      : 'bg-gray-100 text-gray-400 line-through border-gray-200'
+                  }`}
+                  title={`${v.size}: ${v.stock > 0 ? `${v.stock} in stock` : 'Sold out'}`}
+                >
+                  {v.size}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-      </Link>
-    </div>
+      </div>
+    </article>
   );
 };

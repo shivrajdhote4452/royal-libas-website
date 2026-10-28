@@ -458,6 +458,27 @@ button:active:not(:disabled),
   transform: translateX(100%);
 }
 
+/* Product image desktop crossfade: strictly disabled on touch/mobile devices */
+@media (hover: hover) and (pointer: fine) and (min-width: 640px) {
+  .product-card-hover:hover .product-card-image-primary.has-crossfade {
+    opacity: 0;
+  }
+  .product-card-hover:hover .product-card-image-secondary {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+}
+
+/* Ensure mobile and touch devices always keep primary image fully opaque */
+@media (hover: none), (pointer: coarse), (max-width: 639px) {
+  .product-card-image-primary {
+    opacity: 1 !important;
+  }
+  .product-card-image-secondary {
+    display: none !important;
+  }
+}
+
 /* Strict respect for prefers-reduced-motion: disable all non-essential movement */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -513,6 +534,12 @@ button:active:not(:disabled),
   }
 
   .product-card-hover:hover {
+    transform: none !important;
+  }
+
+  .product-card-image-primary,
+  .product-card-image-secondary {
+    transition: none !important;
     transform: none !important;
   }
 
