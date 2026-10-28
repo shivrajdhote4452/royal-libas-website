@@ -290,9 +290,9 @@ export const Shop: React.FC = () => {
           </div>
           <div className="md:col-span-5 aspect-[16/10] sm:aspect-[4/3] rounded-none overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900">
             <img
-              src="/images/products/noorani_maroon_front.jpg"
+              src="/images/editorial/shop_banner.jpg"
               alt="The Royal Libas Atelier Collection"
-              className="w-full h-full object-cover object-top"
+              className="w-full h-full object-cover object-right"
             />
           </div>
         </div>

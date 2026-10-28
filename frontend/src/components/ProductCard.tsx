@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Plus } from 'lucide-react';
+import { Heart, Plus, ShoppingBag } from 'lucide-react';
 import { Product } from '../types/product';
 import { formatPrice } from '../lib/api';
 import { useWishlist } from '../context/WishlistContext';
@@ -47,7 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   return (
     <div
-      className={`group relative bg-white rounded-none border border-[#E8DFD0] hover:border-[#B58A3C]/50 shadow-sm hover:shadow-[0_8px_24px_rgba(43,27,30,0.08)] transition-all duration-300 ease-out flex flex-col justify-between ${
+      className={`product-card-hover group relative bg-white rounded-none border border-[#E8DFD0] hover:border-[#B58A3C]/50 shadow-sm hover:shadow-[0_8px_24px_rgba(43,27,30,0.08)] transition-all duration-300 ease-out flex flex-col justify-between ${
         isSoldOut ? 'opacity-90' : ''
       }`}
       style={{
@@ -142,15 +142,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             )}
           </div>
 
-          {/* Desktop Hover Quick Add Button (Point 1 & 2) */}
+          {/* Desktop Hover Quick Add Button (Reference Video at 1:14 & Handoff) */}
           {!isSoldOut && (
-            <div className="hidden sm:block absolute inset-x-3 bottom-3 z-20 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-250 ease-out pointer-events-none group-hover:pointer-events-auto">
+            <div className="hidden sm:block absolute inset-x-3 bottom-3 z-20 opacity-0 group-hover:opacity-100 focus-within:opacity-100 translate-y-2 group-hover:translate-y-0 focus-within:translate-y-0 transition-all duration-250 ease-out pointer-events-none group-hover:pointer-events-auto focus-within:pointer-events-auto">
               <button
                 type="button"
                 onClick={handleQuickAddClick}
-                className="w-full py-2.5 px-3 bg-[#5E1224]/95 hover:bg-[#3A080F] text-[#FCF8F0] text-xs font-ui font-semibold rounded-none border border-[#B58A3C]/50 shadow-md backdrop-blur-sm tracking-[0.14em] uppercase flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full py-2.5 px-3 bg-[#5E1224]/95 hover:bg-[#3A080F] text-[#FCF8F0] text-xs font-ui font-semibold rounded-none border border-[#B58A3C]/60 shadow-lg backdrop-blur-sm tracking-[0.16em] uppercase flex items-center justify-center gap-1.5 transition-all duration-200"
               >
-                <Plus className="w-3.5 h-3.5 text-[#B58A3C]" />
+                <Plus className="w-3.5 h-3.5 text-[#D4AF67]" />
                 <span>Quick Add</span>
               </button>
             </div>
@@ -229,7 +229,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               )}
             </div>
 
-            {/* Sizes available preview */}
+            {/* Mobile Circular Quick-Add Action (Handoff Page 12) */}
+            {!isSoldOut && (
+              <button
+                type="button"
+                onClick={handleQuickAddClick}
+                className="sm:hidden w-8 h-8 rounded-full bg-[#5E1224] hover:bg-[#3A080F] text-[#FCF8F0] flex items-center justify-center shadow-md active:scale-90 transition-transform shrink-0 focus:outline-none focus:ring-1 focus:ring-[#B58A3C]"
+                aria-label={`Quick add ${product.name}`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-[#D4AF67]" />
+              </button>
+            )}
+
+            {/* Sizes available preview for desktop */}
             {product.variants && product.variants.length > 0 && (
               <div className="hidden sm:flex gap-1 no-motion">
                 {product.variants.slice(0, 4).map((v) => (
@@ -250,20 +262,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
         </div>
       </Link>
-
-      {/* Mobile-Only Quick Add Button Strip (Point 1: Do NOT depend on hover) */}
-      {!isSoldOut && (
-        <div className="sm:hidden px-3 pb-3 bg-white">
-          <button
-            type="button"
-            onClick={handleQuickAddClick}
-            className="w-full py-2 bg-[#FCF8F0] hover:bg-[#5E1224] text-[#5E1224] hover:text-[#FCF8F0] border border-[#B58A3C]/40 text-[11px] font-ui font-semibold rounded-none tracking-[0.14em] uppercase flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5 text-[#B58A3C]" />
-            <span>Quick Add</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 };

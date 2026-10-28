@@ -92,65 +92,86 @@ export const Home: React.FC = () => {
           1. CINEMATIC CAMPAIGN HERO (Handbook Page 3 & Visual PDF Page 2)
           "A NEW HEIRLOOM" - Dominates first viewport with ONE primary CTA
           ======================================================== */}
-      <section className="relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-b border-[#B58A3C]/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+      <section className="relative overflow-hidden bg-[#180A0E] text-[#FCF8F0] border-b border-[#B58A3C]/40">
+        {/* Ambient atmospheric lighting */}
+        <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-[#B58A3C]/12 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#2E1218]/60 via-[#180A0E] to-[#12070A] pointer-events-none" />
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 lg:py-20 xl:py-24">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
+            {/* Mobile-First Fashion Image Display (prominent visual on mobile before text) */}
+            <div className="lg:hidden w-full">
+              <div className="hero-motion-frame relative aspect-[4/3] sm:aspect-[16/11] overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900 group">
+                <img
+                  src="/images/editorial/hero_campaign.jpg"
+                  alt="Royal Libas A New Heirloom Campaign"
+                  className="hero-motion-image w-full h-full object-cover object-top"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-3 left-3 z-10">
+                  <span className="inline-flex items-center px-2.5 py-1 text-[9.5px] font-bold tracking-[0.2em] uppercase bg-[#5E1224]/95 text-[#FCF8F0] border border-[#B58A3C]/50 shadow-md backdrop-blur-sm">
+                    ATELIER COUTURE &bull; FESTIVE 2026
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Left Column: High-Fashion Editorial Narrative */}
             <div className="hero-motion-copy lg:col-span-5 z-10 flex flex-col justify-center space-y-6 text-center lg:text-left">
               <div className="inline-flex items-center justify-center lg:justify-start gap-2.5">
-                <span className="w-8 h-[1px] bg-[#B58A3C]" />
-                <span className="text-[11px] uppercase tracking-[0.28em] text-[#B58A3C] font-semibold">
-                  TRADITION LIVES FOREVER
+                <span className="w-8 h-[1px] bg-[#D4AF67]" />
+                <span className="text-[11px] uppercase tracking-[0.3em] text-[#D4AF67] font-semibold">
+                  ✦ &nbsp; TRADITION LIVES FOREVER &nbsp; ✦
                 </span>
-                <span className="w-8 h-[1px] bg-[#B58A3C]" />
+                <span className="w-8 h-[1px] bg-[#D4AF67]" />
               </div>
 
-              <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-[#FCF8F0] leading-[1.08]">
+              <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight text-[#FCF8F0] leading-[1.04]">
                 A NEW HEIRLOOM
               </h1>
 
-              <p className="text-sm sm:text-base text-[#FCF8F0]/85 font-light leading-relaxed max-w-lg mx-auto lg:mx-0">
+              <p className="text-sm sm:text-base text-[#FCF8F0]/90 font-light leading-relaxed max-w-lg mx-auto lg:mx-0">
                 Handcrafted ethnic wear for the modern woman. Rooted in centuries-old Indian textile heritage, tailored with precision for your celebrations.
               </p>
 
-              {/* Single Primary Hero Action as mandated by Handbook Section 03 */}
+              {/* High-Contrast, Prominent Shopping CTA Button */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
                 <Link
                   to="/shop?collection=festive-edit"
-                  className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 bg-[#FCF8F0] hover:bg-[#B58A3C] text-[#2B1B1E] hover:text-white font-ui font-semibold text-xs uppercase tracking-[0.22em] transition-all duration-300 shadow-xl group border border-[#B58A3C]"
+                  className="luxury-btn-sheen w-full sm:w-auto inline-flex items-center justify-center px-8 sm:px-10 py-4 bg-gradient-to-r from-[#D4AF67] via-[#C5A059] to-[#B58A3C] hover:from-[#E2C27F] hover:to-[#D4AF67] text-[#1A0B0E] font-ui font-bold text-xs sm:text-sm uppercase tracking-[0.24em] transition-all duration-300 shadow-[0_8px_28px_rgba(212,175,103,0.38)] hover:shadow-[0_12px_36px_rgba(212,175,103,0.55)] group border border-[#D4AF67] active:scale-[0.99]"
                 >
-                  <span>EXPLORE FESTIVE EDIT</span>
-                  <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                  <span>EXPLORE FESTIVE COLLECTION</span>
+                  <ArrowRight className="w-4 h-4 ml-2.5 group-hover:translate-x-1.5 transition-transform" />
                 </Link>
                 <Link
                   to="/shop"
-                  className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-4 bg-transparent hover:bg-white/10 text-[#FCF8F0] font-ui font-semibold text-xs uppercase tracking-[0.2em] transition-colors border border-[#FCF8F0]/30"
+                  className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-4 bg-transparent hover:bg-white/10 text-[#FCF8F0] hover:text-[#D4AF67] font-ui font-semibold text-xs uppercase tracking-[0.2em] transition-all border border-[#FCF8F0]/30 hover:border-[#D4AF67]"
                 >
                   VIEW ALL DESIGNS
                 </Link>
               </div>
 
-              <div className="pt-2 flex items-center justify-center lg:justify-start gap-6 text-[10.5px] uppercase tracking-[0.2em] text-[#B58A3C]">
+              <div className="pt-2 flex items-center justify-center lg:justify-start gap-4 sm:gap-6 text-[10.5px] uppercase tracking-[0.2em] text-[#D4AF67]">
                 <span>Pure Chanderi &amp; Modal Silk</span>
                 <span>&bull;</span>
                 <span>Zari Needlework</span>
               </div>
             </div>
 
-            {/* Right Column: Hero High-Resolution Fashion Photography */}
-            <div className="lg:col-span-7">
-              <div className="relative aspect-[4/3] sm:aspect-[16/11] lg:aspect-[16/12] overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900 group">
+            {/* Right Column: Hero High-Resolution Fashion Photography (Desktop) */}
+            <div className="hidden lg:block lg:col-span-7">
+              <div className="hero-motion-frame relative aspect-[16/11] overflow-hidden border border-[#B58A3C]/45 shadow-[0_24px_60px_rgba(0,0,0,0.65)] bg-neutral-950 group">
                 <img
-                  src="/images/products/noorani_maroon_front.jpg"
+                  src="/images/editorial/hero_campaign.jpg"
                   alt="Royal Libas Noorani Embroidered Ensemble"
-                  className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 ease-out"
+                  className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-700 ease-out"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
 
                 {/* Editorial Brand Accent */}
                 <div className="absolute bottom-4 left-4 z-10">
                   <span className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold tracking-[0.2em] uppercase bg-[#5E1224]/95 text-[#FCF8F0] border border-[#B58A3C]/50 shadow-md backdrop-blur-sm">
-                    FESTIVE COUTURE &bull; ATELIER EDIT
+                    ATELIER COUTURE &bull; FESTIVE 2026
                   </span>
                 </div>
               </div>
@@ -259,25 +280,25 @@ export const Home: React.FC = () => {
             {
               title: 'KURTI SETS',
               subtitle: '8 Handcrafted Styles',
-              image: '/images/products/chandni_ivory_front.jpg',
+              image: '/images/editorial/cat_sarees.jpg',
               href: '/shop?category=Kurti+Sets',
             },
             {
-              title: 'FESTIVE SETS',
+              title: 'FESTIVE ENSEMBLES',
               subtitle: '4 Royal Ensembles',
-              image: '/images/products/zari_mahal_emerald_front.jpg',
+              image: '/images/editorial/cat_lehengas.jpg',
               href: '/shop?category=Festive+Sets',
             },
             {
               title: 'CO-ORD SETS',
               subtitle: '4 Modern Silhouettes',
-              image: '/images/products/nazm_emerald_front.jpg',
+              image: '/images/editorial/cat_suits.jpg',
               href: '/shop?category=Co-ord+Sets',
             },
             {
               title: 'EVERYDAY COTTON',
               subtitle: 'Curated Boutique Edit',
-              image: '/images/products/bagicha_sage_front.jpg',
+              image: '/images/editorial/cat_anarkalis.jpg',
               href: '/shop?collection=everyday-cotton',
             },
           ].map((cat, idx) => (
@@ -330,29 +351,29 @@ export const Home: React.FC = () => {
       <section className="reveal-on-scroll relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
         <div className="relative min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] flex items-center">
           <img
-            src="/images/products/dastaan_wine_front.jpg"
+            src="/images/editorial/festive_banner.jpg"
             alt="The Festive Collection Campaign"
-            className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-top opacity-60"
+            className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-center opacity-70"
             loading="lazy"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#2B1B1E]/95 via-[#2B1B1E]/75 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#180A0E]/95 via-[#180A0E]/80 to-transparent pointer-events-none" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 w-full">
             <div className="editorial-motion-copy max-w-xl space-y-5 text-left">
-              <span className="text-[10px] uppercase tracking-[0.3em] text-[#B58A3C] font-semibold block">
+              <span className="text-[10px] uppercase tracking-[0.3em] text-[#D4AF67] font-semibold block">
                 SPECIAL OCCASIONS
               </span>
               <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold text-[#FCF8F0] leading-tight">
                 THE FESTIVE COLLECTION
               </h2>
-              <div className="w-12 h-[1px] bg-[#B58A3C]" />
-              <p className="text-sm sm:text-base text-[#FCF8F0]/85 leading-relaxed font-light">
+              <div className="w-12 h-[1px] bg-[#D4AF67]" />
+              <p className="text-sm sm:text-base text-[#FCF8F0]/90 leading-relaxed font-light">
                 For celebrations that become a part of your story. Tailored in pure chanderi silks, modal velvets, and delicate zardozi needlework.
               </p>
               <div className="pt-2">
                 <Link
                   to="/shop?collection=festive-edit"
-                  className="inline-flex items-center gap-2 px-8 py-3.5 bg-transparent hover:bg-[#B58A3C] text-[#FCF8F0] hover:text-[#2B1B1E] border border-[#B58A3C] font-ui font-semibold text-xs tracking-[0.2em] uppercase transition-all shadow-lg"
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#D4AF67] via-[#C5A059] to-[#B58A3C] hover:from-[#E2C27F] hover:to-[#D4AF67] text-[#1A0B0E] font-ui font-bold text-xs tracking-[0.22em] uppercase transition-all shadow-[0_6px_20px_rgba(212,175,103,0.35)] border border-[#D4AF67]"
                 >
                   <span>EXPLORE FESTIVE COLLECTION</span>
                   <ArrowRight className="w-4 h-4" />

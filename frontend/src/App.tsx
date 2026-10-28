@@ -43,6 +43,7 @@ import { AdminActivityLog } from './pages/admin/AdminActivityLog';
 import { AdminSettings } from './pages/admin/AdminSettings';
 import { CartDrawer } from './components/CartDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { BackToTop } from './components/BackToTop';
 
 const StorefrontLayout: React.FC = () => {
   const location = useLocation();
@@ -58,6 +59,7 @@ const StorefrontLayout: React.FC = () => {
       </main>
       <Footer />
       <MobileBottomNav />
+      <BackToTop />
     </div>
   );
 };

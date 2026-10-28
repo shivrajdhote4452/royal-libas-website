@@ -1,0 +1,107 @@
+diff --git a/frontend/src/components/ProductCard.tsx b/frontend/src/components/ProductCard.tsx
+index a39b56a..5105294 100644
+--- a/frontend/src/components/ProductCard.tsx
++++ b/frontend/src/components/ProductCard.tsx
+@@ -47,7 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
+ 
+   return (
+     <div
+-      className={`group relative bg-white rounded-none border border-[#E8DFD0] hover:border-[#B58A3C]/50 shadow-sm hover:shadow-[0_8px_24px_rgba(43,27,30,0.08)] transition-all duration-300 ease-out flex flex-col justify-between ${
++      className={`product-card-hover group relative bg-white rounded-none border border-[#E8DFD0] hover:border-[#B58A3C]/50 shadow-sm hover:shadow-[0_8px_24px_rgba(43,27,30,0.08)] transition-all duration-300 ease-out flex flex-col justify-between ${
+         isSoldOut ? 'opacity-90' : ''
+       }`}
+       style={{
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index 5a21fc2..a6cb6e6 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -329,25 +329,33 @@ button:active:not(:disabled),
+    Only elements primed below the viewport animate when reached
+    ======================================================== */
+ @keyframes campaignCopyEnter {
+-  from { opacity: 0; transform: translateY(18px); }
++  from { opacity: 0; transform: translateY(30px); }
+   to { opacity: 1; transform: translateY(0); }
+ }
+ 
++@keyframes campaignFrameEnter {
++  from { clip-path: inset(0 0 100% 0); }
++  to { clip-path: inset(0 0 0 0); }
++}
++
+ @keyframes campaignImageEnter {
+-  from { opacity: 0; transform: scale(1.045); }
++  from { opacity: 0.5; transform: scale(1.12); }
+   to { opacity: 1; transform: scale(1); }
+ }
+ 
+ @media (prefers-reduced-motion: no-preference) {
+   .hero-motion-copy > * {
+-    animation: campaignCopyEnter 700ms var(--ease-royal) both;
++    animation: campaignCopyEnter 900ms var(--ease-royal) both;
+   }
+   .hero-motion-copy > :nth-child(2) { animation-delay: 100ms; }
+   .hero-motion-copy > :nth-child(3) { animation-delay: 180ms; }
+   .hero-motion-copy > :nth-child(4) { animation-delay: 260ms; }
+   .hero-motion-copy > :nth-child(5) { animation-delay: 320ms; }
++  .hero-motion-frame {
++    animation: campaignFrameEnter 1100ms var(--ease-royal) both;
++  }
+   .hero-motion-image {
+-    animation: campaignImageEnter 950ms var(--ease-royal);
++    animation: campaignImageEnter 1500ms var(--ease-royal) both;
+   }
+ }
+ 
+@@ -358,7 +366,7 @@ button:active:not(:disabled),
+ 
+ .reveal-on-scroll.reveal-primed {
+   opacity: 0;
+-  transform: translateY(22px);
++  transform: translateY(38px);
+   transition: opacity var(--motion-slow) var(--ease-royal),
+               transform var(--motion-slow) var(--ease-royal);
+   will-change: opacity, transform;
+@@ -372,7 +380,7 @@ button:active:not(:disabled),
+ /* Animate individual cards when their section is actually reached. */
+ .reveal-on-scroll.reveal-primed .reveal-card {
+   opacity: 0;
+-  transform: translateY(24px);
++  transform: translateY(32px);
+   transition: opacity 600ms var(--ease-royal), transform 600ms var(--ease-royal);
+ }
+ .reveal-on-scroll.reveal-primed.is-revealed .reveal-card {
+@@ -380,7 +388,7 @@ button:active:not(:disabled),
+   transform: translateY(0);
+ }
+ .reveal-on-scroll.reveal-primed .editorial-motion-image {
+-  transform: scale(1.06);
++  transform: scale(1.09);
+   transition: transform 1100ms var(--ease-royal);
+ }
+ .reveal-on-scroll.reveal-primed.is-revealed .editorial-motion-image {
+@@ -473,6 +481,11 @@ button:active:not(:disabled),
+     transform: none !important;
+   }
+ 
++  .hero-motion-frame {
++    animation: none !important;
++    clip-path: none !important;
++  }
++
+   .product-card-hover:hover {
+     transform: none !important;
+   }
+diff --git a/frontend/src/pages/Home.tsx b/frontend/src/pages/Home.tsx
+index d97197a..38171d2 100644
+--- a/frontend/src/pages/Home.tsx
++++ b/frontend/src/pages/Home.tsx
+@@ -139,7 +139,7 @@ export const Home: React.FC = () => {
+ 
+             {/* Right Column: Hero High-Resolution Fashion Photography */}
+             <div className="lg:col-span-7">
+-              <div className="relative aspect-[4/3] sm:aspect-[16/11] lg:aspect-[16/12] overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900 group">
++              <div className="hero-motion-frame relative aspect-[4/3] sm:aspect-[16/11] lg:aspect-[16/12] overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900 group">
+                 <img
+                   src="/images/products/noorani_maroon_front.jpg"
+                   alt="Royal Libas Noorani Embroidered Ensemble"

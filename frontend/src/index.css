@@ -329,25 +329,33 @@ button:active:not(:disabled),
    Only elements primed below the viewport animate when reached
    ======================================================== */
 @keyframes campaignCopyEnter {
-  from { opacity: 0; transform: translateY(18px); }
+  from { opacity: 0; transform: translateY(30px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes campaignFrameEnter {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
 @keyframes campaignImageEnter {
-  from { opacity: 0; transform: scale(1.045); }
+  from { opacity: 0.5; transform: scale(1.12); }
   to { opacity: 1; transform: scale(1); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .hero-motion-copy > * {
-    animation: campaignCopyEnter 700ms var(--ease-royal) both;
+    animation: campaignCopyEnter 900ms var(--ease-royal) both;
   }
   .hero-motion-copy > :nth-child(2) { animation-delay: 100ms; }
   .hero-motion-copy > :nth-child(3) { animation-delay: 180ms; }
   .hero-motion-copy > :nth-child(4) { animation-delay: 260ms; }
   .hero-motion-copy > :nth-child(5) { animation-delay: 320ms; }
+  .hero-motion-frame {
+    animation: campaignFrameEnter 1100ms var(--ease-royal) both;
+  }
   .hero-motion-image {
-    animation: campaignImageEnter 950ms var(--ease-royal);
+    animation: campaignImageEnter 1500ms var(--ease-royal) both;
   }
 }
 
@@ -358,7 +366,7 @@ button:active:not(:disabled),
 
 .reveal-on-scroll.reveal-primed {
   opacity: 0;
-  transform: translateY(22px);
+  transform: translateY(38px);
   transition: opacity var(--motion-slow) var(--ease-royal),
               transform var(--motion-slow) var(--ease-royal);
   will-change: opacity, transform;
@@ -372,7 +380,7 @@ button:active:not(:disabled),
 /* Animate individual cards when their section is actually reached. */
 .reveal-on-scroll.reveal-primed .reveal-card {
   opacity: 0;
-  transform: translateY(24px);
+  transform: translateY(32px);
   transition: opacity 600ms var(--ease-royal), transform 600ms var(--ease-royal);
 }
 .reveal-on-scroll.reveal-primed.is-revealed .reveal-card {
@@ -380,7 +388,7 @@ button:active:not(:disabled),
   transform: translateY(0);
 }
 .reveal-on-scroll.reveal-primed .editorial-motion-image {
-  transform: scale(1.06);
+  transform: scale(1.09);
   transition: transform 1100ms var(--ease-royal);
 }
 .reveal-on-scroll.reveal-primed.is-revealed .editorial-motion-image {
@@ -422,6 +430,32 @@ button:active:not(:disabled),
   transform: translateY(-4px);
   box-shadow: 0 12px 28px -4px rgba(43, 27, 30, 0.1);
   border-color: rgba(181, 138, 60, 0.6);
+}
+
+/* Subtle luxury sheen highlight for primary buttons */
+.luxury-btn-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.luxury-btn-sheen::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    60deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 60%
+  );
+  transform: translateX(-100%);
+  transition: transform 650ms var(--ease-royal);
+  pointer-events: none;
+}
+.luxury-btn-sheen:hover::after {
+  transform: translateX(100%);
 }
 
 /* Strict respect for prefers-reduced-motion: disable all non-essential movement */
@@ -473,8 +507,17 @@ button:active:not(:disabled),
     transform: none !important;
   }
 
+  .hero-motion-frame {
+    animation: none !important;
+    clip-path: none !important;
+  }
+
   .product-card-hover:hover {
     transform: none !important;
+  }
+
+  .luxury-btn-sheen::after {
+    display: none !important;
   }
 
   .animate-cart-bounce,
