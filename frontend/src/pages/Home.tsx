@@ -96,7 +96,7 @@ export const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 lg:py-20">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             {/* Left Column: High-Fashion Editorial Narrative */}
-            <div className="lg:col-span-5 z-10 flex flex-col justify-center space-y-6 text-center lg:text-left">
+            <div className="hero-motion-copy lg:col-span-5 z-10 flex flex-col justify-center space-y-6 text-center lg:text-left">
               <div className="inline-flex items-center justify-center lg:justify-start gap-2.5">
                 <span className="w-8 h-[1px] bg-[#B58A3C]" />
                 <span className="text-[11px] uppercase tracking-[0.28em] text-[#B58A3C] font-semibold">
@@ -143,7 +143,7 @@ export const Home: React.FC = () => {
                 <img
                   src="/images/products/noorani_maroon_front.jpg"
                   alt="Royal Libas Noorani Embroidered Ensemble"
-                  className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 ease-out"
+                  className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700 ease-out"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
 
@@ -284,7 +284,7 @@ export const Home: React.FC = () => {
             <Link
               key={idx}
               to={cat.href}
-              className={`group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none stagger-${idx + 1}`}
+              className={`reveal-card group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none stagger-${idx + 1}`}
             >
               <img
                 src={cat.image}
@@ -327,18 +327,18 @@ export const Home: React.FC = () => {
           4. THE FESTIVE COLLECTION (Handbook Section 03 & Visual PDF Page 3)
           Full-Width Editorial Campaign Banner
           ======================================================== */}
-      <section className="relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
+      <section className="reveal-on-scroll relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
         <div className="relative min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] flex items-center">
           <img
             src="/images/products/dastaan_wine_front.jpg"
             alt="The Festive Collection Campaign"
-            className="absolute inset-0 w-full h-full object-cover object-top opacity-60"
+            className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-top opacity-60"
             loading="lazy"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[#2B1B1E]/95 via-[#2B1B1E]/75 to-transparent pointer-events-none" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 w-full">
-            <div className="max-w-xl space-y-5 text-left">
+            <div className="editorial-motion-copy max-w-xl space-y-5 text-left">
               <span className="text-[10px] uppercase tracking-[0.3em] text-[#B58A3C] font-semibold block">
                 SPECIAL OCCASIONS
               </span>
@@ -402,7 +402,7 @@ export const Home: React.FC = () => {
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {curatedProducts.map((product, idx) => (
-              <div key={product.id} className="card-stagger" style={{ animationDelay: `${idx * 40}ms` }}>
+              <div key={product.id} className={`reveal-card stagger-${idx + 1}`}>
                 <ProductCard product={product} />
               </div>
             ))}
@@ -420,13 +420,13 @@ export const Home: React.FC = () => {
             <img
               src="/images/products/riwayat_plum_front.jpg"
               alt="Artisan Craftsmanship at Royal Libas Atelier"
-              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
+              className="editorial-motion-image w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
               loading="lazy"
             />
           </div>
 
           {/* Right Column: Editorial Narrative */}
-          <div className="lg:col-span-6 bg-[#FCF8F0] border border-[#B58A3C]/30 p-8 sm:p-12 lg:p-14 space-y-6 text-left shadow-sm">
+          <div className="editorial-motion-copy lg:col-span-6 bg-[#FCF8F0] border border-[#B58A3C]/30 p-8 sm:p-12 lg:p-14 space-y-6 text-left shadow-sm">
             <div className="inline-flex items-center gap-2">
               <span className="w-6 h-[1px] bg-[#B58A3C]" />
               <span className="text-[10.5px] uppercase tracking-[0.3em] text-[#B58A3C] font-semibold">

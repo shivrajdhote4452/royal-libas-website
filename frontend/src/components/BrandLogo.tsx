@@ -298,7 +298,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       <div className={`flex flex-col items-center text-center leading-none ${className}`}>
         {renderEmblem(size, 'mb-0.5')}
         <span
-          className="font-serif font-bold text-base sm:text-xl tracking-[0.15em] uppercase transition-colors"
+          className="font-serif font-bold text-sm sm:text-xl tracking-[0.1em] sm:tracking-[0.15em] whitespace-nowrap uppercase transition-colors"
           style={{ color: textRoyal }}
         >
           ROYAL LIBAS

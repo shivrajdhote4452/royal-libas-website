@@ -328,6 +328,29 @@ button:active:not(:disabled),
    Content is visible by default so it never hides if JS fails
    Only elements primed below the viewport animate when reached
    ======================================================== */
+@keyframes campaignCopyEnter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes campaignImageEnter {
+  from { opacity: 0; transform: scale(1.045); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-motion-copy > * {
+    animation: campaignCopyEnter 700ms var(--ease-royal) both;
+  }
+  .hero-motion-copy > :nth-child(2) { animation-delay: 100ms; }
+  .hero-motion-copy > :nth-child(3) { animation-delay: 180ms; }
+  .hero-motion-copy > :nth-child(4) { animation-delay: 260ms; }
+  .hero-motion-copy > :nth-child(5) { animation-delay: 320ms; }
+  .hero-motion-image {
+    animation: campaignImageEnter 950ms var(--ease-royal);
+  }
+}
+
 .reveal-on-scroll {
   opacity: 1;
   transform: none;
@@ -346,12 +369,48 @@ button:active:not(:disabled),
   transform: translateY(0);
 }
 
+/* Animate individual cards when their section is actually reached. */
+.reveal-on-scroll.reveal-primed .reveal-card {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 600ms var(--ease-royal), transform 600ms var(--ease-royal);
+}
+.reveal-on-scroll.reveal-primed.is-revealed .reveal-card {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-on-scroll.reveal-primed .editorial-motion-image {
+  transform: scale(1.06);
+  transition: transform 1100ms var(--ease-royal);
+}
+.reveal-on-scroll.reveal-primed.is-revealed .editorial-motion-image {
+  transform: scale(1);
+}
+.reveal-on-scroll.reveal-primed .editorial-motion-copy > * {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 650ms var(--ease-royal), transform 650ms var(--ease-royal);
+}
+.reveal-on-scroll.reveal-primed.is-revealed .editorial-motion-copy > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+.editorial-motion-copy > :nth-child(2) { transition-delay: 80ms !important; }
+.editorial-motion-copy > :nth-child(3) { transition-delay: 150ms !important; }
+.editorial-motion-copy > :nth-child(4) { transition-delay: 220ms !important; }
+.editorial-motion-copy > :nth-child(5) { transition-delay: 290ms !important; }
+
 /* Stagger utilities for grids of cards */
 .stagger-1 { transition-delay: 60ms; }
 .stagger-2 { transition-delay: 120ms; }
 .stagger-3 { transition-delay: 180ms; }
 .stagger-4 { transition-delay: 240ms; }
 .stagger-5 { transition-delay: 300ms; }
+.reveal-on-scroll .reveal-card.stagger-1 { transition-delay: 60ms; }
+.reveal-on-scroll .reveal-card.stagger-2 { transition-delay: 120ms; }
+.reveal-on-scroll .reveal-card.stagger-3 { transition-delay: 180ms; }
+.reveal-on-scroll .reveal-card.stagger-4 { transition-delay: 240ms; }
+.reveal-on-scroll .reveal-card.stagger-5 { transition-delay: 300ms; }
 
 /* Product Card Luxury Elevation */
 .product-card-hover {
@@ -397,6 +456,20 @@ button:active:not(:disabled),
   .dropdown-animated {
     animation: none !important;
     opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .reveal-card,
+  .editorial-motion-copy > *,
+  .hero-motion-copy > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .editorial-motion-image,
+  .hero-motion-image {
+    animation: none !important;
     transform: none !important;
   }
 

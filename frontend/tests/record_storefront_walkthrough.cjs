@@ -112,10 +112,14 @@ async function recordWalkthrough() {
     await context.close();
     await browser.close();
 
-    // Find the generated video file
-    const files = fs.readdirSync(outputDir).filter(f => f.endsWith('.webm'));
+    // Find the generated video file (newest by mtime)
+    const files = fs.readdirSync(outputDir)
+      .filter((f) => f.endsWith('.webm'))
+      .map((f) => ({ name: f, time: fs.statSync(path.join(outputDir, f)).mtimeMs }))
+      .sort((a, b) => b.time - a.time);
+
     if (files.length > 0) {
-      const videoPath = path.join(outputDir, files[0]);
+      const videoPath = path.join(outputDir, files[0].name);
       const targetPath = path.resolve('C:/Users/Shivraj Dhote/.gemini/antigravity/brain/c0a8e530-3dea-4e8b-aa00-b6df8bb36877/storefront_motion_walkthrough.webm');
       fs.copyFileSync(videoPath, targetPath);
       console.log('Recorded video copied to:', targetPath);

@@ -77,7 +77,7 @@ export const Header: React.FC = () => {
   return (
     <>
       <header
-        className={`sticky top-0 z-40 bg-[#FCF8F0]/98 backdrop-blur-md transition-all duration-250 ease-out ${
+        className={`sticky top-0 z-40 bg-[#FCF8F0]/95 backdrop-blur-md transition-all duration-250 ease-out ${
           isScrolled
             ? 'shadow-[0_2px_14px_rgba(43,27,30,0.08)] border-b border-[#E8DFD0]'
             : 'border-b border-[#E8DFD0]'
