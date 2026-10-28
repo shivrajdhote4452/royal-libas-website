@@ -127,8 +127,8 @@ export const AdminProducts: React.FC = () => {
         if (!isVideo && !isImage) {
           throw new Error(`File ${file.name} is not an allowed format (JPEG, PNG, WebP, MP4, MOV, WebM).`);
         }
-        if (isImage && file.size > 15 * 1024 * 1024) {
-          throw new Error(`Photo ${file.name} exceeds 15MB limit.`);
+        if (isImage && file.size > 10 * 1024 * 1024) {
+          throw new Error(`Photo ${file.name} exceeds 10MB limit for images.`);
         }
         if (isVideo && file.size > 60 * 1024 * 1024) {
           throw new Error(`Video ${file.name} exceeds 60MB limit.`);

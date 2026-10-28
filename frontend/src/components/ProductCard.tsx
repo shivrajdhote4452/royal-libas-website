@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, Plus, ShoppingBag } from 'lucide-react';
 import { Product } from '../types/product';
@@ -41,9 +41,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       ? pureImageUrls[1]
       : (product.images && product.images.length > 1 ? toImageUrl(product.images[1].url) : null);
 
-  // Graceful fallback: If primary failed to load, promote secondary to primary
-  const primaryImage = primaryError ? rawSecondary : rawPrimary;
-  const secondaryImage = primaryError ? null : rawSecondary;
+  // Reset image status on product or image URL changes
+  useEffect(() => {
+    setPrimaryError(false);
+    setSecondaryError(false);
+    setSecondaryLoaded(false);
+  }, [product.id, rawPrimary, rawSecondary]);
+
+  // Robust fallback:
+  // If primary fails, use secondary. If both fail, primaryImage becomes null (rendering branded placeholder)
+  const primaryImage = !primaryError
+    ? rawPrimary
+    : (!secondaryError ? rawSecondary : null);
+
+  // Secondary candidate is eligible only if primary displays rawPrimary and rawSecondary is valid & distinct
+  const secondaryImage = (!primaryError && !secondaryError && rawSecondary && rawSecondary !== rawPrimary)
+    ? rawSecondary
+    : null;
+
+  // Preloading & desktop hover crossfade state
+  const hasSecondary = Boolean(primaryImage && secondaryImage);
+  const canCrossfade = Boolean(hasSecondary && secondaryLoaded);
 
   // Prices and stock
   const firstVariant = product.variants && product.variants.length > 0 ? product.variants[0] : null;
@@ -53,9 +71,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
   const inWishlist = isInWishlist(product.id);
   const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
-
-  // Crossfade is ONLY enabled on desktop when both primary and secondary images are valid and loaded
-  const canCrossfade = Boolean(primaryImage && secondaryImage && !primaryError && !secondaryError && secondaryLoaded);
 
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -122,14 +137,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </div>
           )}
 
-          {/* Secondary image for desktop-only hover crossfade */}
-          {canCrossfade && secondaryImage && (
+          {/* Secondary image rendered in DOM for desktop preloading and smooth hover crossfade */}
+          {hasSecondary && secondaryImage && (
             <img
               src={secondaryImage}
               alt={`${product.name} alternate view`}
               onLoad={() => setSecondaryLoaded(true)}
-              onError={() => setSecondaryError(true)}
-              className="product-card-image-secondary hidden sm:block absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-[1.03] transition-all duration-300 ease-out pointer-events-none"
+              onError={() => {
+                setSecondaryError(true);
+                setSecondaryLoaded(false);
+              }}
+              className={`product-card-image-secondary hidden sm:block absolute inset-0 w-full h-full object-cover object-center transition-all duration-500 ease-out pointer-events-none ${
+                canCrossfade ? 'opacity-0 sm:group-hover:opacity-100 sm:group-hover:scale-[1.03]' : 'opacity-0'
+              }`}
               loading="lazy"
               style={{
                 transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',

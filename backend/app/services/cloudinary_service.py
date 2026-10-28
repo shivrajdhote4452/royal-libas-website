@@ -1,6 +1,6 @@
 """Cloudinary Media Service for Royal Libas Admin and Storefront.
 Handles secure uploads, content validation, video & image transformations,
-metadata extraction, and safe deletion from Cloudinary storage.
+metadata extraction, bounded memory reads, and safe deletion from Cloudinary storage.
 
 Precedence:
 If CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are all
@@ -13,7 +13,7 @@ import os
 import re
 import logging
 from typing import Optional, Dict, Any, Tuple
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
@@ -46,7 +46,8 @@ def init_cloudinary():
 init_cloudinary()
 
 # Allowed media formats & constraints
-MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
+# Aligned with Cloudinary Free plan limit (10 MB per image) and video limit (60 MB)
+MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB Free plan limit
 MAX_VIDEO_SIZE_BYTES = 60 * 1024 * 1024  # 60MB
 MAX_BATCH_FILES = 20
 
@@ -70,11 +71,33 @@ ALLOWED_VIDEO_MIME_TYPES = {
 }
 
 
-def validate_file_content_signature(file_bytes: bytes, filename: str) -> str:
-    """Inspect magic bytes to verify file integrity and content type server-side.
+async def read_bounded_file(file: UploadFile, max_bytes: int = MAX_VIDEO_SIZE_BYTES) -> bytes:
+    """Read an UploadFile up to max_bytes without buffering unbounded streams into memory.
+    
+    Prevents denial-of-service from massive file streaming.
+    """
+    chunk_size = 512 * 1024  # 512KB chunks
+    buffer = bytearray()
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{file.filename}' exceeds the maximum allowed file size of {max_bytes // (1024 * 1024)}MB.",
+            )
+    return bytes(buffer)
 
+
+def inspect_media_content_type(file_bytes: bytes, filename: str) -> Tuple[str, str, str]:
+    """Inspect binary magic bytes to verify file integrity and content type server-side.
+    
+    Does NOT fall back to file extension; strictly inspects byte signatures.
+    
     Returns:
-        resource_type ('image' or 'video')
+        (resource_type, detected_format, mime_type) e.g. ('image', 'jpg', 'image/jpeg')
     Raises:
         HTTPException if the content does not match allowed media signatures.
     """
@@ -85,42 +108,86 @@ def validate_file_content_signature(file_bytes: bytes, filename: str) -> str:
         )
 
     # Magic byte checks
-    # JPEG
+    # JPEG (\xff\xd8\xff)
     if file_bytes.startswith(b"\xff\xd8\xff"):
-        return "image"
-    # PNG
+        return "image", "jpg", "image/jpeg"
+
+    # PNG (\x89PNG\r\n\x1a\n)
     if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image"
-    # WebP
+        return "image", "png", "image/png"
+
+    # WebP (RIFF....WEBP)
     if file_bytes.startswith(b"RIFF") and len(file_bytes) >= 12 and file_bytes[8:12] == b"WEBP":
-        return "image"
-    # GIF
+        return "image", "webp", "image/webp"
+
+    # GIF (GIF87a or GIF89a)
     if file_bytes.startswith(b"GIF87a") or file_bytes.startswith(b"GIF89a"):
-        return "image"
-    # AVIF
+        return "image", "gif", "image/gif"
+
+    # AVIF (ftypavif / ftypmif1)
     if len(file_bytes) >= 16 and b"ftyp" in file_bytes[4:12] and (b"avif" in file_bytes[4:24] or b"mif1" in file_bytes[4:24]):
-        return "image"
-    # MP4 / MOV
-    if len(file_bytes) >= 12 and (b"ftyp" in file_bytes[4:16] or b"moov" in file_bytes[:32] or b"wide" in file_bytes[4:16] or b"mdat" in file_bytes[4:16]):
-        return "video"
-    # WebM / MKV
+        return "image", "avif", "image/avif"
+
+    # MP4 / MOV (ftyp, moov, wide, mdat)
+    if len(file_bytes) >= 12 and (
+        b"ftyp" in file_bytes[4:16]
+        or b"moov" in file_bytes[:32]
+        or b"wide" in file_bytes[4:16]
+        or b"mdat" in file_bytes[4:16]
+    ):
+        if b"qt  " in file_bytes[4:16] or filename.lower().endswith(".mov"):
+            return "video", "mov", "video/quicktime"
+        return "video", "mp4", "video/mp4"
+
+    # WebM / MKV (\x1a\x45\xdf\xa3)
     if file_bytes.startswith(b"\x1a\x45\xdf\xa3"):
-        return "video"
-    # OGG
+        if filename.lower().endswith(".mkv"):
+            return "video", "mkv", "video/x-matroska"
+        return "video", "webm", "video/webm"
+
+    # OGG (OggS)
     if file_bytes.startswith(b"OggS"):
-        return "video"
+        return "video", "ogg", "video/ogg"
 
-    # Fallback to extension check if magic bytes are ambiguous but extension is strictly whitelisted
-    _, ext = os.path.splitext(filename.lower())
-    if ext in ALLOWED_IMAGE_EXTENSIONS:
-        return "image"
-    if ext in ALLOWED_VIDEO_EXTENSIONS:
-        return "video"
-
+    # Strict rejection: no unrecognized signatures allowed, even if filename claims an allowed extension!
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=f"File '{filename}' does not match supported image or video signatures. Allowed formats: JPEG, PNG, WebP, GIF, AVIF, MP4, WebM, MOV.",
     )
+
+
+def validate_file_content_signature(file_bytes: bytes, filename: str) -> str:
+    """Convenience wrapper for backward compatibility. Returns 'image' or 'video'."""
+    res_type, _, _ = inspect_media_content_type(file_bytes, filename)
+    return res_type
+
+
+def validate_media_file(file_bytes: bytes, filename: str) -> Tuple[str, str, str]:
+    """Strictly validate file signature, extension consistency, and size limits.
+
+    Returns:
+        (resource_type, detected_format, mime_type)
+    """
+    res_type, detected_fmt, mime_type = inspect_media_content_type(file_bytes, filename)
+    _, ext = os.path.splitext(filename.lower())
+
+    # Verify extension consistency
+    if ext:
+        if res_type == "image" and ext not in ALLOWED_IMAGE_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{filename}' contains image content but has incompatible extension '{ext}'.",
+            )
+        elif res_type == "video" and ext not in ALLOWED_VIDEO_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File '{filename}' contains video content but has incompatible extension '{ext}'.",
+            )
+
+    # Validate size limits against Cloudinary Free plan thresholds
+    validate_file_size(len(file_bytes), res_type)
+
+    return res_type, detected_fmt, mime_type
 
 
 def detect_resource_type(filename: str, mime_type: Optional[str] = None) -> Tuple[str, str]:
@@ -152,7 +219,7 @@ def validate_file_size(file_size: int, resource_type: str) -> None:
         max_mb = MAX_IMAGE_SIZE_BYTES // (1024 * 1024)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Image exceeds maximum size of {max_mb}MB.",
+            detail=f"Image exceeds maximum size of {max_mb}MB for Cloudinary Free plan.",
         )
     if resource_type == "video" and file_size > MAX_VIDEO_SIZE_BYTES:
         max_mb = MAX_VIDEO_SIZE_BYTES // (1024 * 1024)
@@ -176,18 +243,12 @@ def upload_to_cloudinary(
             detail="Cloudinary media storage is not configured on this server.",
         )
 
-    # 1. Inspect content signature
-    content_res_type = validate_file_content_signature(file_bytes, original_filename)
-    res_type, _ = detect_resource_type(original_filename)
+    # 1. Strictly inspect content signature and extension consistency
+    res_type, detected_fmt, mime_type = validate_media_file(file_bytes, original_filename)
     if resource_type_override and resource_type_override in ("image", "video"):
         res_type = resource_type_override
-    else:
-        res_type = content_res_type
 
-    # 2. Validate file size limits
-    validate_file_size(len(file_bytes), res_type)
-
-    # 3. Perform upload
+    # 2. Perform upload
     try:
         upload_result = cloudinary.uploader.upload(
             file_bytes,
@@ -214,7 +275,7 @@ def upload_to_cloudinary(
         "url": secure_url,
         "secure_url": secure_url,
         "resource_type": detected_res_type,
-        "format": upload_result.get("format"),
+        "format": upload_result.get("format") or detected_fmt,
         "width": upload_result.get("width"),
         "height": upload_result.get("height"),
         "duration": upload_result.get("duration"),

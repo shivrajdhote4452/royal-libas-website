@@ -87,6 +87,10 @@ from app.services.cloudinary_service import (
     get_video_poster_url,
     detect_resource_type,
     is_cloudinary_configured,
+    read_bounded_file,
+    validate_media_file,
+    MAX_BATCH_FILES,
+    MAX_VIDEO_SIZE_BYTES,
 )
 from app.services.payment_service import sync_cashfree_payment_status
 from app.services.product_service import build_product_detail_response, build_variant_response
@@ -1773,11 +1777,10 @@ async def admin_upload_media_batch(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
-    """Upload multiple photos or videos to Cloudinary in a single batch operation with client ID mapping and DB rollback."""
+    """Upload multiple photos or videos to Cloudinary in a single batch operation with client ID mapping and safe DB rollback."""
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files provided for upload.")
 
-    MAX_BATCH_FILES = 20
     if len(files) > MAX_BATCH_FILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1803,16 +1806,27 @@ async def admin_upload_media_batch(
         filename = file.filename or "uploaded_media"
         cid = parsed_client_ids[idx] if idx < len(parsed_client_ids) else f"cid_{idx}_{filename}"
 
+        # 1. Bounded read and strict server-side content validation
         try:
-            contents = await file.read()
+            contents = await read_bounded_file(file, max_bytes=MAX_VIDEO_SIZE_BYTES)
             if not contents or len(contents) == 0:
                 failed.append(MediaUploadFailure(client_id=cid, filename=filename, error="File is empty (0 bytes)."))
                 continue
+            res_type, detected_fmt, mime_type = validate_media_file(contents, filename)
+        except HTTPException as http_e:
+            failed.append(MediaUploadFailure(client_id=cid, filename=filename, error=http_e.detail))
+            continue
+        except Exception as read_e:
+            failed.append(MediaUploadFailure(client_id=cid, filename=filename, error="Failed to read file content."))
+            continue
 
+        # 2. Remote Cloudinary upload
+        try:
             c_res = upload_to_cloudinary(
                 file_bytes=contents,
                 original_filename=filename,
                 folder=folder or "royal_libas/products",
+                resource_type_override=res_type,
             )
         except HTTPException as http_e:
             failed.append(MediaUploadFailure(client_id=cid, filename=filename, error=http_e.detail))
@@ -1821,7 +1835,7 @@ async def admin_upload_media_batch(
             failed.append(MediaUploadFailure(client_id=cid, filename=filename, error="Upload to Cloudinary failed."))
             continue
 
-        # Database registration with safe rollback and remote cleanup on failure
+        # 3. Database transaction boundary
         try:
             asset = MediaAsset(
                 filename=filename,
@@ -1829,60 +1843,69 @@ async def admin_upload_media_batch(
                 url=c_res["secure_url"],
                 secure_url=c_res["secure_url"],
                 resource_type=c_res["resource_type"],
-                format=c_res.get("format"),
+                format=c_res.get("format") or detected_fmt,
                 width=c_res.get("width"),
                 height=c_res.get("height"),
                 duration=c_res.get("duration"),
                 file_size=c_res.get("file_size", len(contents)),
-                mime_type=file.content_type or ("video/mp4" if c_res["resource_type"] == "video" else "image/jpeg"),
+                mime_type=mime_type or file.content_type or ("video/mp4" if c_res["resource_type"] == "video" else "image/jpeg"),
                 alt_text=filename,
                 folder=c_res.get("folder", folder),
             )
             db.add(asset)
             db.commit()
             db.refresh(asset)
-
-            log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({c_res['resource_type']})")
-
-            uploaded.append(
-                MediaAssetResponse(
-                    id=asset.id,
-                    filename=asset.filename,
-                    client_id=cid,
-                    public_id=asset.public_id,
-                    url=asset.url,
-                    secure_url=asset.secure_url,
-                    resource_type=asset.resource_type,
-                    format=asset.format,
-                    width=asset.width,
-                    height=asset.height,
-                    duration=float(asset.duration) if asset.duration is not None else None,
-                    file_size=asset.file_size,
-                    mime_type=asset.mime_type,
-                    alt_text=asset.alt_text,
-                    folder=asset.folder,
-                    created_at=asset.created_at,
-                    used_in_products=[],
-                )
-            )
         except Exception as db_err:
             db.rollback()
-            admin_media_logger.error(f"Database registration failure for {filename} (public_id: {c_res['public_id']}): {db_err}", exc_info=True)
-            # Safe rollback: Destroy the newly uploaded asset from Cloudinary
-            try:
-                delete_from_cloudinary(c_res["public_id"], resource_type=c_res["resource_type"])
-                admin_media_logger.info(f"Cleaned up remote asset {c_res['public_id']} after DB failure.")
-            except Exception as cleanup_err:
-                admin_media_logger.critical(f"ORPHAN_CLEANUP_FAILED: Failed to delete Cloudinary asset {c_res['public_id']} after DB failure: {cleanup_err}")
-
-            failed.append(
-                MediaUploadFailure(
-                    client_id=cid,
-                    filename=filename,
-                    error="Database registration failed. Remote upload was rolled back.",
-                )
+            admin_media_logger.error(
+                f"Database registration failure for '{filename}' (public_id: {c_res['public_id']}): {db_err}",
+                exc_info=True,
             )
+            # Safe rollback: Check remote cleanup result
+            cleanup_res = delete_from_cloudinary(c_res["public_id"], resource_type=c_res["resource_type"])
+            if cleanup_res.get("success"):
+                admin_media_logger.info(f"Cleaned up remote asset '{c_res['public_id']}' after DB registration failure.")
+                error_msg = "Database registration failed. Remote upload was rolled back."
+            else:
+                admin_media_logger.critical(
+                    f"ORPHAN_CLEANUP_FAILED: Failed to delete Cloudinary asset '{c_res['public_id']}' after DB failure. "
+                    f"Action required: manually remove orphan '{c_res['public_id']}' from Cloudinary."
+                )
+                error_msg = (
+                    "Database registration failed and remote asset cleanup could not be confirmed. "
+                    f"Asset ID '{c_res['public_id']}' may require manual cleanup."
+                )
+
+            failed.append(MediaUploadFailure(client_id=cid, filename=filename, error=error_msg))
             continue
+
+        # 4. Post-commit operations (MUST NOT delete remote asset if these fail!)
+        try:
+            log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({c_res['resource_type']})")
+        except Exception as log_err:
+            admin_media_logger.warning(f"Activity logging failed for media {asset.id}: {log_err}")
+
+        uploaded.append(
+            MediaAssetResponse(
+                id=asset.id,
+                filename=asset.filename,
+                client_id=cid,
+                public_id=asset.public_id,
+                url=asset.url,
+                secure_url=asset.secure_url,
+                resource_type=asset.resource_type,
+                format=asset.format,
+                width=asset.width,
+                height=asset.height,
+                duration=float(asset.duration) if asset.duration is not None else None,
+                file_size=asset.file_size,
+                mime_type=asset.mime_type,
+                alt_text=asset.alt_text,
+                folder=asset.folder,
+                created_at=asset.created_at,
+                used_in_products=[],
+            )
+        )
 
     return MediaUploadBatchResponse(
         status="success" if not failed else ("partial" if uploaded else "failure"),
@@ -1903,14 +1926,16 @@ async def admin_upload_media_asset(
 ):
     """Upload a single product photo or video asset directly to Cloudinary with safe rollback."""
     filename = file.filename or "media_upload"
-    contents = await file.read()
+    contents = await read_bounded_file(file, max_bytes=MAX_VIDEO_SIZE_BYTES)
     if not contents or len(contents) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File content is empty.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File content is empty (0 bytes).")
+    res_type, detected_fmt, mime_type = validate_media_file(contents, filename)
 
     c_res = upload_to_cloudinary(
         file_bytes=contents,
         original_filename=filename,
         folder=folder or "royal_libas/products",
+        resource_type_override=res_type,
     )
 
     try:
@@ -1920,12 +1945,12 @@ async def admin_upload_media_asset(
             url=c_res["secure_url"],
             secure_url=c_res["secure_url"],
             resource_type=c_res["resource_type"],
-            format=c_res.get("format"),
+            format=c_res.get("format") or detected_fmt,
             width=c_res.get("width"),
             height=c_res.get("height"),
             duration=c_res.get("duration"),
             file_size=c_res.get("file_size", len(contents)),
-            mime_type=file.content_type or ("video/mp4" if c_res["resource_type"] == "video" else "image/jpeg"),
+            mime_type=mime_type or file.content_type or ("video/mp4" if c_res["resource_type"] == "video" else "image/jpeg"),
             alt_text=filename,
             folder=c_res.get("folder", folder),
         )
@@ -1934,18 +1959,29 @@ async def admin_upload_media_asset(
         db.refresh(asset)
     except Exception as db_err:
         db.rollback()
-        admin_media_logger.error(f"Database registration failure for {filename}: {db_err}", exc_info=True)
-        try:
-            delete_from_cloudinary(c_res["public_id"], resource_type=c_res["resource_type"])
-        except Exception as cleanup_err:
-            admin_media_logger.critical(f"ORPHAN_CLEANUP_FAILED: Failed to delete Cloudinary asset {c_res['public_id']}: {cleanup_err}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database registration failed. Remote upload was rolled back.",
-        )
+        admin_media_logger.error(f"Database registration failure for '{filename}': {db_err}", exc_info=True)
+        cleanup_res = delete_from_cloudinary(c_res["public_id"], resource_type=c_res["resource_type"])
+        if cleanup_res.get("success"):
+            admin_media_logger.info(f"Cleaned up remote asset '{c_res['public_id']}' after DB registration failure.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database registration failed. Remote upload was rolled back.",
+            )
+        else:
+            admin_media_logger.critical(
+                f"ORPHAN_CLEANUP_FAILED: Failed to delete Cloudinary asset '{c_res['public_id']}' after DB failure. "
+                f"Action required: manually remove orphan '{c_res['public_id']}' from Cloudinary."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database registration failed and remote asset cleanup could not be confirmed. Asset ID '{c_res['public_id']}' may require manual cleanup.",
+            )
 
-    log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({c_res['resource_type']})")
-    
+    try:
+        log_activity(db, current_admin, "MEDIA_UPLOADED", "media", asset.id, f"{filename} ({c_res['resource_type']})")
+    except Exception as log_err:
+        admin_media_logger.warning(f"Activity logging failed for media {asset.id}: {log_err}")
+
     return MediaAssetResponse(
         id=asset.id,
         filename=asset.filename,
@@ -2048,14 +2084,16 @@ async def admin_upload_product_image(
 ):
     """Safely upload a product photo or video directly to Cloudinary and register in media library with DB rollback."""
     filename = file.filename or "product_media"
-    contents = await file.read()
+    contents = await read_bounded_file(file, max_bytes=MAX_VIDEO_SIZE_BYTES)
     if not contents or len(contents) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File content is empty.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File content is empty (0 bytes).")
+    res_type, detected_fmt, mime_type = validate_media_file(contents, filename)
 
     c_res = upload_to_cloudinary(
         file_bytes=contents,
         original_filename=filename,
         folder=folder or "royal_libas/products",
+        resource_type_override=res_type,
     )
 
     try:
@@ -2065,12 +2103,12 @@ async def admin_upload_product_image(
             url=c_res["secure_url"],
             secure_url=c_res["secure_url"],
             resource_type=c_res["resource_type"],
-            format=c_res.get("format"),
+            format=c_res.get("format") or detected_fmt,
             width=c_res.get("width"),
             height=c_res.get("height"),
             duration=c_res.get("duration"),
             file_size=c_res.get("file_size", len(contents)),
-            mime_type=file.content_type or ("video/mp4" if c_res["resource_type"] == "video" else "image/jpeg"),
+            mime_type=mime_type or file.content_type or ("video/mp4" if c_res["resource_type"] == "video" else "image/jpeg"),
             alt_text=filename,
             folder=c_res.get("folder", folder),
         )
@@ -2079,15 +2117,23 @@ async def admin_upload_product_image(
         db.refresh(asset)
     except Exception as db_err:
         db.rollback()
-        admin_media_logger.error(f"Database registration failure for product upload {filename}: {db_err}", exc_info=True)
-        try:
-            delete_from_cloudinary(c_res["public_id"], resource_type=c_res["resource_type"])
-        except Exception as cleanup_err:
-            admin_media_logger.critical(f"ORPHAN_CLEANUP_FAILED: Failed to delete Cloudinary asset {c_res['public_id']}: {cleanup_err}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database registration failed. Remote upload was rolled back.",
-        )
+        admin_media_logger.error(f"Database registration failure for product upload '{filename}': {db_err}", exc_info=True)
+        cleanup_res = delete_from_cloudinary(c_res["public_id"], resource_type=c_res["resource_type"])
+        if cleanup_res.get("success"):
+            admin_media_logger.info(f"Cleaned up remote asset '{c_res['public_id']}' after DB registration failure.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database registration failed. Remote upload was rolled back.",
+            )
+        else:
+            admin_media_logger.critical(
+                f"ORPHAN_CLEANUP_FAILED: Failed to delete Cloudinary asset '{c_res['public_id']}' after DB failure. "
+                f"Action required: manually remove orphan '{c_res['public_id']}' from Cloudinary."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database registration failed and remote asset cleanup could not be confirmed. Asset ID '{c_res['public_id']}' may require manual cleanup.",
+            )
 
     return {
         "status": "success",

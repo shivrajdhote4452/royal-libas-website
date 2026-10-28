@@ -94,9 +94,9 @@ export const AdminMedia: React.FC = () => {
         continue;
       }
 
-      // Check sizes: 15MB images, 60MB videos
-      if (isImage && file.size > 15 * 1024 * 1024) {
-        setNotification({ type: 'error', message: `Photo ${file.name} exceeds maximum 15MB limit.` });
+      // Check sizes: 10MB images (Cloudinary Free limit), 60MB videos
+      if (isImage && file.size > 10 * 1024 * 1024) {
+        setNotification({ type: 'error', message: `Photo ${file.name} exceeds maximum 10MB limit for images.` });
         continue;
       }
       if (isVideo && file.size > 60 * 1024 * 1024) {
@@ -388,7 +388,7 @@ export const AdminMedia: React.FC = () => {
           Drag & drop multiple photos or videos here, or <span className="text-[#5E1224] underline">browse</span>
         </div>
         <p className="text-[11px] text-gray-500 max-w-md">
-          Supports multi-file uploads: JPEG, PNG, WebP (up to 15MB) and MP4, MOV, WebM videos (up to 60MB).
+          Supports multi-file uploads: JPEG, PNG, WebP (up to 10MB) and MP4, MOV, WebM videos (up to 60MB).
           Assets are uploaded and optimized via Cloudinary CDN.
         </p>
       </div>
