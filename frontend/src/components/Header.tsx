@@ -225,10 +225,14 @@ export const Header: React.FC = () => {
             {/* Center Logo - Floral Motif Identity */}
             <Link
               to="/"
-              className="group flex flex-col items-center justify-center focus:outline-none py-1 transition-transform duration-200 hover:scale-[1.01]"
+              className="group flex flex-col items-center justify-center focus:outline-none py-0.5 transition-transform duration-200 hover:scale-[1.01]"
               aria-label="Royal Libas Homepage"
             >
-              <BrandLogo layout="compact" emblemSize={isScrolled ? 22 : 26} taglineText="TIMELESS TRADITIONS, MODERN WOMEN." />
+              <BrandLogo
+                layout="compact"
+                emblemSize={isScrolled ? 18 : 22}
+                taglineText="TIMELESS TRADITIONS, MODERN WOMEN."
+              />
             </Link>
 
             {/* Right Nav (Desktop Editorial + Action Icons) */}

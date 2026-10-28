@@ -293,12 +293,12 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 
   // 4. COMPACT LAYOUT (Tailored for Website Header Navbar ~48-56px total height)
   if (layout === 'compact') {
-    const size = emblemSize || 28;
+    const size = emblemSize || 24;
     return (
       <div className={`flex flex-col items-center text-center leading-none ${className}`}>
-        {renderEmblem(size, 'mb-1')}
+        {renderEmblem(size, 'mb-0.5')}
         <span
-          className="font-serif font-bold text-lg sm:text-xl tracking-[0.16em] uppercase transition-colors"
+          className="font-serif font-bold text-base sm:text-xl tracking-[0.15em] uppercase transition-colors"
           style={{ color: textRoyal }}
         >
           ROYAL LIBAS

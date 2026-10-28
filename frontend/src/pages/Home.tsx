@@ -45,6 +45,12 @@ export const Home: React.FC = () => {
 
   // Editorial Scroll Reveal Observer
   useEffect(() => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion || !('IntersectionObserver' in window)) {
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => el.classList.add('is-revealed'));
+      return;
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -54,13 +60,28 @@ export const Home: React.FC = () => {
           }
         });
       },
-      { threshold: 0.12 }
+      { rootMargin: '120px 0px 60px 0px', threshold: 0.05 }
     );
 
     const elements = document.querySelectorAll('.reveal-on-scroll');
-    elements.forEach((el) => observer.observe(el));
+    elements.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight + 150) {
+        el.classList.add('is-revealed');
+      } else {
+        observer.observe(el);
+      }
+    });
 
-    return () => observer.disconnect();
+    // Safety guarantee: Ensure all content is revealed within 1.2s so no section stays hidden
+    const safetyTimer = setTimeout(() => {
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => el.classList.add('is-revealed'));
+    }, 1200);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(safetyTimer);
+    };
   }, [loading]);
 
   const curatedProducts = products.slice(0, 4);
