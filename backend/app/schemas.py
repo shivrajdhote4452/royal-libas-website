@@ -498,6 +498,7 @@ class CashfreeCreateOrderResponse(BaseModel):
 class CashfreeConfigResponse(BaseModel):
     configured: bool
     mode: str
+    online_payment_enabled: bool = True
 
 
 # ==========================================
@@ -670,6 +671,8 @@ class StoreSettingResponse(BaseModel):
     instagram_handle: str
     shipping_policy_content: Optional[str] = None
     return_policy_content: Optional[str] = None
+    cod_enabled: bool = False
+    online_payment_enabled: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -692,6 +695,8 @@ class StoreSettingUpdate(BaseModel):
     instagram_handle: Optional[str] = None
     shipping_policy_content: Optional[str] = None
     return_policy_content: Optional[str] = None
+    cod_enabled: Optional[bool] = None
+    online_payment_enabled: Optional[bool] = None
 
 
 class ContactInquiryCreate(BaseModel):

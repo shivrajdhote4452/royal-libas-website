@@ -61,15 +61,29 @@ export const Checkout: React.FC = () => {
     fetchPaymentGatewayConfig()
       .then((cfg) => {
         setGatewayConfig(cfg);
-        if (!cfg.configured) {
-          setPaymentMethod('COD');
-        }
       })
       .catch(() => {
         setGatewayConfig({ configured: false, mode: 'sandbox' });
-        setPaymentMethod('COD');
       });
   }, [items, navigate]);
+
+  const isOnlinePaymentAvailable = Boolean(
+    settings.onlinePaymentEnabled && (gatewayConfig === null || gatewayConfig.configured !== false)
+  );
+  const isCodAvailable = Boolean(settings.codEnabled);
+  const isAnyPaymentAvailable = isOnlinePaymentAvailable || isCodAvailable;
+
+  useEffect(() => {
+    if (isOnlinePaymentAvailable && !isCodAvailable) {
+      setPaymentMethod('PREPAID');
+    } else if (!isOnlinePaymentAvailable && isCodAvailable) {
+      setPaymentMethod('COD');
+    } else if (isOnlinePaymentAvailable && isCodAvailable) {
+      if (paymentMethod !== 'PREPAID' && paymentMethod !== 'COD') {
+        setPaymentMethod('PREPAID');
+      }
+    }
+  }, [isOnlinePaymentAvailable, isCodAvailable]);
 
   // Dynamic server-aligned fee calculations
   const discountAmount = appliedCoupon?.valid ? appliedCoupon.discount : 0;
@@ -141,6 +155,21 @@ export const Checkout: React.FC = () => {
     }
     if (!city.trim() || !state.trim()) {
       setFormError('Please specify your city and state.');
+      return;
+    }
+
+    if (!isAnyPaymentAvailable) {
+      setFormError('Checkout is currently unavailable as no payment methods are active. Please contact boutique concierge.');
+      return;
+    }
+
+    if (paymentMethod === 'COD' && !isCodAvailable) {
+      setFormError('Cash on Delivery (COD) is currently unavailable. Please select another payment method.');
+      return;
+    }
+
+    if (paymentMethod === 'PREPAID' && !isOnlinePaymentAvailable) {
+      setFormError('Online payment is currently unavailable. Please select another payment method.');
       return;
     }
 
@@ -234,8 +263,12 @@ export const Checkout: React.FC = () => {
         const isLoaded = await loadCashfreeSDK();
         if (!isLoaded || typeof (window as any).Cashfree !== 'function') {
           await cancelOrder(orderResponse.order_code, orderToken, 'Cashfree SDK failed to load').catch(() => {});
-          setFormError('Unable to load payment gateway. Your cart is preserved. Please choose Cash on Delivery.');
-          setPaymentMethod('COD');
+          if (isCodAvailable) {
+            setFormError('Unable to load payment gateway. Your cart is preserved. Please choose Cash on Delivery.');
+            setPaymentMethod('COD');
+          } else {
+            setFormError('Unable to load payment gateway. Please check your internet connection or try again shortly.');
+          }
           setIsSubmitting(false);
           return;
         }
@@ -253,7 +286,11 @@ export const Checkout: React.FC = () => {
       } catch (paymentErr: any) {
         // Safe recovery: cancel reservation so items are immediately returned to stock
         await cancelOrder(orderResponse.order_code, orderToken, 'Payment session creation failed').catch(() => {});
-        setFormError('Could not launch payment gateway. Your cart has been preserved. Please retry or choose Cash on Delivery.');
+        setFormError(
+          isCodAvailable
+            ? 'Could not launch payment gateway. Your cart has been preserved. Please retry or choose Cash on Delivery.'
+            : 'Could not launch payment gateway. Your cart has been preserved. Please retry in a few moments.'
+        );
         setIsSubmitting(false);
       }
     } catch (err: any) {
@@ -553,86 +590,103 @@ export const Checkout: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {/* Prepaid Choice */}
-              <label
-                className={`p-4 rounded-none border flex items-start gap-3 transition-colors ${
-                  gatewayConfig && !gatewayConfig.configured
-                    ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200'
-                    : paymentMethod === 'PREPAID'
-                    ? 'border-[#5E1224] bg-[#FCF8F0] ring-1 ring-[#5E1224] cursor-pointer'
-                    : 'border-gray-200 hover:border-gray-300 bg-white cursor-pointer'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="payment_choice"
-                  value="PREPAID"
-                  disabled={gatewayConfig ? !gatewayConfig.configured : false}
-                  checked={paymentMethod === 'PREPAID' && (gatewayConfig ? gatewayConfig.configured : true)}
-                  onChange={() => {
-                    if (gatewayConfig?.configured !== false) {
-                      setPaymentMethod('PREPAID');
-                    }
-                  }}
-                  className="mt-1 text-[#5E1224] focus:ring-[#B58A3C]"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-[#B58A3C]" />
-                      <span>Online Payment (UPI, Cards, NetBanking)</span>
-                    </span>
-                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-none border border-emerald-200">
-                      FREE SHIPPING
-                    </span>
+              {/* If no payment method is available */}
+              {!isAnyPaymentAvailable && (
+                <div className="p-4 rounded-none bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-sm text-amber-800">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Checkout Temporarily Paused</span>
                   </div>
-                  {gatewayConfig && !gatewayConfig.configured ? (
-                    <p className="text-[11px] text-amber-700 font-semibold mt-1">
-                      Prepaid payment not available right now, please choose COD
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Instant confirmation via Cashfree. Zero transaction convenience fees.
-                    </p>
-                  )}
-                </div>
-              </label>
-
-              {/* COD Choice */}
-              <label
-                className={`p-4 rounded-none border flex items-start gap-3 cursor-pointer transition-colors ${
-                  paymentMethod === 'COD'
-                    ? 'border-[#5E1224] bg-[#FCF8F0] ring-1 ring-[#5E1224]'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="payment_choice"
-                  value="COD"
-                  checked={paymentMethod === 'COD'}
-                  onChange={() => setPaymentMethod('COD')}
-                  className="mt-1 text-[#5E1224] focus:ring-[#B58A3C]"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-[#B58A3C]" />
-                      <span>Cash on Delivery (COD)</span>
-                    </span>
-                    <span className="text-[11px] font-semibold text-gray-600">
-                      {subtotal >= settings.freeShippingThreshold ? (
-                        <span className="text-emerald-700 font-bold">FREE SHIPPING</span>
-                      ) : (
-                        `+ Rs. ${settings.standardShippingFee} shipping`
-                      )}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    Pay in cash or UPI directly to courier delivery partner upon arrival.
+                  <p className="text-gray-700 leading-relaxed">
+                    Online payments and Cash on Delivery are currently undergoing scheduled maintenance. New orders cannot be placed at this moment. Please reach out to our concierge for assistance.
                   </p>
                 </div>
-              </label>
+              )}
+
+              {/* Prepaid Choice - Visible ONLY when Online Payment is enabled */}
+              {settings.onlinePaymentEnabled && (
+                <label
+                  className={`p-4 rounded-none border flex items-start gap-3 transition-colors ${
+                    gatewayConfig && !gatewayConfig.configured
+                      ? 'opacity-60 cursor-not-allowed bg-gray-50 border-gray-200'
+                      : paymentMethod === 'PREPAID'
+                      ? 'border-[#5E1224] bg-[#FCF8F0] ring-1 ring-[#5E1224] cursor-pointer'
+                      : 'border-gray-200 hover:border-gray-300 bg-white cursor-pointer'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment_choice"
+                    value="PREPAID"
+                    disabled={gatewayConfig ? !gatewayConfig.configured : false}
+                    checked={paymentMethod === 'PREPAID' && (gatewayConfig ? gatewayConfig.configured : true)}
+                    onChange={() => {
+                      if (gatewayConfig?.configured !== false) {
+                        setPaymentMethod('PREPAID');
+                      }
+                    }}
+                    className="mt-1 text-[#5E1224] focus:ring-[#B58A3C]"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-2">
+                        <CreditCard className="w-4 h-4 text-[#B58A3C]" />
+                        <span>Online Payment (UPI, Cards, NetBanking)</span>
+                      </span>
+                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-none border border-emerald-200">
+                        FREE SHIPPING
+                      </span>
+                    </div>
+                    {gatewayConfig && !gatewayConfig.configured ? (
+                      <p className="text-[11px] text-amber-700 font-semibold mt-1">
+                        Prepaid payment not available right now{isCodAvailable ? ', please choose COD' : ''}.
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        Instant confirmation via Cashfree. Zero transaction convenience fees.
+                      </p>
+                    )}
+                  </div>
+                </label>
+              )}
+
+              {/* COD Choice - Visible ONLY when COD is enabled */}
+              {settings.codEnabled && (
+                <label
+                  className={`p-4 rounded-none border flex items-start gap-3 cursor-pointer transition-colors ${
+                    paymentMethod === 'COD'
+                      ? 'border-[#5E1224] bg-[#FCF8F0] ring-1 ring-[#5E1224]'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment_choice"
+                    value="COD"
+                    checked={paymentMethod === 'COD'}
+                    onChange={() => setPaymentMethod('COD')}
+                    className="mt-1 text-[#5E1224] focus:ring-[#B58A3C]"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs sm:text-sm text-gray-900 flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-[#B58A3C]" />
+                        <span>Cash on Delivery (COD)</span>
+                      </span>
+                      <span className="text-[11px] font-semibold text-gray-600">
+                        {subtotal >= settings.freeShippingThreshold ? (
+                          <span className="text-emerald-700 font-bold">FREE SHIPPING</span>
+                        ) : (
+                          `+ Rs. ${settings.standardShippingFee} shipping`
+                        )}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Pay in cash or UPI directly to courier delivery partner upon arrival.
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
         </div>
@@ -786,7 +840,7 @@ export const Checkout: React.FC = () => {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isAnyPaymentAvailable}
               className="w-full py-4 bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-400 text-[#FCF8F0] text-xs sm:text-sm font-ui font-semibold uppercase tracking-[0.2em] transition-all shadow-md flex items-center justify-center gap-2 mt-2 rounded-none"
             >
               {isSubmitting ? (
@@ -794,6 +848,8 @@ export const Checkout: React.FC = () => {
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
                   <span>PROCESSING ORDER...</span>
                 </span>
+              ) : !isAnyPaymentAvailable ? (
+                <span>CHECKOUT CURRENTLY UNAVAILABLE</span>
               ) : (
                 <span>{paymentMethod === 'COD' ? 'PLACE ORDER →' : 'PAY & PLACE ORDER →'}</span>
               )}

@@ -4,12 +4,20 @@ import { ShoppingBag, Menu, X, Search, Heart, ChevronDown, User } from 'lucide-r
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { BrandLogo } from './BrandLogo';
+import { useStoreSettings } from '../lib/settings';
 import { SearchModal } from './SearchModal';
 
 export const Header: React.FC = () => {
   const location = useLocation();
   const { totalItems, openDrawer } = useCart();
   const { wishlistCount } = useWishlist();
+  const { settings } = useStoreSettings();
+
+  const dynamicAnnouncement = settings.codEnabled
+    ? (settings.announcementText || `COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | FREE COD ABOVE ₹${settings.freeShippingThreshold.toLocaleString('en-IN')}`)
+    : (settings.announcementText && settings.announcementText.includes('COD')
+        ? 'COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | SECURE ONLINE CHECKOUT'
+        : (settings.announcementText || 'COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS'));
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -89,7 +97,7 @@ export const Header: React.FC = () => {
             ROYAL LIBAS
           </div>
           <div className="flex-1 text-center">
-            <span className="font-medium tracking-[0.18em]">COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS &nbsp;|&nbsp; FREE COD ABOVE ₹1,500</span>
+            <span className="font-medium tracking-[0.18em]">{dynamicAnnouncement}</span>
           </div>
           <div className="hidden md:flex items-center gap-1.5 text-[10.5px] text-[#FCF8F0] font-medium tracking-wider">
             <span>INDIA (INR) ▾</span>

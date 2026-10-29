@@ -21,11 +21,15 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 @router.get("/cashfree/config", response_model=CashfreeConfigResponse)
-def get_payment_gateway_config():
+def get_payment_gateway_config(db: Session = Depends(get_db)):
     """Return whether Cashfree gateway credentials are configured and the operating mode."""
+    from app.models import StoreSetting
+    store_setting = db.query(StoreSetting).first()
+    online_enabled = bool(store_setting.online_payment_enabled) if store_setting else True
     return CashfreeConfigResponse(
-        configured=is_cashfree_configured(),
+        configured=is_cashfree_configured() and online_enabled,
         mode=CASHFREE_ENVIRONMENT,
+        online_payment_enabled=online_enabled,
     )
 
 

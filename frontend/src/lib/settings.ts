@@ -8,6 +8,8 @@ export interface StoreSettings {
   whatsappNumber: string;
   supportEmail: string;
   instagramHandle: string;
+  codEnabled: boolean;
+  onlinePaymentEnabled: boolean;
 }
 
 const SETTINGS_STORAGE_KEY = 'royal_libas_store_settings';
@@ -19,6 +21,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   whatsappNumber: '+91 98112 23344',
   supportEmail: 'care@royallibas.com',
   instagramHandle: '@royal_libas_by_tanya',
+  codEnabled: false,
+  onlinePaymentEnabled: true,
 };
 
 export function getStoreSettings(): StoreSettings {
@@ -32,6 +36,8 @@ export function getStoreSettings(): StoreSettings {
       ...parsed,
       freeShippingThreshold: Number(parsed.freeShippingThreshold) || DEFAULT_STORE_SETTINGS.freeShippingThreshold,
       standardShippingFee: Number(parsed.standardShippingFee) || DEFAULT_STORE_SETTINGS.standardShippingFee,
+      codEnabled: typeof parsed.codEnabled === 'boolean' ? parsed.codEnabled : DEFAULT_STORE_SETTINGS.codEnabled,
+      onlinePaymentEnabled: typeof parsed.onlinePaymentEnabled === 'boolean' ? parsed.onlinePaymentEnabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
     };
   } catch {
     return DEFAULT_STORE_SETTINGS;
@@ -66,6 +72,8 @@ export function useStoreSettings(): {
           whatsappNumber: serverData.whatsapp_number || DEFAULT_STORE_SETTINGS.whatsappNumber,
           supportEmail: serverData.support_email || DEFAULT_STORE_SETTINGS.supportEmail,
           instagramHandle: serverData.instagram_handle || DEFAULT_STORE_SETTINGS.instagramHandle,
+          codEnabled: typeof serverData.cod_enabled === 'boolean' ? serverData.cod_enabled : DEFAULT_STORE_SETTINGS.codEnabled,
+          onlinePaymentEnabled: typeof serverData.online_payment_enabled === 'boolean' ? serverData.online_payment_enabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
         };
         saveStoreSettings(synced);
         setSettings(synced);

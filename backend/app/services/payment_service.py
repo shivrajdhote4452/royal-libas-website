@@ -17,7 +17,7 @@ from app.config import (
     is_cashfree_configured,
 )
 from datetime import datetime, timezone
-from app.models import Order, ProductVariant
+from app.models import Order, ProductVariant, StoreSetting
 from app.schemas import CashfreeCreateOrderResponse
 
 
@@ -49,6 +49,13 @@ def create_cashfree_order(db: Session, order_code: str) -> CashfreeCreateOrderRe
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Order '{order_code}' is not awaiting prepaid payment (status: {order.status}).",
+        )
+
+    store_setting = db.query(StoreSetting).first()
+    if store_setting and not store_setting.online_payment_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Online payments are currently disabled by store settings.",
         )
 
     if not is_cashfree_configured():

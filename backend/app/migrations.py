@@ -62,5 +62,22 @@ def run_migrations(engine: Engine) -> None:
                     else:
                         conn.execute(text(f"ALTER TABLE product_images ADD COLUMN {col_name} {col_type};"))
 
+        # 3. StoreSetting table migrations for payment controls
+        if "store_settings" in existing_tables:
+            existing_setting_cols = {col["name"] for col in inspector.get_columns("store_settings")}
+            
+            setting_cols = [
+                ("cod_enabled", "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE"),
+                ("online_payment_enabled", "BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE"),
+            ]
+
+            for col_name, sqlite_type, pg_type in setting_cols:
+                if col_name not in existing_setting_cols:
+                    logger.info(f"Adding column '{col_name}' to store_settings table...")
+                    if dialect_name == "postgresql":
+                        conn.execute(text(f"ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS {col_name} {pg_type};"))
+                    else:
+                        conn.execute(text(f"ALTER TABLE store_settings ADD COLUMN {col_name} {sqlite_type};"))
+
     logger.info("Database schema migrations completed successfully.")
 

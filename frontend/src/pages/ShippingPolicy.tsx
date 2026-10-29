@@ -56,7 +56,7 @@ export const ShippingPolicy: React.FC = () => {
                 <strong>Prepaid Orders (UPI, NetBanking, Credit/Debit Cards via Cashfree):</strong> <strong>FREE Standard Shipping</strong> across all serviceable pincodes in India.
               </li>
               <li>
-                <strong>Cash on Delivery (COD) Orders:</strong> <strong>FREE</strong> on orders of <strong>₹1,500 and above</strong>; ₹99 delivery fee applies to COD orders under ₹1,500.
+                <strong>Cash on Delivery (COD) Orders (when enabled at checkout):</strong> <strong>FREE</strong> on orders of <strong>₹1,500 and above</strong>; ₹99 delivery fee applies to COD orders under ₹1,500. Availability of COD is subject to active store checkout settings and courier pin code serviceability.
               </li>
               <li>
                 <strong>Express Delivery:</strong> ₹99 across all payment modes for priority 2–3 day transit.

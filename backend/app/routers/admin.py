@@ -2527,6 +2527,8 @@ def admin_get_settings(
         instagram_handle=setting.instagram_handle,
         shipping_policy_content=setting.shipping_policy_content,
         return_policy_content=setting.return_policy_content,
+        cod_enabled=bool(setting.cod_enabled),
+        online_payment_enabled=bool(setting.online_payment_enabled),
     )
 
 
@@ -2575,9 +2577,25 @@ def admin_update_settings(
         setting.shipping_policy_content = payload.shipping_policy_content
     if payload.return_policy_content is not None:
         setting.return_policy_content = payload.return_policy_content
+    payment_settings_changed = False
+    if payload.cod_enabled is not None:
+        setting.cod_enabled = payload.cod_enabled
+        payment_settings_changed = True
+    if payload.online_payment_enabled is not None:
+        setting.online_payment_enabled = payload.online_payment_enabled
+        payment_settings_changed = True
 
     db.commit()
     db.refresh(setting)
+    if payment_settings_changed:
+        log_activity(
+            db,
+            current_admin,
+            "PAYMENT_SETTINGS_UPDATED",
+            "settings",
+            setting.id,
+            f"Payment controls updated: cod_enabled={setting.cod_enabled}, online_payment_enabled={setting.online_payment_enabled}",
+        )
     log_activity(db, current_admin, "SETTINGS_UPDATED", "settings", setting.id, "Store & Homepage settings updated")
 
     return StoreSettingResponse(
@@ -2598,6 +2616,8 @@ def admin_update_settings(
         instagram_handle=setting.instagram_handle,
         shipping_policy_content=setting.shipping_policy_content,
         return_policy_content=setting.return_policy_content,
+        cod_enabled=bool(setting.cod_enabled),
+        online_payment_enabled=bool(setting.online_payment_enabled),
     )
 
 

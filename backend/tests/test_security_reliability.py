@@ -34,7 +34,7 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.database import Base, get_db
 import app.database as app_db
-from app.models import Admin, Product, ProductVariant, Order, OrderItem, Address
+from app.models import Admin, Product, ProductVariant, Order, OrderItem, Address, StoreSetting
 from app.auth import hash_password, create_access_token
 from app.services.order_service import (
     create_order_transaction,
@@ -71,6 +71,19 @@ def setup_module():
     app_db.engine = test_engine
     Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
+    db = TestingSessionLocal()
+    try:
+        setting = StoreSetting(
+            standard_cod_free_threshold=Decimal("1500.00"),
+            standard_shipping_fee=Decimal("99.00"),
+            express_shipping_fee=Decimal("99.00"),
+            cod_enabled=True,
+            online_payment_enabled=True,
+        )
+        db.add(setting)
+        db.commit()
+    finally:
+        db.close()
 
 
 def teardown_module():

@@ -32,6 +32,8 @@ def get_store_settings(db: Session = Depends(get_db)):
         whatsapp_number=setting.whatsapp_number,
         support_email=setting.support_email,
         instagram_handle=setting.instagram_handle,
+        cod_enabled=bool(setting.cod_enabled),
+        online_payment_enabled=bool(setting.online_payment_enabled),
     )
 
 

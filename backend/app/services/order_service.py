@@ -212,11 +212,37 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
             order_items_to_create.append(order_item)
 
         # Shipping charge rule (Backend is single source of truth using StoreSetting):
-        payment_method = payload.payment_method.upper()
+        payment_method = payload.payment_method.upper().strip()
         shipping_method = (payload.shipping_method or "STANDARD").upper().strip()
 
-        # Query dynamic store settings
+        # Query dynamic store settings and enforce payment controls
         store_setting = db.query(StoreSetting).first()
+        cod_enabled = bool(store_setting.cod_enabled) if store_setting else False
+        online_payment_enabled = bool(store_setting.online_payment_enabled) if store_setting else True
+
+        if not cod_enabled and not online_payment_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Store checkout is currently paused as no payment methods are active. Please check back shortly.",
+            )
+
+        if payment_method == "COD":
+            if not cod_enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cash on Delivery (COD) is currently unavailable.",
+                )
+        elif payment_method == "PREPAID":
+            if not online_payment_enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Online payment is currently unavailable.",
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported payment method '{payload.payment_method}'.",
+            )
         cod_threshold = (
             Decimal(str(store_setting.standard_cod_free_threshold))
             if store_setting

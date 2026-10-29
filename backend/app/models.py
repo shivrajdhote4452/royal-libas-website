@@ -374,6 +374,8 @@ class StoreSetting(Base):
     standard_cod_free_threshold = Column(Numeric(10, 2), default=1500.00, nullable=False)
     standard_shipping_fee = Column(Numeric(10, 2), default=99.00, nullable=False)
     express_shipping_fee = Column(Numeric(10, 2), default=99.00, nullable=False)
+    cod_enabled = Column(Boolean, default=False, nullable=False)
+    online_payment_enabled = Column(Boolean, default=True, nullable=False)
     announcement_text = Column(
         String(500),
         default="COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | FREE COD ABOVE ₹1,500",
