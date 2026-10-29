@@ -1,12 +1,16 @@
 import time
+import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Order
+from app.models import Order, ReturnRequest, OrderItem
 from app.schemas import (
     AddressResponse,
+    CustomerExchangeCreate,
+    CustomerExchangeResponse,
+    ExchangeSummaryResponse,
     OrderCancelRequest,
     OrderCreateRequest,
     OrderResponse,
@@ -149,6 +153,29 @@ def track_order(
             state=order.address.state,
         )
 
+    returns_and_exchanges = (
+        db.query(ReturnRequest)
+        .filter(ReturnRequest.order_id == order.id)
+        .order_by(ReturnRequest.created_at.desc())
+        .all()
+    )
+    exchange_summaries = [
+        ExchangeSummaryResponse(
+            id=r.id,
+            return_code=r.return_code,
+            order_code=order.order_code,
+            request_type=r.request_type,
+            reason=r.reason,
+            requested_size=r.exchange_size,
+            customer_notes=r.customer_comment,
+            status=r.status,
+            staff_notes=r.staff_notes,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+        )
+        for r in returns_and_exchanges
+    ]
+
     return OrderTrackResponse(
         order_code=order.order_code,
         customer_name=mask_name(order.customer_name),
@@ -170,6 +197,7 @@ def track_order(
         updated_at=order.updated_at,
         items=order.items,
         address=masked_addr,
+        exchanges=exchange_summaries,
     )
 
 
@@ -317,3 +345,122 @@ def cancel_order_by_customer(
     )
     return cancelled_order
 
+
+@router.post("/exchange", response_model=CustomerExchangeResponse)
+def request_exchange(
+    payload: CustomerExchangeCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Customer-initiated exchange request with strict ownership verification.
+    
+    Rules:
+    - Customer must provide matching 10-digit phone or order_token.
+    - Rejects cancelled or refunded orders.
+    - Validates order_item_id if specified belongs to the order.
+    - Prevents duplicate active exchange requests for the same item.
+    - Creates ReturnRequest with status='REQUESTED' (Pending Review).
+    - Neutral notice: 'Exchange requests are reviewed by our team. Conditions will be confirmed by the store.'
+    """
+    enforce_lookup_rate_limit(request)
+    clean_code = (payload.order_code or "").strip().upper()
+    has_phone = bool(payload.phone and payload.phone.strip())
+    clean_phone = "".join(filter(str.isdigit, payload.phone or ""))
+    if len(clean_phone) == 12 and clean_phone.startswith("91"):
+        clean_phone = clean_phone[2:]
+
+    if not clean_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order reference code is required.",
+        )
+
+    if not has_phone and not payload.token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide your registered 10-digit mobile number or order token for verification.",
+        )
+
+    order = db.query(Order).filter(Order.order_code == clean_code).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found. Please verify your order code and phone number.",
+        )
+
+    # Verify phone or token
+    verified = False
+    if payload.token and order.order_token and payload.token == order.order_token:
+        verified = True
+    elif has_phone:
+        stored_phone = "".join(filter(str.isdigit, order.phone))
+        if len(stored_phone) == 12 and stored_phone.startswith("91"):
+            stored_phone = stored_phone[2:]
+        if stored_phone == clean_phone:
+            verified = True
+
+    if not verified:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found. Verification credentials do not match our records.",
+        )
+
+    if order.status in ["CANCELLED", "REFUNDED"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Exchanges cannot be requested for {order.status.lower()} orders.",
+        )
+
+    # Validate order_item_id if provided
+    if payload.order_item_id:
+        item = db.query(OrderItem).filter(
+            OrderItem.id == payload.order_item_id,
+            OrderItem.order_id == order.id,
+        ).first()
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Specified order item does not belong to this order.",
+            )
+
+    # Check for duplicate active exchange requests
+    existing_req = (
+        db.query(ReturnRequest)
+        .filter(
+            ReturnRequest.order_id == order.id,
+            ReturnRequest.order_item_id == payload.order_item_id,
+            ReturnRequest.status.in_(["REQUESTED", "APPROVED", "PICKUP_SCHEDULED"]),
+        )
+        .first()
+    )
+    if existing_req:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"An active exchange request ({existing_req.return_code}) is already pending review for this item.",
+        )
+
+    rand_code = uuid.uuid4().hex[:6].upper()
+    return_code = f"EXC-2026-{rand_code}"
+
+    exchange_req = ReturnRequest(
+        return_code=return_code,
+        order_id=order.id,
+        order_item_id=payload.order_item_id,
+        request_type="EXCHANGE",
+        reason=payload.reason.strip() if payload.reason else "SIZE_FIT",
+        customer_comment=payload.customer_notes.strip() if payload.customer_notes else None,
+        requested_resolution="EXCHANGE_SIZE",
+        exchange_size=payload.requested_size.strip() if payload.requested_size else None,
+        status="REQUESTED",
+    )
+    db.add(exchange_req)
+    db.commit()
+    db.refresh(exchange_req)
+
+    return CustomerExchangeResponse(
+        success=True,
+        return_code=exchange_req.return_code,
+        status="REQUESTED",
+        message="Exchange requests are reviewed by our team. Conditions will be confirmed by the store.",
+        created_at=exchange_req.created_at,
+    )

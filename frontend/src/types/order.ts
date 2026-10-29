@@ -120,6 +120,20 @@ export interface CouponValidateResponse {
   message: string;
 }
 
+export interface ExchangeSummaryItem {
+  id: number;
+  return_code: string;
+  order_code: string;
+  request_type: string;
+  reason: string;
+  requested_size?: string | null;
+  customer_notes?: string | null;
+  status: string;
+  staff_notes?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
 export interface OrderTrackResponse {
   order_code: string;
   customer_name: string;
@@ -141,6 +155,7 @@ export interface OrderTrackResponse {
   updated_at?: string;
   items: OrderItemResponse[];
   address?: (OrderAddress & { id: number }) | null;
+  exchanges?: ExchangeSummaryItem[];
 }
 
 export interface OrderStatusUpdateRequest {

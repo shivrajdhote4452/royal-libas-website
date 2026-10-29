@@ -2331,6 +2331,7 @@ def admin_create_product(
         size_chart=payload.size_chart,
         size_chart_id=payload.size_chart_id,
         category=payload.category,
+        subcategory=payload.subcategory,
         status=prod_status,
         is_bestseller=payload.is_bestseller,
         is_active=is_active,
@@ -2428,6 +2429,8 @@ def admin_update_product(
         product.size_chart_id = payload.size_chart_id
     if payload.category is not None:
         product.category = payload.category
+    if payload.subcategory is not None:
+        product.subcategory = payload.subcategory
     if payload.is_bestseller is not None:
         product.is_bestseller = payload.is_bestseller
 

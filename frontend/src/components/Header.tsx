@@ -22,11 +22,13 @@ export const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [collectionsAccordionOpen, setCollectionsAccordionOpen] = useState(false);
-  const [activeDropdown, setActiveDropdown] = useState<'categories' | 'collections' | null>(null);
+  const [twoPiecesAccordionOpen, setTwoPiecesAccordionOpen] = useState(false);
+  const [suitSetAccordionOpen, setSuitSetAccordionOpen] = useState(false);
+  const [heavyDressAccordionOpen, setHeavyDressAccordionOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<'two_pieces' | 'suit_set' | 'heavy_dress' | null>(null);
   const closeDropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleDropdownEnter = (type: 'categories' | 'collections') => {
+  const handleDropdownEnter = (type: 'two_pieces' | 'suit_set' | 'heavy_dress') => {
     if (closeDropdownTimerRef.current) {
       clearTimeout(closeDropdownTimerRef.current);
       closeDropdownTimerRef.current = null;
@@ -93,8 +95,8 @@ export const Header: React.FC = () => {
       >
         {/* Top Announcement Bar (Handbook Section 03 & Configured Business Rules) */}
         <div className="bg-[#5E1224] text-[#FCF8F0] text-[10.5px] sm:text-xs py-2 px-4 sm:px-8 tracking-[0.16em] uppercase font-medium flex items-center justify-between transition-all duration-300">
-          <div className="hidden md:block w-28 text-[10px] text-[#D4AF67] tracking-widest font-serif">
-            ROYAL LIBAS
+          <div className="hidden md:block w-36 text-[10px] text-[#D4AF67] tracking-widest font-serif whitespace-nowrap">
+            ROYAL LIBAS BY TANYA
           </div>
           <div className="flex-1 text-center">
             <span className="font-medium tracking-[0.18em]">{dynamicAnnouncement}</span>
@@ -122,8 +124,8 @@ export const Header: React.FC = () => {
               </button>
             </div>
 
-            {/* Left Nav (Desktop Editorial) */}
-            <nav className="hidden lg:flex items-center space-x-7 text-xs font-semibold uppercase tracking-[0.18em] font-ui">
+            {/* Left Nav (Desktop Editorial - 3 Main Category Groups) */}
+            <nav className="hidden lg:flex items-center space-x-4 xl:space-x-5 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.15em] font-ui">
               <Link
                 to="/shop?sort=newest"
                 className={`transition-colors py-1 hover:text-[#5E1224] ${
@@ -140,145 +142,219 @@ export const Header: React.FC = () => {
               >
                 SHOP
               </Link>
-              {/* Categories Navigation with Smooth Dropdown */}
+
+              {/* TWO PIECES Dropdown */}
               <div
                 className="relative"
-                onMouseEnter={() => handleDropdownEnter('categories')}
+                onMouseEnter={() => handleDropdownEnter('two_pieces')}
                 onMouseLeave={handleDropdownLeave}
               >
                 <Link
-                  to="/shop"
-                  onFocus={() => handleDropdownEnter('categories')}
-                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none ${
-                    location.search.includes('category') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                  to="/shop?category=TWO+PIECES"
+                  onFocus={() => handleDropdownEnter('two_pieces')}
+                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none whitespace-nowrap ${
+                    location.search.includes('category=TWO+PIECES') || location.search.includes('category=TWO%20PIECES')
+                      ? 'text-[#5E1224] border-b-2 border-[#B58A3C]'
+                      : 'text-gray-700'
                   }`}
                   aria-haspopup="true"
-                  aria-expanded={activeDropdown === 'categories'}
+                  aria-expanded={activeDropdown === 'two_pieces'}
                 >
-                  <span>CATEGORIES</span>
+                  <span>TWO PIECES</span>
                   <ChevronDown
                     className={`w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out ${
-                      activeDropdown === 'categories' ? 'rotate-180' : ''
+                      activeDropdown === 'two_pieces' ? 'rotate-180' : ''
                     }`}
                   />
                 </Link>
 
-                {/* Categories Dropdown with smooth opacity and slide-down transition */}
                 <div
-                  className={`absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
-                    activeDropdown === 'categories'
+                  className={`absolute top-full left-0 w-52 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
+                    activeDropdown === 'two_pieces'
                       ? 'opacity-100 visible translate-y-0 pointer-events-auto'
                       : 'opacity-0 invisible -translate-y-2 pointer-events-none'
                   }`}
                 >
                   <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
-                    <span className="text-[9.5px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
-                      Explore By Silhouette
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
+                      Two Pieces
                     </span>
                   </div>
                   <Link
-                    to="/shop?category=Kurti+Sets"
-                    onClick={() => setActiveDropdown(null)}
-                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
-                  >
-                    <span>Kurti Sets</span>
-                    <span className="text-[10px] text-gray-400 font-mono">8 Styles</span>
-                  </Link>
-                  <Link
-                    to="/shop?category=Festive+Sets"
-                    onClick={() => setActiveDropdown(null)}
-                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
-                  >
-                    <span>Festive Sets</span>
-                    <span className="text-[10px] text-gray-400 font-mono">4 Styles</span>
-                  </Link>
-                  <Link
-                    to="/shop?category=Co-ord+Sets"
+                    to="/shop?category=TWO+PIECES&subcategory=Co-ord+Sets"
                     onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
                     <span>Co-ord Sets</span>
-                    <span className="text-[10px] text-gray-400 font-mono">4 Styles</span>
+                  </Link>
+                  <Link
+                    to="/shop?category=TWO+PIECES&subcategory=Kurta+Pant"
+                    onClick={() => setActiveDropdown(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Kurta Pant</span>
                   </Link>
                   <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
                     <Link
-                      to="/shop"
+                      to="/shop?category=TWO+PIECES"
                       onClick={() => setActiveDropdown(null)}
                       className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
                     >
-                      <span>Explore All Silhouettes &rarr;</span>
+                      <span>Explore All Two Pieces &rarr;</span>
                     </Link>
                   </div>
                 </div>
               </div>
 
-              {/* Collections Navigation with Smooth Dropdown */}
+              {/* SUIT SET Dropdown */}
               <div
                 className="relative"
-                onMouseEnter={() => handleDropdownEnter('collections')}
+                onMouseEnter={() => handleDropdownEnter('suit_set')}
                 onMouseLeave={handleDropdownLeave}
               >
                 <Link
-                  to="/shop?collection=festive-edit"
-                  onFocus={() => handleDropdownEnter('collections')}
-                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none ${
-                    location.search.includes('collection') ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                  to="/shop?category=SUIT+SET"
+                  onFocus={() => handleDropdownEnter('suit_set')}
+                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none whitespace-nowrap ${
+                    location.search.includes('category=SUIT+SET') || location.search.includes('category=SUIT%20SET')
+                      ? 'text-[#5E1224] border-b-2 border-[#B58A3C]'
+                      : 'text-gray-700'
                   }`}
                   aria-haspopup="true"
-                  aria-expanded={activeDropdown === 'collections'}
+                  aria-expanded={activeDropdown === 'suit_set'}
                 >
-                  <span>COLLECTIONS</span>
+                  <span>SUIT SET</span>
                   <ChevronDown
                     className={`w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out ${
-                      activeDropdown === 'collections' ? 'rotate-180' : ''
+                      activeDropdown === 'suit_set' ? 'rotate-180' : ''
                     }`}
                   />
                 </Link>
 
-                {/* Collections Dropdown with smooth opacity and slide-down transition */}
                 <div
-                  className={`absolute top-full left-0 w-60 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
-                    activeDropdown === 'collections'
+                  className={`absolute top-full left-0 w-52 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
+                    activeDropdown === 'suit_set'
                       ? 'opacity-100 visible translate-y-0 pointer-events-auto'
                       : 'opacity-0 invisible -translate-y-2 pointer-events-none'
                   }`}
                 >
                   <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
-                    <span className="text-[9.5px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
-                      Curated Editions
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
+                      Suit Set
                     </span>
                   </div>
                   <Link
-                    to="/shop?collection=festive-edit"
+                    to="/shop?category=SUIT+SET&subcategory=Three+Pieces"
                     onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    <span>Festive Edit &apos;26</span>
-                    <span className="text-[10px] text-amber-700 font-semibold">New</span>
+                    <span>Three Pieces</span>
                   </Link>
                   <Link
-                    to="/shop?collection=everyday-cotton"
+                    to="/shop?category=SUIT+SET&subcategory=Semi-party+Wear"
                     onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    <span>Everyday Cotton</span>
-                    <span className="text-[10px] text-gray-400">Pure Weave</span>
+                    <span>Semi-party Wear</span>
                   </Link>
                   <Link
-                    to="/shop?collection=bestsellers"
+                    to="/shop?category=SUIT+SET&subcategory=Party+Wear"
                     onClick={() => setActiveDropdown(null)}
                     className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
                   >
-                    <span>Iconic Bestsellers</span>
-                    <span className="text-[10px] text-[#B58A3C]">★ Top Rated</span>
+                    <span>Party Wear</span>
                   </Link>
                   <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
                     <Link
-                      to="/shop"
+                      to="/shop?category=SUIT+SET"
                       onClick={() => setActiveDropdown(null)}
                       className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
                     >
-                      <span>Explore All Editions &rarr;</span>
+                      <span>Explore All Suit Sets &rarr;</span>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* HEAVY DRESS Dropdown */}
+              <div
+                className="relative"
+                onMouseEnter={() => handleDropdownEnter('heavy_dress')}
+                onMouseLeave={handleDropdownLeave}
+              >
+                <Link
+                  to="/shop?category=HEAVY+DRESS"
+                  onFocus={() => handleDropdownEnter('heavy_dress')}
+                  className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none whitespace-nowrap ${
+                    location.search.includes('category=HEAVY+DRESS') || location.search.includes('category=HEAVY%20DRESS')
+                      ? 'text-[#5E1224] border-b-2 border-[#B58A3C]'
+                      : 'text-gray-700'
+                  }`}
+                  aria-haspopup="true"
+                  aria-expanded={activeDropdown === 'heavy_dress'}
+                >
+                  <span>HEAVY DRESS</span>
+                  <ChevronDown
+                    className={`w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out ${
+                      activeDropdown === 'heavy_dress' ? 'rotate-180' : ''
+                    }`}
+                  />
+                </Link>
+
+                <div
+                  className={`absolute top-full left-0 w-56 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
+                    activeDropdown === 'heavy_dress'
+                      ? 'opacity-100 visible translate-y-0 pointer-events-auto'
+                      : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+                  }`}
+                >
+                  <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
+                      Heavy Dress
+                    </span>
+                  </div>
+                  <Link
+                    to="/shop?category=HEAVY+DRESS&subcategory=Lehenga"
+                    onClick={() => setActiveDropdown(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Lehenga</span>
+                  </Link>
+                  <Link
+                    to="/shop?category=HEAVY+DRESS&subcategory=Short+Kurta"
+                    onClick={() => setActiveDropdown(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Short Kurta</span>
+                  </Link>
+                  <Link
+                    to="/shop?category=HEAVY+DRESS&subcategory=Palazzo+Set"
+                    onClick={() => setActiveDropdown(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Palazzo Set</span>
+                  </Link>
+                  <Link
+                    to="/shop?category=HEAVY+DRESS&subcategory=Designer+Wear"
+                    onClick={() => setActiveDropdown(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Designer Wear</span>
+                  </Link>
+                  <Link
+                    to="/shop?category=HEAVY+DRESS&subcategory=Sharara+%2F+Gharara"
+                    onClick={() => setActiveDropdown(null)}
+                    className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                  >
+                    <span>Sharara / Gharara</span>
+                  </Link>
+                  <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
+                    <Link
+                      to="/shop?category=HEAVY+DRESS"
+                      onClick={() => setActiveDropdown(null)}
+                      className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
+                    >
+                      <span>Explore All Heavy Dresses &rarr;</span>
                     </Link>
                   </div>
                 </div>
@@ -289,12 +365,12 @@ export const Header: React.FC = () => {
             <Link
               to="/"
               className="group flex flex-col items-center justify-center focus:outline-none py-0.5 transition-transform duration-200 hover:scale-[1.01]"
-              aria-label="Royal Libas Homepage"
+              aria-label="Royal Libas by Tanya Homepage"
             >
               <BrandLogo
                 layout="compact"
                 emblemSize={isScrolled ? 18 : 22}
-                taglineText="TIMELESS TRADITIONS, MODERN WOMEN."
+                taglineText="BY TANYA"
               />
             </Link>
 
@@ -425,43 +501,159 @@ export const Header: React.FC = () => {
                 Shop All Boutique Styles
               </Link>
 
-              {/* Collections Accordion */}
-              <div>
+              {/* Three Main Expandable Categories on Mobile */}
+              {/* 1. TWO PIECES Accordion */}
+              <div className="border-b border-[#E8DFD0]/40 pb-1">
                 <button
                   type="button"
-                  onClick={() => setCollectionsAccordionOpen(!collectionsAccordionOpen)}
+                  onClick={() => setTwoPiecesAccordionOpen(!twoPiecesAccordionOpen)}
                   className="w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-gray-800 hover:bg-[#E8DFD0]/40 flex items-center justify-between"
+                  aria-expanded={twoPiecesAccordionOpen}
                 >
-                  <span>Curated Collections</span>
+                  <span className="tracking-wide">TWO PIECES</span>
                   <ChevronDown
                     className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
-                      collectionsAccordionOpen ? 'rotate-180 text-[#5B111A]' : ''
+                      twoPiecesAccordionOpen ? 'rotate-180 text-[#5E1224]' : ''
                     }`}
                   />
                 </button>
 
-                {collectionsAccordionOpen && (
-                  <div className="pl-4 pr-2 py-1 space-y-1 text-xs border-l-2 border-[#C59B27] ml-3 mt-1 animate-in slide-in-from-top-1 duration-200">
+                {twoPiecesAccordionOpen && (
+                  <div className="pl-4 pr-2 py-1 space-y-1 text-xs border-l-2 border-[#C59B27] ml-3 mt-0.5 animate-in slide-in-from-top-1 duration-200">
                     <Link
-                      to="/shop?collection=festive-edit"
+                      to="/shop?category=TWO+PIECES&subcategory=Co-ord+Sets"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5B111A] font-medium"
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
                     >
-                      Festive Edit
+                      Co-ord Sets
                     </Link>
                     <Link
-                      to="/shop?collection=everyday-cotton"
+                      to="/shop?category=TWO+PIECES&subcategory=Kurta+Pant"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5B111A] font-medium"
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
                     >
-                      Everyday Cotton Co-ords
+                      Kurta Pant
                     </Link>
                     <Link
-                      to="/shop?collection=bestsellers"
+                      to="/shop?category=TWO+PIECES"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5B111A] font-medium"
+                      className="block px-2.5 py-1.5 rounded text-[#5E1224] font-semibold hover:underline"
                     >
-                      Bestsellers
+                      View All Two Pieces &rarr;
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. SUIT SET Accordion */}
+              <div className="border-b border-[#E8DFD0]/40 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSuitSetAccordionOpen(!suitSetAccordionOpen)}
+                  className="w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-gray-800 hover:bg-[#E8DFD0]/40 flex items-center justify-between"
+                  aria-expanded={suitSetAccordionOpen}
+                >
+                  <span className="tracking-wide">SUIT SET</span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
+                      suitSetAccordionOpen ? 'rotate-180 text-[#5E1224]' : ''
+                    }`}
+                  />
+                </button>
+
+                {suitSetAccordionOpen && (
+                  <div className="pl-4 pr-2 py-1 space-y-1 text-xs border-l-2 border-[#C59B27] ml-3 mt-0.5 animate-in slide-in-from-top-1 duration-200">
+                    <Link
+                      to="/shop?category=SUIT+SET&subcategory=Three+Pieces"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Three Pieces
+                    </Link>
+                    <Link
+                      to="/shop?category=SUIT+SET&subcategory=Semi-party+Wear"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Semi-party Wear
+                    </Link>
+                    <Link
+                      to="/shop?category=SUIT+SET&subcategory=Party+Wear"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Party Wear
+                    </Link>
+                    <Link
+                      to="/shop?category=SUIT+SET"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-[#5E1224] font-semibold hover:underline"
+                    >
+                      View All Suit Sets &rarr;
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* 3. HEAVY DRESS Accordion */}
+              <div className="border-b border-[#E8DFD0]/40 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setHeavyDressAccordionOpen(!heavyDressAccordionOpen)}
+                  className="w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-gray-800 hover:bg-[#E8DFD0]/40 flex items-center justify-between"
+                  aria-expanded={heavyDressAccordionOpen}
+                >
+                  <span className="tracking-wide">HEAVY DRESS</span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
+                      heavyDressAccordionOpen ? 'rotate-180 text-[#5E1224]' : ''
+                    }`}
+                  />
+                </button>
+
+                {heavyDressAccordionOpen && (
+                  <div className="pl-4 pr-2 py-1 space-y-1 text-xs border-l-2 border-[#C59B27] ml-3 mt-0.5 animate-in slide-in-from-top-1 duration-200">
+                    <Link
+                      to="/shop?category=HEAVY+DRESS&subcategory=Lehenga"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Lehenga
+                    </Link>
+                    <Link
+                      to="/shop?category=HEAVY+DRESS&subcategory=Short+Kurta"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Short Kurta
+                    </Link>
+                    <Link
+                      to="/shop?category=HEAVY+DRESS&subcategory=Palazzo+Set"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Palazzo Set
+                    </Link>
+                    <Link
+                      to="/shop?category=HEAVY+DRESS&subcategory=Designer+Wear"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Designer Wear
+                    </Link>
+                    <Link
+                      to="/shop?category=HEAVY+DRESS&subcategory=Sharara+%2F+Gharara"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Sharara / Gharara
+                    </Link>
+                    <Link
+                      to="/shop?category=HEAVY+DRESS"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-[#5E1224] font-semibold hover:underline"
+                    >
+                      View All Heavy Dresses &rarr;
                     </Link>
                   </div>
                 )}

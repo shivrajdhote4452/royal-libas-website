@@ -31,13 +31,14 @@ router = APIRouter(tags=["products"])
 @router.get("/products", response_model=List[ProductListResponse])
 def list_products(
     category: Optional[str] = Query(None, description="Filter by category"),
+    subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
     collection: Optional[str] = Query(None, description="Filter by collection slug or name"),
     size: Optional[str] = Query(None, description="Filter by available variant size"),
     sort: Optional[str] = Query("newest", description="Sort order: newest, price_asc, price_desc"),
     include_inactive: bool = Query(False, description="Include inactive products (admin only)"),
     db: Session = Depends(get_db),
 ):
-    """List products with filters (category, collection, size) and sorting (newest, price_asc, price_desc)."""
+    """List products with filters (category, subcategory, collection, size) and sorting (newest, price_asc, price_desc)."""
     query = (
         db.query(Product)
         .options(
@@ -51,7 +52,12 @@ def list_products(
         query = query.filter(Product.is_active == True)
 
     if category:
-        query = query.filter(Product.category == category)
+        clean_cat = category.strip()
+        query = query.filter(Product.category.ilike(clean_cat))
+
+    if subcategory:
+        clean_sub = subcategory.strip()
+        query = query.filter(Product.subcategory.ilike(clean_sub))
 
     if collection:
         query = query.join(Product.collections).filter(

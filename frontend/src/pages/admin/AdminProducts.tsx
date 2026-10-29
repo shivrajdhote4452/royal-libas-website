@@ -37,6 +37,12 @@ interface ProductMediaItem {
   alt_text?: string | null;
 }
 
+export const CATEGORY_GROUPS: Record<string, string[]> = {
+  'TWO PIECES': ['Co-ord Sets', 'Kurta Pant'],
+  'SUIT SET': ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
+  'HEAVY DRESS': ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
+};
+
 export const AdminProducts: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,8 +53,12 @@ export const AdminProducts: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newProductName, setNewProductName] = useState('');
   const [newProductSlug, setNewProductSlug] = useState('');
-  const [newCategory, setNewCategory] = useState('Festive Sets');
+  const [newCategory, setNewCategory] = useState('TWO PIECES');
+  const [newSubcategory, setNewSubcategory] = useState('Co-ord Sets');
   const [newFabric, setNewFabric] = useState('Pure Chanderi Silk');
+  const [categoryModalProduct, setCategoryModalProduct] = useState<Product | null>(null);
+  const [assignCat, setAssignCat] = useState<string>('TWO PIECES');
+  const [assignSubcat, setAssignSubcat] = useState<string>('Co-ord Sets');
   const [newCare, setNewCare] = useState('Dry clean only');
   const [newFit, setNewFit] = useState('Tailored Regular Fit');
   const [newStatus, setNewStatus] = useState<'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('PUBLISHED');
@@ -272,6 +282,7 @@ export const AdminProducts: React.FC = () => {
       name: newProductName.trim(),
       slug: slug,
       category: newCategory,
+      subcategory: newSubcategory,
       fabric: newFabric,
       care: newCare,
       fit: newFit,
@@ -332,6 +343,26 @@ export const AdminProducts: React.FC = () => {
       );
     } catch (err: any) {
       alert(err.message || 'Failed to update product status');
+    }
+  };
+
+
+  // Save Category & Subcategory assignment for existing product
+  const handleSaveCategoryAssignment = async () => {
+    if (!categoryModalProduct) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await adminUpdateProduct(token, categoryModalProduct.id, {
+        category: assignCat,
+        subcategory: assignSubcat,
+      });
+      setCategoryModalProduct(null);
+      await loadProducts();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to update category');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -477,7 +508,9 @@ export const AdminProducts: React.FC = () => {
                         </span>
                       </div>
                       <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span>{product.category || 'Apparel'}</span>
+                        <span className="font-medium text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          {product.category || 'Unassigned'} {product.subcategory ? `› ${product.subcategory}` : ''}
+                        </span>
                         {product.fit && (
                           <>
                             <span>•</span>
@@ -495,6 +528,20 @@ export const AdminProducts: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCategoryModalProduct(product);
+                        const initialCat = product.category && CATEGORY_GROUPS[product.category] ? product.category : 'TWO PIECES';
+                        setAssignCat(initialCat);
+                        setAssignSubcat(product.subcategory || CATEGORY_GROUPS[initialCat]?.[0] || 'Co-ord Sets');
+                      }}
+                      className="px-2.5 py-1 rounded text-xs font-semibold transition-colors border border-[#D4AF67] text-[#5E1224] bg-[#FCF8F0] hover:bg-[#F3E9DA]"
+                      title="Assign Main Category and Subcategory"
+                    >
+                      Assign Category
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -915,22 +962,42 @@ export const AdminProducts: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block font-semibold text-gray-700 mb-1">
-                    Category
+                    Category <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
+                    onChange={(e) => {
+                      const cat = e.target.value;
+                      setNewCategory(cat);
+                      setNewSubcategory(CATEGORY_GROUPS[cat]?.[0] || '');
+                    }}
                     className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224] bg-white"
                   >
-                    <option value="Festive Sets">Festive Sets</option>
-                    <option value="Everyday Cotton">Everyday Cotton</option>
-                    <option value="Co-ord Sets">Co-ord Sets</option>
-                    <option value="Kurti Sets">Kurti Sets</option>
-                    <option value="Anarkali">Anarkali</option>
-                    <option value="Lehenga">Lehenga</option>
+                    {Object.keys(CATEGORY_GROUPS).map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">
+                    Subcategory <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newSubcategory}
+                    onChange={(e) => setNewSubcategory(e.target.value)}
+                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224] bg-white"
+                  >
+                    {(CATEGORY_GROUPS[newCategory] || []).map((sub) => (
+                      <option key={sub} value={sub}>
+                        {sub}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1143,6 +1210,93 @@ export const AdminProducts: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Assignment Modal for Existing Products */}
+      {categoryModalProduct && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-[#E8DFD0] shadow-2xl max-w-md w-full p-6 space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-serif font-bold text-base text-gray-900">
+                  Assign Category & Subcategory
+                </h3>
+                <p className="text-xs text-gray-500 truncate max-w-xs">
+                  {categoryModalProduct.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCategoryModalProduct(null)}
+                className="text-gray-400 hover:text-gray-700 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1.5">
+                  Main Category
+                </label>
+                <select
+                  value={assignCat}
+                  onChange={(e) => {
+                    const nextCat = e.target.value;
+                    setAssignCat(nextCat);
+                    setAssignSubcat(CATEGORY_GROUPS[nextCat]?.[0] || '');
+                  }}
+                  className="w-full px-3 py-2 border rounded bg-white text-sm focus:outline-none focus:border-[#5E1224]"
+                >
+                  {Object.keys(CATEGORY_GROUPS).map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1.5">
+                  Subcategory
+                </label>
+                <select
+                  value={assignSubcat}
+                  onChange={(e) => setAssignSubcat(e.target.value)}
+                  className="w-full px-3 py-2 border rounded bg-white text-sm focus:outline-none focus:border-[#5E1224]"
+                >
+                  {(CATEGORY_GROUPS[assignCat] || []).map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3 bg-[#FCF8F0] border border-[#E8DFD0] rounded text-gray-600 text-[11px] leading-relaxed">
+                Saving this will organize this design into <strong>{assignCat} › {assignSubcat}</strong> across desktop and mobile menus without changing any existing variants, prices, or orders.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCategoryModalProduct(null)}
+                  className="px-4 py-2 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={handleSaveCategoryAssignment}
+                  className="px-5 py-2 rounded text-xs font-semibold bg-[#5E1224] text-white hover:bg-[#3A080F] disabled:opacity-50"
+                >
+                  {actionLoading ? 'Saving...' : 'Save Category'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

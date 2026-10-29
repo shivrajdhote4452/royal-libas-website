@@ -35,12 +35,28 @@ const COLOR_HEX_MAP: Record<string, string> = {
   'Royal Plum': '#582949',
 };
 
+export const MAIN_CATEGORIES_CONFIG = [
+  {
+    name: 'TWO PIECES',
+    subcategories: ['Co-ord Sets', 'Kurta Pant'],
+  },
+  {
+    name: 'SUIT SET',
+    subcategories: ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
+  },
+  {
+    name: 'HEAVY DRESS',
+    subcategories: ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
+  },
+];
+
 export const Shop: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { wishlist } = useWishlist();
 
   // URL search params
   const currentCategory = searchParams.get('category') || '';
+  const currentSubcategory = searchParams.get('subcategory') || '';
   const currentCollection = searchParams.get('collection') || '';
   const currentSize = searchParams.get('size') || '';
   const currentColor = searchParams.get('color') || '';
@@ -111,6 +127,7 @@ export const Shop: React.FC = () => {
         setLoading(true);
         const data = await fetchProducts({
           category: currentCategory || undefined,
+          subcategory: currentSubcategory || undefined,
           collection: currentCollection || undefined,
           size: currentSize || undefined,
           sort: currentSort,
@@ -131,7 +148,7 @@ export const Shop: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [currentCategory, currentCollection, currentSize, currentSort]);
+  }, [currentCategory, currentSubcategory, currentCollection, currentSize, currentSort]);
 
   // Lock background scroll when bottom sheet is open
   useEffect(() => {
@@ -191,6 +208,7 @@ export const Shop: React.FC = () => {
 
   const hasActiveFilters = Boolean(
     currentCategory ||
+    currentSubcategory ||
     currentCollection ||
     currentSize ||
     currentColor ||
@@ -205,22 +223,13 @@ export const Shop: React.FC = () => {
     ? 'My Wishlist'
     : currentSearch
     ? `Search: "${currentSearch}"`
+    : currentSubcategory
+    ? `${currentCategory ? currentCategory + ' — ' : ''}${currentSubcategory}`
     : currentCollection
     ? collections.find((c) => c.slug === currentCollection)?.name || 'Collection'
     : currentCategory || 'All Designs';
 
-  // Dynamic category counts from full catalog reference so options never disappear
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    catalogReference.forEach((p) => {
-      if (p.category) {
-        counts[p.category] = (counts[p.category] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [catalogReference]);
-
-  // Dynamic available variant colours from full catalog reference
+// Dynamic available variant colours from full catalog reference
   const availableColours = useMemo(() => {
     const counts: Record<string, number> = {};
     catalogReference.forEach((p) => {
@@ -340,29 +349,76 @@ export const Shop: React.FC = () => {
               )}
             </div>
 
-            {/* Category Filter */}
-            <div className="space-y-2.5">
+            {/* Category & Subcategory Filter */}
+            <div className="space-y-3">
               <h4 className="text-[11px] uppercase tracking-[0.18em] font-bold text-[#5E1224]">
-                CATEGORY
+                CATEGORIES & SILHOUETTES
               </h4>
-              <div className="space-y-2">
-                {Object.entries(categoryCounts).map(([catName, count]) => (
-                  <label
-                    key={catName}
-                    className="flex items-center justify-between text-xs text-gray-700 cursor-pointer hover:text-[#5E1224]"
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={currentCategory === catName}
-                        onChange={() => updateParam('category', currentCategory === catName ? '' : catName)}
-                        className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
-                      />
-                      <span>{catName}</span>
+              <div className="space-y-3">
+                {MAIN_CATEGORIES_CONFIG.map((group) => {
+                  const isSelected = currentCategory.toUpperCase() === group.name;
+                  return (
+                    <div key={group.name} className="space-y-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = new URLSearchParams(searchParams);
+                          if (isSelected && !currentSubcategory) {
+                            next.delete('category');
+                          } else {
+                            next.set('category', group.name);
+                            next.delete('subcategory');
+                          }
+                          setSearchParams(next);
+                        }}
+                        className={`w-full text-left text-xs font-bold tracking-wide flex items-center justify-between transition-colors py-1 ${
+                          isSelected ? 'text-[#5E1224]' : 'text-gray-800 hover:text-[#5E1224]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-[#5E1224]' : 'bg-[#D4AF67]'}`} />
+                          {group.name}
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          {catalogReference.filter(p => p.category?.toUpperCase() === group.name).length}
+                        </span>
+                      </button>
+
+                      <div className="pl-3 space-y-1 border-l border-[#E8DFD0]/60">
+                        {group.subcategories.map((sub) => {
+                          const isSubSelected = isSelected && currentSubcategory === sub;
+                          const subCount = catalogReference.filter(
+                            p => p.category?.toUpperCase() === group.name && p.subcategory === sub
+                          ).length;
+                          return (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => {
+                                const next = new URLSearchParams(searchParams);
+                                if (isSubSelected) {
+                                  next.delete('subcategory');
+                                } else {
+                                  next.set('category', group.name);
+                                  next.set('subcategory', sub);
+                                }
+                                setSearchParams(next);
+                              }}
+                              className={`w-full text-left text-[11px] py-1 flex items-center justify-between transition-colors ${
+                                isSubSelected
+                                  ? 'text-[#5E1224] font-bold'
+                                  : 'text-gray-600 hover:text-gray-900'
+                              }`}
+                            >
+                              <span>{sub}</span>
+                              <span className="text-gray-400 text-[10px]">({subCount})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <span className="text-gray-400 text-[11px]">({count})</span>
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -571,7 +627,18 @@ export const Shop: React.FC = () => {
                 {currentCategory && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
                     Category: {currentCategory}
-                    <button onClick={() => updateParam('category', '')}><X className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => {
+                      const next = new URLSearchParams(searchParams);
+                      next.delete('category');
+                      next.delete('subcategory');
+                      setSearchParams(next);
+                    }}><X className="w-3.5 h-3.5" /></button>
+                  </span>
+                )}
+                {currentSubcategory && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-[#5E1224] text-white shadow-sm">
+                    Subcategory: {currentSubcategory}
+                    <button onClick={() => updateParam('subcategory', '')}><X className="w-3.5 h-3.5" /></button>
                   </span>
                 )}
                 {currentCollection && (
@@ -646,16 +713,16 @@ export const Shop: React.FC = () => {
                 <div className="w-14 h-14 rounded-full bg-[#FCF8F0] border border-[#E8DFD0] flex items-center justify-center mx-auto text-[#B58A3C]">
                   <Filter className="w-6 h-6" />
                 </div>
-                <h3 className="font-serif text-lg font-bold text-gray-900">No pieces found</h3>
-                <p className="text-xs text-gray-500 max-w-sm mx-auto">
-                  No products matched your exact filter combination. Try clearing some active filters.
+                <h3 className="font-serif text-lg font-bold text-gray-900">No designs in this curation yet</h3>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto leading-relaxed">
+                  We are currently handcrafting pieces for this edit. Explore our other handcrafted collections or browse all silhouettes.
                 </p>
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="inline-flex items-center px-6 py-2.5 rounded-none bg-[#5E1224] text-[#FCF8F0] text-xs font-ui font-semibold uppercase tracking-wider hover:bg-[#3A080F]"
+                  className="inline-flex items-center px-6 py-2.5 rounded-none bg-[#5E1224] text-[#FCF8F0] text-xs font-ui font-semibold uppercase tracking-wider hover:bg-[#3A080F] transition-colors"
                 >
-                  Reset All Filters
+                  Explore All Designs
                 </button>
               </div>
             )}
@@ -689,23 +756,70 @@ export const Shop: React.FC = () => {
               </button>
             </div>
 
-            {/* Category */}
-            <div className="space-y-2">
-              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Category</h4>
-              {Object.entries(categoryCounts).map(([catName, count]) => (
-                <label key={catName} className="flex items-center justify-between text-xs text-gray-700 py-1 cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={currentCategory === catName}
-                      onChange={() => updateParam('category', currentCategory === catName ? '' : catName)}
-                      className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
-                    />
-                    <span>{catName}</span>
-                  </div>
-                  <span className="text-gray-400">({count})</span>
-                </label>
-              ))}
+            {/* Categories & Subcategories on Mobile Sheet */}
+            <div className="space-y-3">
+              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Categories & Silhouettes</h4>
+              <div className="space-y-3">
+                {MAIN_CATEGORIES_CONFIG.map((group) => {
+                  const isSelected = currentCategory.toUpperCase() === group.name;
+                  return (
+                    <div key={group.name} className="space-y-1.5 border-b border-gray-100 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = new URLSearchParams(searchParams);
+                          if (isSelected && !currentSubcategory) {
+                            next.delete('category');
+                          } else {
+                            next.set('category', group.name);
+                            next.delete('subcategory');
+                          }
+                          setSearchParams(next);
+                        }}
+                        className={`w-full text-left text-xs font-bold tracking-wide flex items-center justify-between py-1 ${
+                          isSelected ? 'text-[#5E1224]' : 'text-gray-800'
+                        }`}
+                      >
+                        <span>{group.name}</span>
+                        <span className="text-[10px] text-gray-400">
+                          {catalogReference.filter(p => p.category?.toUpperCase() === group.name).length}
+                        </span>
+                      </button>
+
+                      <div className="pl-3 space-y-1.5 border-l-2 border-[#D4AF67]/50">
+                        {group.subcategories.map((sub) => {
+                          const isSubSelected = isSelected && currentSubcategory === sub;
+                          return (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => {
+                                const next = new URLSearchParams(searchParams);
+                                if (isSubSelected) {
+                                  next.delete('subcategory');
+                                } else {
+                                  next.set('category', group.name);
+                                  next.set('subcategory', sub);
+                                }
+                                setSearchParams(next);
+                                setMobileFilterOpen(false);
+                              }}
+                              className={`w-full text-left text-xs py-1 flex items-center justify-between ${
+                                isSubSelected ? 'text-[#5E1224] font-bold' : 'text-gray-600'
+                              }`}
+                            >
+                              <span>{sub}</span>
+                              <span className="text-gray-400 text-[10px]">
+                                ({catalogReference.filter(p => p.category?.toUpperCase() === group.name && p.subcategory === sub).length})
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Curated Collections */}

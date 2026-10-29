@@ -151,6 +151,7 @@ class ProductCreate(BaseModel):
     size_chart: Optional[str] = None
     size_chart_id: Optional[int] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     status: Optional[str] = 'PUBLISHED'
     is_bestseller: bool = False
     is_active: bool = True
@@ -169,6 +170,7 @@ class ProductUpdate(BaseModel):
     size_chart: Optional[str] = None
     size_chart_id: Optional[int] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     status: Optional[str] = None
     is_bestseller: Optional[bool] = None
     is_active: Optional[bool] = None
@@ -183,6 +185,7 @@ class ProductListResponse(BaseModel):
     description: Optional[str] = None
     fabric: Optional[str] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     is_bestseller: bool
     is_active: bool
     min_price: Optional[Decimal] = None
@@ -208,6 +211,7 @@ class ProductDetailResponse(BaseModel):
     size_chart: Optional[str] = None
     size_chart_id: Optional[int] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     status: str = 'PUBLISHED'
     is_bestseller: bool
     is_active: bool
@@ -405,6 +409,40 @@ class OrderItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ExchangeSummaryResponse(BaseModel):
+    id: int
+    return_code: str
+    order_code: str
+    request_type: str = "EXCHANGE"
+    reason: str
+    requested_size: Optional[str] = None
+    customer_notes: Optional[str] = None
+    status: str = "REQUESTED"
+    staff_notes: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CustomerExchangeCreate(BaseModel):
+    order_code: str
+    phone: Optional[str] = None
+    token: Optional[str] = None
+    order_item_id: Optional[int] = None
+    reason: str
+    requested_size: Optional[str] = None
+    customer_notes: Optional[str] = None
+
+
+class CustomerExchangeResponse(BaseModel):
+    success: bool = True
+    return_code: str
+    status: str = "REQUESTED"
+    message: str = "Exchange requests are reviewed by our team. Conditions will be confirmed by the store."
+    created_at: datetime
+
+
 class OrderResponse(BaseModel):
     id: int
     order_code: str
@@ -434,6 +472,7 @@ class OrderResponse(BaseModel):
     updated_at: Optional[datetime] = None
     items: List[OrderItemResponse] = []
     address: Optional[AddressResponse] = None
+    exchanges: List[ExchangeSummaryResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -553,6 +592,7 @@ class OrderTrackResponse(BaseModel):
     updated_at: Optional[datetime] = None
     items: List[OrderItemResponse] = []
     address: Optional[AddressResponse] = None
+    exchanges: List[ExchangeSummaryResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

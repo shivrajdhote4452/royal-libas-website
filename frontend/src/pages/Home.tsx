@@ -127,13 +127,21 @@ export const Home: React.FC = () => {
                 <span className="w-8 h-[1px] bg-[#D4AF67]" />
               </div>
 
-              <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight text-[#FCF8F0] leading-[1.04]">
-                A NEW HEIRLOOM
+              <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight text-[#FCF8F0] leading-[1.06]">
+                <span className="block">ROYAL LIBAS</span>
+                <span className="block text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-normal tracking-[0.16em] text-[#D4AF67] font-serif italic mt-1 sm:mt-1.5">
+                  by Tanya
+                </span>
               </h1>
 
-              <p className="text-sm sm:text-base text-[#FCF8F0]/90 font-light leading-relaxed max-w-lg mx-auto lg:mx-0">
-                Handcrafted ethnic wear for the modern woman. Rooted in centuries-old Indian textile heritage, tailored with precision for your celebrations.
-              </p>
+              <div className="space-y-1.5 max-w-lg mx-auto lg:mx-0">
+                <p className="text-xs sm:text-sm uppercase tracking-[0.22em] text-[#D4AF67] font-semibold">
+                  A New Heirloom &bull; Festive 2026
+                </p>
+                <p className="text-sm sm:text-base text-[#FCF8F0]/90 font-light leading-relaxed">
+                  Handcrafted ethnic wear for the modern woman. Rooted in centuries-old Indian textile heritage, tailored with precision for your celebrations.
+                </p>
+              </div>
 
               {/* High-Contrast, Prominent Shopping CTA Button */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">

@@ -57,7 +57,7 @@ class SizeChart(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    category = Column(String(100), nullable=True)
+    category = Column(String(100), nullable=True, index=True)
     measurements = Column(Text, nullable=False)  # JSON array: [{"size": "S", "bust": 36, "waist": 32, "hip": 38, "length": 44}, ...]
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -81,7 +81,8 @@ class Product(Base):
     fit = Column(String(100), nullable=True)  # Slim Fit, Regular Fit, Relaxed, Tailored
     size_chart = Column(Text, nullable=True)  # JSON-encoded structured data (measurements in cm)
     size_chart_id = Column(Integer, ForeignKey("size_charts.id", ondelete="SET NULL"), nullable=True)
-    category = Column(String(100), nullable=True)
+    category = Column(String(100), nullable=True, index=True)
+    subcategory = Column(String(100), nullable=True, index=True)
     status = Column(String(50), default="PUBLISHED", nullable=False)  # DRAFT, PUBLISHED, ARCHIVED
     is_bestseller = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

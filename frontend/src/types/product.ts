@@ -75,6 +75,7 @@ export interface Product {
   size_chart_id?: number | null;
   status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | string;
   category: string | null;
+  subcategory?: string | null;
   is_bestseller: boolean;
   is_active: boolean;
   min_price: number | null;

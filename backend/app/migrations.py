@@ -79,5 +79,15 @@ def run_migrations(engine: Engine) -> None:
                     else:
                         conn.execute(text(f"ALTER TABLE store_settings ADD COLUMN {col_name} {sqlite_type};"))
 
+        # 4. Product table migrations for subcategory
+        if "products" in existing_tables:
+            existing_prod_cols = {col["name"] for col in inspector.get_columns("products")}
+            if "subcategory" not in existing_prod_cols:
+                logger.info("Adding column 'subcategory' to products table...")
+                if dialect_name == "postgresql":
+                    conn.execute(text("ALTER TABLE products ADD COLUMN IF NOT EXISTS subcategory VARCHAR(100);"))
+                else:
+                    conn.execute(text("ALTER TABLE products ADD COLUMN subcategory VARCHAR(100);"))
+
     logger.info("Database schema migrations completed successfully.")
 

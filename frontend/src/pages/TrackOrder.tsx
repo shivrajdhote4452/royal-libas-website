@@ -12,8 +12,11 @@ import {
   AlertCircle,
   MessageCircle,
   Loader2,
+  RotateCcw,
+  X,
 } from 'lucide-react';
-import { trackOrder, formatPrice } from '../lib/api';
+import { trackOrder, formatPrice, submitCustomerExchange } from '../lib/api';
+import { OrderItemResponse } from '../types/order';
 import { OrderTrackResponse } from '../types/order';
 
 export const TrackOrder: React.FC = () => {
@@ -24,6 +27,15 @@ export const TrackOrder: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<OrderTrackResponse | null>(null);
   const tokenParam = searchParams.get('token') || '';
+
+  // Exchange Request Modal State
+  const [exchangeModalItem, setExchangeModalItem] = useState<OrderItemResponse | null>(null);
+  const [exchangeReason, setExchangeReason] = useState('SIZE_FIT');
+  const [exchangeRequestedSize, setExchangeRequestedSize] = useState('L');
+  const [exchangeNotes, setExchangeNotes] = useState('');
+  const [exchangeSubmitting, setExchangeSubmitting] = useState(false);
+  const [exchangeSuccessMsg, setExchangeSuccessMsg] = useState<string | null>(null);
+  const [exchangeErrorMsg, setExchangeErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Track Your Order | Royal Libas by Tanya';
@@ -94,6 +106,40 @@ export const TrackOrder: React.FC = () => {
   const steps = ['PLACED', 'PACKED', 'SHIPPED', 'DELIVERED'];
   const currentStepIndex = order ? steps.indexOf(order.status.toUpperCase()) : -1;
   const isCancelled = order?.status.toUpperCase() === 'CANCELLED';
+
+
+  const handleExchangeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    setExchangeSubmitting(true);
+    setExchangeErrorMsg(null);
+    setExchangeSuccessMsg(null);
+
+    try {
+      const res = await submitCustomerExchange({
+        order_code: order.order_code,
+        phone: phone || undefined,
+        token: tokenParam || undefined,
+        order_item_id: exchangeModalItem ? exchangeModalItem.id : undefined,
+        reason: exchangeReason,
+        requested_size: exchangeRequestedSize,
+        customer_notes: exchangeNotes.trim() || undefined,
+      });
+
+      setExchangeSuccessMsg(
+        `Exchange request (${res.return_code}) received. Status: PENDING REVIEW. ${res.message}`
+      );
+      setExchangeModalItem(null);
+      setExchangeNotes('');
+      // Re-fetch order tracking to reflect the pending exchange
+      const updated = await trackOrder(order.order_code, phone || undefined, tokenParam || undefined);
+      setOrder(updated);
+    } catch (err: any) {
+      setExchangeErrorMsg(err.message || 'Failed to submit exchange request.');
+    } finally {
+      setExchangeSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#FCF8F0] page-enter font-sans">
@@ -369,21 +415,93 @@ export const TrackOrder: React.FC = () => {
               <span>Items in this Order ({order.items.length})</span>
             </div>
             <div className="divide-y divide-gray-100">
-              {order.items.map((item) => (
-                <div key={item.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-semibold text-gray-900">{item.product_name_snapshot}</p>
-                    <p className="text-gray-500 text-[11px]">
-                      Size: <strong>{item.size_snapshot}</strong> | Qty: {item.quantity}
-                    </p>
+              {order.items.map((item) => {
+                                return (
+                  <div key={item.id} className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                    <div>
+                      <p className="font-semibold text-gray-900">{item.product_name_snapshot}</p>
+                      <p className="text-gray-500 text-[11px] mt-0.5">
+                        Size: <strong className="text-gray-700">{item.size_snapshot}</strong> | Qty: {item.quantity}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                      <span className="font-bold text-[#5E1224]">
+                        {formatPrice(item.line_total)}
+                      </span>
+                      {order.status !== 'CANCELLED' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExchangeModalItem(item);
+                            setExchangeErrorMsg(null);
+                            setExchangeSuccessMsg(null);
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-semibold text-[#5E1224] bg-[#FCF8F0] border border-[#B58A3C]/40 hover:bg-[#F3E9DA] rounded transition-colors flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Request Exchange</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <span className="font-bold text-[#5E1224]">
-                    {formatPrice(item.line_total)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
+
+          {/* Customer Feedback Message */}
+          {exchangeSuccessMsg && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span>{exchangeSuccessMsg}</span>
+            </div>
+          )}
+          {exchangeErrorMsg && (
+            <div className="p-3.5 bg-red-50 border border-red-200 text-red-800 rounded text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+              <span>{exchangeErrorMsg}</span>
+            </div>
+          )}
+
+          {/* Active Exchanges / Returns History */}
+          {(order.exchanges || []).length > 0 && (
+            <div className="bg-white p-5 rounded-none border border-[#E8DFD0] shadow-sm space-y-3">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-2 text-xs font-bold text-gray-900">
+                <RotateCcw className="w-4 h-4 text-[#B58A3C]" />
+                <span>Exchange & Return Requests</span>
+              </div>
+              <div className="space-y-3">
+                {order.exchanges!.map((exch) => (
+                  <div key={exch.id} className="p-3 bg-[#FCF8F0] border border-[#E8DFD0] rounded space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-[#5E1224]">{exch.return_code}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        exch.status === 'APPROVED'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : exch.status === 'REJECTED'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {exch.status === 'REQUESTED' ? 'Pending Review' : exch.status}
+                      </span>
+                    </div>
+                    <p className="text-gray-700">
+                      <strong>Type:</strong> {exch.request_type} &bull; <strong>Reason:</strong> {exch.reason.replace(/_/g, ' ')}
+                      {exch.requested_size && (
+                        <span> &bull; <strong>Requested Size:</strong> {exch.requested_size}</span>
+                      )}
+                    </p>
+                    {exch.customer_notes && (
+                      <p className="text-gray-500 italic text-[11px]">&ldquo;{exch.customer_notes}&rdquo;</p>
+                    )}
+                    <p className="text-[10px] text-gray-400 border-t border-[#E8DFD0]/60 pt-1">
+                      Exchange requests are reviewed by our team. Conditions will be confirmed by the store.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Support Banner */}
           <div className="p-4 bg-[#FCF8F0] rounded-none border border-[#E8DFD0] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-700">
@@ -403,6 +521,105 @@ export const TrackOrder: React.FC = () => {
         </div>
       )}
       </div>
+
+      {/* Exchange Request Modal */}
+      {exchangeModalItem && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-[#E8DFD0] shadow-2xl max-w-md w-full p-6 space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-serif font-bold text-base text-gray-900">
+                  Request Size / Style Exchange
+                </h3>
+                <p className="text-xs text-gray-500 truncate max-w-xs">
+                  {exchangeModalItem.product_name_snapshot}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExchangeModalItem(null)}
+                className="text-gray-400 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExchangeSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
+                  Exchange Reason <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={exchangeReason}
+                  onChange={(e) => setExchangeReason(e.target.value)}
+                  className="w-full px-3 py-2 border rounded bg-white text-xs focus:outline-none focus:border-[#5E1224]"
+                >
+                  <option value="SIZE_FIT">Size / Fit Adjustment Required</option>
+                  <option value="COLOR_MISMATCH">Color / Tone Preference</option>
+                  <option value="STYLE_PREFERENCE">Different Silhouette Preferred</option>
+                  <option value="DEFECTIVE">Fabric / Handcrafting Query</option>
+                  <option value="OTHER">Other Reason</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
+                  Requested Replacement Size <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={exchangeRequestedSize}
+                  onChange={(e) => setExchangeRequestedSize(e.target.value)}
+                  className="w-full px-3 py-2 border rounded bg-white text-xs focus:outline-none focus:border-[#5E1224]"
+                >
+                  <option value="XS">XS (Bust 34)</option>
+                  <option value="S">S (Bust 36)</option>
+                  <option value="M">M (Bust 38)</option>
+                  <option value="L">L (Bust 40)</option>
+                  <option value="XL">XL (Bust 42)</option>
+                  <option value="XXL">XXL (Bust 44)</option>
+                  <option value="3XL">3XL (Bust 46)</option>
+                  <option value="Custom">Custom Sizing / Assistance Required</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
+                  Notes for Boutique Concierge (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Sleeves are perfect, just need 2 inches looser at chest..."
+                  value={exchangeNotes}
+                  onChange={(e) => setExchangeNotes(e.target.value)}
+                  className="w-full px-3 py-2 border rounded text-xs focus:outline-none focus:border-[#5E1224]"
+                />
+              </div>
+
+              {/* Neutral Wording Disclosure */}
+              <div className="p-3 bg-[#FCF8F0] border border-[#E8DFD0] rounded text-gray-600 text-[11px] leading-relaxed">
+                Exchange requests are reviewed by our team. Conditions will be confirmed by the store.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setExchangeModalItem(null)}
+                  className="px-4 py-2 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={exchangeSubmitting}
+                  className="px-5 py-2 rounded text-xs font-semibold bg-[#5E1224] text-white hover:bg-[#3A080F] disabled:opacity-50 transition-colors"
+                >
+                  {exchangeSubmitting ? 'Submitting...' : 'Submit Exchange Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

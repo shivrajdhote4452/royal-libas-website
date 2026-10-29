@@ -31,7 +31,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   className = '',
   emblemSize,
   showTagline = true,
-  taglineText = 'TIMELESS TRADITIONS, MODERN WOMEN.',
+  taglineText = 'BY TANYA',
 }) => {
   // Resolve colors based on variant
   let petalFill = '#5E1224'; // Deep Maroon
@@ -304,15 +304,15 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
           ROYAL LIBAS
         </span>
         {showTagline && (
-          <div className="hidden sm:flex items-center justify-center gap-1.5 mt-0.5">
-            <span className="w-3 sm:w-4 h-[1px]" style={{ backgroundColor: lineColor }} />
+          <div className="flex items-center justify-center gap-1 sm:gap-1.5 mt-0.5">
+            <span className="w-2.5 sm:w-4 h-[1px]" style={{ backgroundColor: lineColor }} />
             <span
-              className="text-[8px] sm:text-[8.5px] uppercase tracking-[0.3em] font-semibold"
+              className="text-[7.5px] sm:text-[8.5px] uppercase tracking-[0.24em] sm:tracking-[0.3em] font-semibold whitespace-nowrap"
               style={{ color: textTanya }}
             >
               {taglineText}
             </span>
-            <span className="w-3 sm:w-4 h-[1px]" style={{ backgroundColor: lineColor }} />
+            <span className="w-2.5 sm:w-4 h-[1px]" style={{ backgroundColor: lineColor }} />
           </div>
         )}
       </div>

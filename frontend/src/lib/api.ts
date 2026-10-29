@@ -4,6 +4,7 @@ const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost
 
 export interface ProductFilters {
   category?: string;
+  subcategory?: string;
   collection?: string;
   size?: string;
   sort?: 'newest' | 'price_asc' | 'price_desc' | string;
@@ -12,6 +13,7 @@ export interface ProductFilters {
 export async function fetchProducts(filters: ProductFilters = {}): Promise<Product[]> {
   const params = new URLSearchParams();
   if (filters.category) params.append('category', filters.category);
+  if (filters.subcategory) params.append('subcategory', filters.subcategory);
   if (filters.collection) params.append('collection', filters.collection);
   if (filters.size) params.append('size', filters.size);
   if (filters.sort) params.append('sort', filters.sort);
@@ -1017,5 +1019,38 @@ export async function adminDeleteProduct(token: string, id: number): Promise<any
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || 'Failed to delete product');
   }
+  return response.json();
+}
+
+export interface CustomerExchangePayload {
+  order_code: string;
+  phone?: string;
+  token?: string;
+  order_item_id?: number;
+  reason: string;
+  requested_size?: string;
+  customer_notes?: string;
+}
+
+export interface CustomerExchangeResponse {
+  success: boolean;
+  return_code: string;
+  status: string;
+  message: string;
+  created_at: string;
+}
+
+export async function submitCustomerExchange(payload: CustomerExchangePayload): Promise<CustomerExchangeResponse> {
+  const response = await fetch(`${API_BASE_URL}/orders/exchange`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.detail || 'Failed to submit exchange request.');
+  }
+
   return response.json();
 }
