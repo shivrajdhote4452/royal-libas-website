@@ -53,6 +53,10 @@ export const ProductPage: React.FC = () => {
   const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
   const [btnState, setBtnState] = useState<'idle' | 'adding' | 'added'>('idle');
 
+  // Touch swipe support for mobile product gallery
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+
   // Load product data
   useEffect(() => {
     let isMounted = true;
@@ -234,10 +238,6 @@ export const ProductPage: React.FC = () => {
     setSelectedVariant(v);
     setQuantity((q) => Math.min(q, v.stock > 0 ? v.stock : 1));
   };
-
-  // Touch swipe support for mobile product gallery
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartX(e.targetTouches[0].clientX);
