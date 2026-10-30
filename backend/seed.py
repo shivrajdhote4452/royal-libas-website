@@ -423,12 +423,132 @@ def clean_dummy_products(db, confirm: bool = False):
     print(f"  [-] Successfully deleted {len(dummy_products)} dummy product(s).\n")
 
 
-def seed_database(session_factory=None, force_reset_sample: bool = False, allow_production_sample_seed: bool = False, default_status: str = "DRAFT"):
+def reset_sample_products(db, confirm: bool = False, allow_production: bool = False) -> dict:
+    """Explicit separate maintenance utility to safely review and reset sample product metadata.
+
+    SAFETY RULES:
+    1. Default behavior is ALWAYS a DRY RUN: lists every affected product and every field that would change.
+    2. No database changes occur unless confirm=True is explicitly passed (e.g., via --confirm).
+    3. Products containing client data, active inventory (stock > 0), custom prices, or ANY photos/videos
+       are strictly PROTECTED and skipped. We NEVER assume a product is safe to reset simply because
+       it has no Cloudinary photo.
+    4. Blocked in production environments unless allow_production=True.
+    """
+    if is_production_environment() and not allow_production:
+        print("\n[SAFETY GUARD] Production database detected.")
+        print("  Sample product metadata reset is BLOCKED in production to protect real client products and business data.")
+        return {"status": "blocked", "eligible": 0, "reset": 0, "protected": 0}
+
+    print("\n" + "=" * 75)
+    print("ROYAL LIBAS - SAMPLE PRODUCT METADATA RESET AUDIT" + (" (DRY RUN)" if not confirm else " (EXECUTION)"))
+    print("=" * 75)
+
+    eligible_updates = []
+    protected_count = 0
+    missing_count = 0
+
+    for pdata in REAL_PRODUCTS_DATA:
+        slug = pdata["slug"]
+        product = db.query(Product).filter(Product.slug == slug).first()
+        if not product:
+            missing_count += 1
+            continue
+
+        # PROTECTION CHECK:
+        # 1. Has any attached images or videos (Cloudinary, local, or external)
+        has_media = len(product.images) > 0
+
+        # 2. Has customized client data or active business inventory
+        sample_variant_skus = {v["sku"] for v in pdata["variants"]}
+        has_active_stock = any(v.stock > 0 for v in product.variants)
+        has_custom_variants = (
+            len(product.variants) != len(pdata["variants"])
+            or any(v.sku not in sample_variant_skus for v in product.variants)
+        )
+
+        # Check if product attributes have been customized by the client (e.g. renamed or moved category)
+        is_customized_text = (
+            product.name != pdata["name"]
+            or (product.category and product.category != pdata["category"])
+        )
+
+        if has_media or has_active_stock or has_custom_variants or is_customized_text:
+            reason_parts = []
+            if has_media:
+                reason_parts.append(f"{len(product.images)} attached media asset(s)")
+            if has_active_stock:
+                total_stock = sum(v.stock for v in product.variants)
+                reason_parts.append(f"active inventory (total stock: {total_stock})")
+            if has_custom_variants:
+                reason_parts.append("customized variants/SKUs")
+            if is_customized_text:
+                reason_parts.append("client customized details (name/fabric/category)")
+
+            reasons = ", ".join(reason_parts)
+            print(f"  [!] PROTECTED: '{product.name}' (ID: {product.id}, slug: {product.slug})")
+            print(f"      Reason: Contains {reasons}. Reset is SKIPPED to protect client data.")
+            protected_count += 1
+            continue
+
+        # Product is an unmodified sample placeholder. Inspect field differences:
+        field_diffs = []
+        if product.name != pdata["name"]:
+            field_diffs.append(("name", product.name, pdata["name"]))
+        if product.description != pdata["description"]:
+            field_diffs.append(("description", f"{product.description[:30]}..." if product.description else "None", f"{pdata['description'][:30]}..."))
+        if product.fabric != pdata["fabric"]:
+            field_diffs.append(("fabric", product.fabric, pdata["fabric"]))
+        if product.care != pdata["care"]:
+            field_diffs.append(("care", product.care, pdata["care"]))
+        if product.category != pdata["category"]:
+            field_diffs.append(("category", product.category, pdata["category"]))
+
+        if field_diffs:
+            eligible_updates.append((product, pdata, field_diffs))
+            print(f"  [*] CANDIDATE: '{product.name}' (ID: {product.id}, slug: {product.slug})")
+            for field, old_val, new_val in field_diffs:
+                print(f"      • {field}: '{old_val}' -> '{new_val}'")
+        else:
+            print(f"  [-] IN SYNC: '{product.name}' (ID: {product.id}, slug: {product.slug}) already matches seed metadata.")
+
+    print("\nAudit Summary:")
+    print(f"  • Total sample candidates checked: {len(REAL_PRODUCTS_DATA)}")
+    print(f"  • Protected client/active records: {protected_count}")
+    print(f"  • Eligible for metadata reset:     {len(eligible_updates)}")
+    print(f"  • Missing from database:           {missing_count}")
+
+    if not eligible_updates:
+        print("\nNo eligible sample products require metadata reset.")
+        return {"status": "noop", "eligible": 0, "reset": 0, "protected": protected_count}
+
+    if not confirm:
+        print("\n" + "=" * 75)
+        print("DRY-RUN COMPLETE: 0 database records were modified.")
+        print(f"To execute these {len(eligible_updates)} metadata update(s), re-run with:")
+        print("  python seed.py --reset-sample-data --confirm")
+        print("=" * 75 + "\n")
+        return {"status": "dry_run", "eligible": len(eligible_updates), "reset": 0, "protected": protected_count}
+
+    # Execute changes with confirmation
+    for product, pdata, diffs in eligible_updates:
+        product.name = pdata["name"]
+        product.description = pdata["description"]
+        product.fabric = pdata["fabric"]
+        product.care = pdata["care"]
+        product.size_chart = SIZE_CHART_CM
+        product.category = pdata["category"]
+
+    db.commit()
+    print(f"\n[+] SUCCESS: Successfully updated metadata for {len(eligible_updates)} sample product(s).\n")
+    return {"status": "executed", "eligible": len(eligible_updates), "reset": len(eligible_updates), "protected": protected_count}
+
+
+def seed_database(session_factory=None, allow_production_sample_seed: bool = False, default_status: str = "DRAFT"):
     """Seed collections, coupons, and sample catalog products safely and non-destructively.
 
     SAFETY RULES:
     1. Environment check runs FIRST. In production environments, routine seeding is strictly blocked.
-    2. Routine seeding is completely non-destructive: it NEVER deletes dummy products or any other records.
+    2. Routine seeding is completely non-destructive: it NEVER resets, overwrites, or deletes products.
     3. Existing collections and coupons are preserved without overwriting existing values.
     4. Existing products (matching slug or ID) are 100% preserved: details, variants, stock, and media are untouched.
     5. Newly created sample products default to status='DRAFT', is_active=False, and stock=0, ensuring they never appear to customers.
@@ -481,79 +601,55 @@ def seed_database(session_factory=None, force_reset_sample: bool = False, allow_
             else:
                 print(f"  [*] Preserved existing coupon: {coupon.code}")
 
-        # 4. Safe Sample Product Seeding
+        # 4. Safe Sample Product Seeding (Routine: NEVER overwrite existing products or variants, NEVER delete images)
         created_count = 0
         preserved_count = 0
-        reset_count = 0
 
         for pdata in REAL_PRODUCTS_DATA:
             product = db.query(Product).filter(Product.slug == pdata["slug"]).first()
             if product:
-                if not force_reset_sample:
-                    # SAFE ROUTINE: NEVER overwrite existing products or variants, NEVER delete images!
-                    preserved_count += 1
-                    continue
+                preserved_count += 1
+                continue
 
-                # Explicit force reset mode requested:
-                # Protect products that have uploaded client photos or Cloudinary assets
-                has_custom_photos = any(
-                    img.public_id or (img.url and ("cloudinary" in img.url or "upload" in img.url))
-                    for img in product.images
+            # Insert brand new sample product as DRAFT with 0 stock (completely hidden from customers)
+            product = Product(
+                name=pdata["name"],
+                slug=pdata["slug"],
+                description=pdata["description"],
+                fabric=pdata["fabric"],
+                care=pdata["care"],
+                size_chart=SIZE_CHART_CM,
+                category=pdata["category"],
+                status="DRAFT",
+                is_bestseller=pdata.get("is_bestseller", False),
+                is_active=False,
+            )
+            db.add(product)
+            db.flush()
+
+            # Associate collections
+            target_cols = [collections_map[cslug] for cslug in pdata["collections"] if cslug in collections_map]
+            product.collections = target_cols
+
+            # Add initial variants with 0 stock
+            for vdata in pdata["variants"]:
+                variant = ProductVariant(
+                    product_id=product.id,
+                    size=vdata["size"],
+                    colour=vdata["colour"],
+                    sku=vdata["sku"],
+                    mrp=vdata["mrp"],
+                    selling_price=vdata["selling_price"],
+                    stock=0,  # Zero test stock for newly seeded draft products
                 )
-                if has_custom_photos:
-                    print(f"  [!] Skipped reset for '{product.name}' (slug: {product.slug}): has uploaded client/Cloudinary photos.")
-                    preserved_count += 1
-                    continue
+                db.add(variant)
 
-                # Only reset fields for pure placeholder sample products without custom media
-                product.name = pdata["name"]
-                product.description = pdata["description"]
-                product.fabric = pdata["fabric"]
-                product.care = pdata["care"]
-                product.size_chart = SIZE_CHART_CM
-                product.category = pdata["category"]
-                reset_count += 1
-                print(f"  [*] Reset sample product: {product.name} (slug: {product.slug})")
-            else:
-                # Insert brand new sample product as DRAFT with 0 stock (completely hidden from customers)
-                product = Product(
-                    name=pdata["name"],
-                    slug=pdata["slug"],
-                    description=pdata["description"],
-                    fabric=pdata["fabric"],
-                    care=pdata["care"],
-                    size_chart=SIZE_CHART_CM,
-                    category=pdata["category"],
-                    status="DRAFT",
-                    is_bestseller=pdata.get("is_bestseller", False),
-                    is_active=False,
-                )
-                db.add(product)
-                db.flush()
-
-                # Associate collections
-                target_cols = [collections_map[cslug] for cslug in pdata["collections"] if cslug in collections_map]
-                product.collections = target_cols
-
-                # Add initial variants with 0 stock
-                for vdata in pdata["variants"]:
-                    variant = ProductVariant(
-                        product_id=product.id,
-                        size=vdata["size"],
-                        colour=vdata["colour"],
-                        sku=vdata["sku"],
-                        mrp=vdata["mrp"],
-                        selling_price=vdata["selling_price"],
-                        stock=0,  # Zero test stock for newly seeded draft products
-                    )
-                    db.add(variant)
-
-                # Images are intentionally empty: ProductPlaceholder renders until Tanya uploads real photos
-                created_count += 1
-                print(f"  [+] Created draft sample product: {product.name} (slug: {product.slug})")
+            # Images are intentionally empty: ProductPlaceholder renders until Tanya uploads real photos
+            created_count += 1
+            print(f"  [+] Created draft sample product: {product.name} (slug: {product.slug})")
 
         db.commit()
-        print(f"Catalogue seed summary: {created_count} created (DRAFT), {preserved_count} preserved untouched, {reset_count} reset.")
+        print(f"Catalogue seed summary: {created_count} created (DRAFT), {preserved_count} preserved untouched, 0 reset.")
     except Exception as e:
         db.rollback()
         print(f"Error during seeding: {e}")
@@ -563,16 +659,18 @@ def seed_database(session_factory=None, force_reset_sample: bool = False, allow_
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Royal Libas Safe Catalogue Seeder")
+    parser = argparse.ArgumentParser(description="Royal Libas Safe Catalogue Seeder & Maintenance Utility")
     parser.add_argument(
         "--clean-dummy-products",
         action="store_true",
         help="Inspect and optionally clean products with 'dummy' in slug or name. (Runs in dry-run mode unless --confirm is provided)",
     )
     parser.add_argument(
+        "--reset-sample-data",
         "--force-reset-sample-data",
         action="store_true",
-        help="Explicitly reset sample product metadata. (Products with uploaded client/Cloudinary photos are always preserved)",
+        dest="reset_sample_data",
+        help="Explicitly review and reset sample product metadata. (Default is DRY RUN listing all changes. Requires --confirm to execute. Products with client data, real stock, or media are always protected.)",
     )
     parser.add_argument(
         "--allow-production-sample-seed",
@@ -582,7 +680,7 @@ def main():
     parser.add_argument(
         "--confirm",
         action="store_true",
-        help="Confirm execution of explicit maintenance actions.",
+        help="Explicitly confirm execution of maintenance actions (--clean-dummy-products, --reset-sample-data). Without this flag, maintenance utilities run in dry-run mode.",
     )
     args = parser.parse_args()
 
@@ -594,8 +692,15 @@ def main():
             db.close()
         return
 
+    if args.reset_sample_data:
+        db = SessionLocal()
+        try:
+            reset_sample_products(db, confirm=args.confirm, allow_production=args.allow_production_sample_seed)
+        finally:
+            db.close()
+        return
+
     seed_database(
-        force_reset_sample=args.force_reset_sample_data,
         allow_production_sample_seed=args.allow_production_sample_seed,
     )
 
