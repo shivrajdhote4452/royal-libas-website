@@ -37,8 +37,14 @@ def list_products(
     sort: Optional[str] = Query("newest", description="Sort order: newest, price_asc, price_desc"),
     include_inactive: bool = Query(False, description="Include inactive products (admin only)"),
     db: Session = Depends(get_db),
+    admin: Optional[Admin] = Depends(get_current_admin_optional),
 ):
-    """List products with filters (category, subcategory, collection, size) and sorting (newest, price_asc, price_desc)."""
+    """List products with filters (category, subcategory, collection, size) and sorting (newest, price_asc, price_desc).
+    
+    SECURITY RULE:
+    Unauthenticated customers can NEVER see draft, inactive, or archived products, even if they pass include_inactive=True.
+    Only an authenticated, active admin with a valid Bearer token who explicitly passes include_inactive=True may see them.
+    """
     query = (
         db.query(Product)
         .options(
@@ -48,7 +54,8 @@ def list_products(
         )
     )
 
-    if not include_inactive:
+    is_admin = admin is not None and admin.is_active
+    if not (is_admin and include_inactive):
         query = query.filter(Product.is_active == True, Product.status == "PUBLISHED")
 
     if category:
@@ -128,7 +135,8 @@ def get_product_by_slug(
         )
 
     # Protect draft, inactive, and archived products from public visibility
-    if (product.status != "PUBLISHED" or not product.is_active) and not admin:
+    is_admin = admin is not None and admin.is_active
+    if (product.status != "PUBLISHED" or not product.is_active) and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with slug '{slug}' not found",

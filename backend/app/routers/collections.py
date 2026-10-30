@@ -24,6 +24,7 @@ def list_collections(db: Session = Depends(get_db)):
             .filter(
                 product_collections.c.collection_id == col.id,
                 Product.is_active == True,
+                Product.status == "PUBLISHED",
             )
             .scalar()
         ) or 0
