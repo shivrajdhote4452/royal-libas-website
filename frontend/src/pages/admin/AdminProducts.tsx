@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Check,
   Play,
+  Camera,
 } from 'lucide-react';
 import {
   fetchAdminProducts,
@@ -78,7 +79,7 @@ export const AdminProducts: React.FC = () => {
   const [addingVariantForId, setAddingVariantForId] = useState<number | null>(null);
   const [newSize, setNewSize] = useState('XL');
   const [newVariantPrice, setNewVariantPrice] = useState('2999');
-  const [newVariantStock, setNewVariantStock] = useState('10');
+  const [newVariantStock, setNewVariantStock] = useState('0');
 
   // Inline editing state for variant
   const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
@@ -393,12 +394,19 @@ export const AdminProducts: React.FC = () => {
     setActionLoading(true);
     setActionError(null);
     try {
-      const priceNum = parseFloat(editPrice);
-      const stockNum = parseInt(editStock, 10);
+      const priceNum = editPrice !== '' ? parseFloat(editPrice) : undefined;
+      const stockNum = editStock !== '' ? parseInt(editStock, 10) : undefined;
+
+      if (priceNum !== undefined && (isNaN(priceNum) || priceNum <= 0)) {
+        throw new Error('Price must be greater than ₹0');
+      }
+      if (stockNum !== undefined && (isNaN(stockNum) || stockNum < 0)) {
+        throw new Error('Stock must be a non-negative number (0 or greater).');
+      }
 
       await adminUpdateVariant(token, variantId, {
-        selling_price: isNaN(priceNum) ? undefined : priceNum,
-        stock: isNaN(stockNum) ? undefined : stockNum,
+        selling_price: priceNum,
+        stock: stockNum,
       });
 
       setEditingVariantId(null);
@@ -426,13 +434,27 @@ export const AdminProducts: React.FC = () => {
     setActionLoading(true);
     setActionError(null);
     try {
+      const trimmedSize = newSize.trim().toUpperCase();
+      if (!trimmedSize) {
+        throw new Error('Size name is required (e.g., S, M, L, XL)');
+      }
+      const priceNum = parseFloat(newVariantPrice);
+      if (isNaN(priceNum) || priceNum <= 0) {
+        throw new Error('Please enter a valid price greater than ₹0');
+      }
+      const stockInt = parseInt(newVariantStock, 10);
+      if (isNaN(stockInt) || stockInt < 0) {
+        throw new Error('Stock must be a non-negative number (0 or greater).');
+      }
+
       await adminAddVariant(token, productId, {
-        size: newSize.trim().toUpperCase(),
-        selling_price: parseFloat(newVariantPrice) || 2999,
-        mrp: (parseFloat(newVariantPrice) || 2999) + 1000,
-        stock: parseInt(newVariantStock, 10) || 5,
+        size: trimmedSize,
+        selling_price: priceNum,
+        mrp: priceNum + 1000,
+        stock: stockInt, // Preserves exact 0, does not overwrite with 5
       });
       setAddingVariantForId(null);
+      setNewVariantStock('0');
       await loadProducts();
     } catch (err: any) {
       setActionError(err.message || 'Failed to add size variant');
@@ -545,6 +567,30 @@ export const AdminProducts: React.FC = () => {
                         <span className="font-semibold text-[#5E1224]">
                           From {formatPrice(product.min_price)}
                         </span>
+                        <span>•</span>
+                        <span
+                          className={`inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded border ${
+                            product.total_stock === 0
+                              ? 'text-rose-800 bg-rose-50 border-rose-200'
+                              : product.total_stock <= 5
+                              ? 'text-amber-800 bg-amber-50 border-amber-200'
+                              : 'text-gray-700 bg-gray-50 border-gray-200'
+                          }`}
+                        >
+                          Stock: {product.total_stock ?? 0}
+                        </span>
+                        <span>•</span>
+                        {product.images && product.images.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            <Camera className="w-3 h-3 text-emerald-600" />
+                            {product.images.length} photo{product.images.length > 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            <Camera className="w-3 h-3 text-amber-600" />
+                            No photos (Placeholder)
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

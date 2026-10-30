@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.auth import get_current_admin
+from app.auth import get_current_admin, get_current_admin_optional
 from app.database import get_db
 from app.models import Admin, Product, ProductVariant, ProductImage, Collection
 from app.schemas import (
@@ -49,7 +49,7 @@ def list_products(
     )
 
     if not include_inactive:
-        query = query.filter(Product.is_active == True)
+        query = query.filter(Product.is_active == True, Product.status == "PUBLISHED")
 
     if category:
         clean_cat = category.strip()
@@ -92,7 +92,11 @@ def list_products(
 
 
 @router.get("/products/{slug}", response_model=ProductDetailResponse)
-def get_product_by_slug(slug: str, db: Session = Depends(get_db)):
+def get_product_by_slug(
+    slug: str,
+    db: Session = Depends(get_db),
+    admin: Optional[Admin] = Depends(get_current_admin_optional),
+):
     """Retrieve complete product details, ordered images, live variant stock, and fabric info by slug or ID."""
     clean_slug = slug.strip()
     norm_slug = clean_slug.replace(" ", "-").lower()
@@ -123,6 +127,13 @@ def get_product_by_slug(slug: str, db: Session = Depends(get_db)):
             detail=f"Product with slug '{slug}' not found",
         )
 
+    # Protect draft, inactive, and archived products from public visibility
+    if (product.status != "PUBLISHED" or not product.is_active) and not admin:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with slug '{slug}' not found",
+        )
+
     return build_product_detail_response(product)
 
 
@@ -144,16 +155,25 @@ def admin_create_product(
             detail=f"A product with slug '{payload.slug}' already exists",
         )
 
+    status_val = (payload.status or "DRAFT").upper().strip()
+    is_active_val = payload.is_active if payload.is_active is not None else (status_val == "PUBLISHED")
+    if status_val != "PUBLISHED":
+        is_active_val = False
+
     product = Product(
         name=payload.name,
         slug=payload.slug,
         description=payload.description,
         fabric=payload.fabric,
         care=payload.care,
+        fit=getattr(payload, "fit", None),
         size_chart=payload.size_chart,
+        size_chart_id=getattr(payload, "size_chart_id", None),
         category=payload.category,
+        subcategory=payload.subcategory,
+        status=status_val,
         is_bestseller=payload.is_bestseller,
-        is_active=payload.is_active,
+        is_active=is_active_val,
     )
 
     # Attach collections
@@ -240,10 +260,22 @@ def admin_update_product(
         product.size_chart = payload.size_chart
     if payload.category is not None:
         product.category = payload.category
+    if payload.subcategory is not None:
+        product.subcategory = payload.subcategory
+    if payload.fit is not None:
+        product.fit = payload.fit
+    if payload.size_chart_id is not None:
+        product.size_chart_id = payload.size_chart_id
     if payload.is_bestseller is not None:
         product.is_bestseller = payload.is_bestseller
-    if payload.is_active is not None:
+
+    if payload.status is not None:
+        clean_status = payload.status.upper().strip()
+        product.status = clean_status
+        product.is_active = (clean_status == "PUBLISHED")
+    elif payload.is_active is not None:
         product.is_active = payload.is_active
+        product.status = "PUBLISHED" if payload.is_active else "DRAFT"
 
     if payload.collection_ids is not None:
         collections = (

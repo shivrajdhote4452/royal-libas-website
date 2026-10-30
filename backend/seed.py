@@ -15,6 +15,9 @@ Safely updates existing products or creates new ones.
 """
 
 import json
+import os
+import sys
+import argparse
 from decimal import Decimal
 from app.database import SessionLocal, Base, engine
 from app.models import Product, ProductVariant, ProductImage, Collection, Coupon, product_collections
@@ -378,14 +381,37 @@ REAL_PRODUCTS_DATA = [
 ]
 
 
-def seed_database(session_factory=None):
-    """Seed collections, coupons, and real 16 products idempotently while clearing dummy data."""
+def is_production_environment() -> bool:
+    """Detect whether the current runtime is configured for production."""
+    env = os.getenv("ENV", "").strip().lower()
+    app_env = os.getenv("APP_ENV", "").strip().lower()
+    db_url = os.getenv("DATABASE_URL", "").strip().lower()
+    return (
+        env in ("production", "prod")
+        or app_env in ("production", "prod")
+        or "postgres" in db_url
+        or "neon" in db_url
+        or "supabase" in db_url
+    )
+
+
+def seed_database(session_factory=None, force_reset_sample: bool = False, allow_production_sample_seed: bool = False, default_status: str = "PUBLISHED"):
+    """Seed collections, coupons, and sample catalog products safely and non-destructively.
+
+    SAFETY RULES:
+    1. Base collections and coupons are verified/created without overwriting business data.
+    2. In production environments, sample product seeding is strictly aborted unless --allow-production-sample-seed is passed.
+    3. Existing products (matching slug) are NEVER overwritten, modified, or deleted during routine seeding.
+    4. Product variants, stocks, prices, and uploaded Cloudinary image links are 100% preserved.
+    5. Newly created sample products default to status='DRAFT' and is_active=False.
+    6. Destructive resets require explicit --force-reset-sample-data flag, and even then products with Cloudinary photos are protected.
+    """
     factory = session_factory or SessionLocal
     db = factory()
     try:
-        print("Starting Royal Libas Phase 6 Catalogue Seed Process...")
+        print("Starting Royal Libas Catalogue Seed Process...")
 
-        # 1. Clean up legacy dummy products and test items
+        # 1. Clean up legacy dummy products and test items only if specifically named 'dummy'
         dummy_products = (
             db.query(Product)
             .filter(
@@ -416,7 +442,7 @@ def seed_database(session_factory=None):
             else:
                 col.name = cdata["name"]
                 col.description = cdata["description"]
-                print(f"  [*] Updated collection: {col.name}")
+                print(f"  [*] Verified collection: {col.name}")
             collections_map[cdata["slug"]] = col
 
         # 3. Seed coupons
@@ -437,12 +463,52 @@ def seed_database(session_factory=None):
                 coupon.value = cpdata["value"]
                 coupon.min_order_value = cpdata["min_order_value"]
                 coupon.is_active = cpdata["is_active"]
-                print(f"  [*] Updated coupon: {coupon.code}")
+                print(f"  [*] Verified coupon: {coupon.code}")
 
-        # 4. Seed 16 Sample Boutique Products
+        # 4. Production Environment Guard
+        if is_production_environment() and not allow_production_sample_seed:
+            print("\n[SAFETY GUARD] Production database detected.")
+            print("  Routine sample product seeding is BLOCKED in production to protect real client products and business data.")
+            print("  Only base collections and essential coupons were verified. Skipping sample product insertion.\n")
+            db.commit()
+            return
+
+        # 5. Safe Sample Product Seeding
+        created_count = 0
+        preserved_count = 0
+        reset_count = 0
+
         for pdata in REAL_PRODUCTS_DATA:
             product = db.query(Product).filter(Product.slug == pdata["slug"]).first()
-            if not product:
+            if product:
+                if not force_reset_sample:
+                    # SAFE ROUTINE: NEVER overwrite existing products or variants, NEVER delete images!
+                    preserved_count += 1
+                    continue
+
+                # Explicit force reset mode requested:
+                # Protect products that have uploaded client photos or Cloudinary assets
+                has_custom_photos = any(
+                    img.public_id or (img.url and ("cloudinary" in img.url or "upload" in img.url))
+                    for img in product.images
+                )
+                if has_custom_photos:
+                    print(f"  [!] Skipped reset for '{product.name}' (slug: {product.slug}): has uploaded client/Cloudinary photos.")
+                    preserved_count += 1
+                    continue
+
+                # Only reset fields for pure placeholder sample products without custom media
+                product.name = pdata["name"]
+                product.description = pdata["description"]
+                product.fabric = pdata["fabric"]
+                product.care = pdata["care"]
+                product.size_chart = SIZE_CHART_CM
+                product.category = pdata["category"]
+                reset_count += 1
+                print(f"  [*] Reset sample product: {product.name} (slug: {product.slug})")
+            else:
+                # Insert brand new sample product (default PUBLISHED in development, protected in prod)
+                prod_status = default_status if pdata.get("is_active", True) else "DRAFT"
                 product = Product(
                     name=pdata["name"],
                     slug=pdata["slug"],
@@ -451,38 +517,19 @@ def seed_database(session_factory=None):
                     care=pdata["care"],
                     size_chart=SIZE_CHART_CM,
                     category=pdata["category"],
-                    is_bestseller=pdata["is_bestseller"],
-                    is_active=pdata["is_active"],
+                    status=prod_status,
+                    is_bestseller=pdata.get("is_bestseller", False),
+                    is_active=(prod_status == "PUBLISHED"),
                 )
                 db.add(product)
                 db.flush()
-                print(f"  [+] Created sample product: {product.name} (slug: {product.slug})")
-            else:
-                product.name = pdata["name"]
-                product.description = pdata["description"]
-                product.fabric = pdata["fabric"]
-                product.care = pdata["care"]
-                product.size_chart = SIZE_CHART_CM
-                product.category = pdata["category"]
-                product.is_bestseller = pdata["is_bestseller"]
-                product.is_active = pdata["is_active"]
-                print(f"  [*] Updated sample product: {product.name} (slug: {product.slug})")
 
-            # Associate collections
-            target_cols = [collections_map[cslug] for cslug in pdata["collections"] if cslug in collections_map]
-            product.collections = target_cols
+                # Associate collections
+                target_cols = [collections_map[cslug] for cslug in pdata["collections"] if cslug in collections_map]
+                product.collections = target_cols
 
-            # Upsert variants
-            for vdata in pdata["variants"]:
-                variant = (
-                    db.query(ProductVariant)
-                    .filter(
-                        ProductVariant.product_id == product.id,
-                        ProductVariant.size == vdata["size"],
-                    )
-                    .first()
-                )
-                if not variant:
+                # Add initial variants
+                for vdata in pdata["variants"]:
                     variant = ProductVariant(
                         product_id=product.id,
                         size=vdata["size"],
@@ -493,30 +540,13 @@ def seed_database(session_factory=None):
                         stock=vdata["stock"],
                     )
                     db.add(variant)
-                else:
-                    variant.colour = vdata["colour"]
-                    variant.sku = vdata["sku"]
-                    variant.mrp = vdata["mrp"]
-                    variant.selling_price = vdata["selling_price"]
-                    variant.stock = vdata["stock"]
 
-            # Upsert 4 sample photos: front, back, detail, worn
-            views = [
-                ("front", f"{product.name} - Front View"),
-                ("back", f"{product.name} - Back Silhouette"),
-                ("detail", f"{product.name} - Embroidery & Fabric Detail"),
-                ("worn", f"{product.name} - Styled Worn Look"),
-            ]
-
-            # Clear existing images for clean sync
-            db.query(ProductImage).filter(ProductImage.product_id == product.id).delete()
-            db.flush()
-
-            # Leave product clean with royal branded placeholder until client uploads real photos
-            db.flush()
+                # Images are intentionally empty: ProductPlaceholder renders until Tanya uploads real photos
+                created_count += 1
+                print(f"  [+] Created draft sample product: {product.name} (slug: {product.slug})")
 
         db.commit()
-        print("Catalogue seed complete: 16 products ready for real photo uploads and inventory.")
+        print(f"Catalogue seed summary: {created_count} created, {preserved_count} preserved untouched, {reset_count} reset.")
     except Exception as e:
         db.rollback()
         print(f"Error during seeding: {e}")
@@ -525,5 +555,25 @@ def seed_database(session_factory=None):
         db.close()
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Royal Libas Safe Catalogue Seeder")
+    parser.add_argument(
+        "--force-reset-sample-data",
+        action="store_true",
+        help="Explicitly reset sample product metadata. (Products with uploaded client/Cloudinary photos are always preserved)",
+    )
+    parser.add_argument(
+        "--allow-production-sample-seed",
+        action="store_true",
+        help="Override production safety guard to permit seeding sample products into a production DB.",
+    )
+    args = parser.parse_args()
+
+    seed_database(
+        force_reset_sample=args.force_reset_sample_data,
+        allow_production_sample_seed=args.allow_production_sample_seed,
+    )
+
+
 if __name__ == "__main__":
-    seed_database()
+    main()

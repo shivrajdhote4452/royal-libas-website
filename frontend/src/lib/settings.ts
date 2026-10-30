@@ -76,10 +76,12 @@ export function getStoreSettings(): StoreSettings {
   }
 }
 
-export function saveStoreSettings(settings: StoreSettings): void {
+export function saveStoreSettings(settings: Partial<StoreSettings>): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    const existing = getStoreSettings();
+    const merged: StoreSettings = { ...existing, ...settings };
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
     window.dispatchEvent(new Event('royal_libas_settings_updated'));
   } catch (err) {
     console.error('Failed to save store settings to localStorage', err);
@@ -88,7 +90,7 @@ export function saveStoreSettings(settings: StoreSettings): void {
 
 export function useStoreSettings(): {
   settings: StoreSettings;
-  updateSettings: (newSettings: StoreSettings) => void;
+  updateSettings: (newSettings: Partial<StoreSettings>) => void;
   syncWithServer: () => Promise<void>;
 } {
   const [settings, setSettings] = useState<StoreSettings>(getStoreSettings);
@@ -143,9 +145,9 @@ export function useStoreSettings(): {
     };
   }, []);
 
-  const updateSettings = (newSettings: StoreSettings) => {
+  const updateSettings = (newSettings: Partial<StoreSettings>) => {
     saveStoreSettings(newSettings);
-    setSettings(newSettings);
+    setSettings(getStoreSettings());
   };
 
   return { settings, updateSettings, syncWithServer };

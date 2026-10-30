@@ -1687,6 +1687,16 @@ import logging
 admin_media_logger = logging.getLogger("royal_libas.admin.media")
 
 
+def _matches_asset(img_url: Optional[str], asset: MediaAsset) -> bool:
+    if not img_url:
+        return False
+    if asset.url and asset.url == img_url:
+        return True
+    if asset.public_id and asset.public_id in img_url:
+        return True
+    return False
+
+
 def _check_asset_references(asset: MediaAsset, db: Session) -> Tuple[List[MediaAssetProductUsage], List[str]]:
     """Helper to find all locations across products and editorial content referencing an asset."""
     filters = [ProductImage.url == asset.url]
@@ -1703,11 +1713,25 @@ def _check_asset_references(asset: MediaAsset, db: Session) -> Tuple[List[MediaA
     product_usages = [MediaAssetProductUsage(id=m.id, name=m.name, slug=m.slug) for m in matches]
 
     editorial_usages = []
-    # Check StoreSetting hero_image_url
+    # Check all StoreSetting editorial and category image attributes
     setting = db.query(StoreSetting).first()
-    if setting and setting.hero_image_url:
-        if asset.url == setting.hero_image_url or (asset.public_id and asset.public_id in setting.hero_image_url):
+    if setting:
+        if _matches_asset(setting.hero_image_url, asset):
             editorial_usages.append("Homepage Hero Banner")
+        if _matches_asset(setting.category_two_pieces_image, asset):
+            editorial_usages.append("Category Card: Two Pieces")
+        if _matches_asset(setting.category_suit_set_image, asset):
+            editorial_usages.append("Category Card: Suit Set")
+        if _matches_asset(setting.category_heavy_dress_image, asset):
+            editorial_usages.append("Category Card: Heavy Dress")
+        if _matches_asset(setting.festive_banner_image, asset):
+            editorial_usages.append("Festive Announcement Banner")
+        if _matches_asset(setting.poster_occasion_image, asset):
+            editorial_usages.append("Editorial Poster: Occasion Wear")
+        if _matches_asset(setting.poster_everyday_image, asset):
+            editorial_usages.append("Editorial Poster: Everyday Luxury")
+        if _matches_asset(setting.poster_story_image, asset):
+            editorial_usages.append("Editorial Poster: Tanya's Heritage Story")
 
     return product_usages, editorial_usages
 
@@ -1744,7 +1768,7 @@ def admin_list_media(
 
     results = []
     for a in assets:
-        used_products, _ = _check_asset_references(a, db)
+        used_products, used_editorial = _check_asset_references(a, db)
         asset_dict = {
             "id": a.id,
             "filename": a.filename,
@@ -1762,6 +1786,7 @@ def admin_list_media(
             "folder": a.folder,
             "created_at": a.created_at,
             "used_in_products": used_products,
+            "used_editorial": used_editorial,
         }
         results.append(MediaAssetResponse(**asset_dict))
 
@@ -2073,8 +2098,23 @@ def admin_delete_media(
     if force:
         if used_editorial:
             setting = db.query(StoreSetting).first()
-            if setting and setting.hero_image_url and (asset.url in setting.hero_image_url or (asset.public_id and asset.public_id in setting.hero_image_url)):
-                setting.hero_image_url = None
+            if setting:
+                if _matches_asset(setting.hero_image_url, asset):
+                    setting.hero_image_url = None
+                if _matches_asset(setting.category_two_pieces_image, asset):
+                    setting.category_two_pieces_image = None
+                if _matches_asset(setting.category_suit_set_image, asset):
+                    setting.category_suit_set_image = None
+                if _matches_asset(setting.category_heavy_dress_image, asset):
+                    setting.category_heavy_dress_image = None
+                if _matches_asset(setting.festive_banner_image, asset):
+                    setting.festive_banner_image = None
+                if _matches_asset(setting.poster_occasion_image, asset):
+                    setting.poster_occasion_image = None
+                if _matches_asset(setting.poster_everyday_image, asset):
+                    setting.poster_everyday_image = None
+                if _matches_asset(setting.poster_story_image, asset):
+                    setting.poster_story_image = None
 
         if used_products:
             filters = [ProductImage.url == asset.url]

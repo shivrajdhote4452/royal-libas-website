@@ -83,9 +83,9 @@ class Product(Base):
     size_chart_id = Column(Integer, ForeignKey("size_charts.id", ondelete="SET NULL"), nullable=True)
     category = Column(String(100), nullable=True, index=True)
     subcategory = Column(String(100), nullable=True, index=True)
-    status = Column(String(50), default="PUBLISHED", nullable=False)  # DRAFT, PUBLISHED, ARCHIVED
+    status = Column(String(50), default="DRAFT", nullable=False)  # DRAFT, PUBLISHED, ARCHIVED
     is_bestseller = Column(Boolean, default=False, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

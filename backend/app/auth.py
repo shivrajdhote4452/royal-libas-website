@@ -94,6 +94,29 @@ def get_current_admin(
     return admin
 
 
+def get_current_admin_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> Optional[Admin]:
+    """Optional admin dependency: returns Admin if valid bearer token is provided, otherwise None."""
+    if not credentials or not credentials.credentials:
+        return None
+
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        admin_id = int(sub)
+        admin = db.query(Admin).filter(Admin.id == admin_id).first()
+        if admin and admin.is_active:
+            return admin
+        return None
+    except Exception:
+        return None
+
+
 def require_roles(*allowed_roles: str) -> Callable:
     """Dependency factory to enforce role-based access control (RBAC).
     

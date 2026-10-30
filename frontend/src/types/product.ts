@@ -46,6 +46,7 @@ export interface MediaAsset {
   folder?: string | null;
   created_at: string;
   used_in_products?: MediaAssetProductUsage[];
+  used_editorial?: string[];
 }
 
 export interface MediaUploadFailure {

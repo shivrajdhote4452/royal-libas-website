@@ -152,9 +152,9 @@ class ProductCreate(BaseModel):
     size_chart_id: Optional[int] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
-    status: Optional[str] = 'PUBLISHED'
+    status: Optional[str] = 'DRAFT'
     is_bestseller: bool = False
-    is_active: bool = True
+    is_active: bool = False
     collection_ids: Optional[List[int]] = []
     variants: Optional[List[ProductVariantCreate]] = []
     images: Optional[List[ProductImageCreate]] = []
@@ -975,6 +975,7 @@ class MediaAssetResponse(BaseModel):
     folder: Optional[str] = None
     created_at: datetime
     used_in_products: Optional[List[MediaAssetProductUsage]] = []
+    used_editorial: Optional[List[str]] = []
 
     model_config = ConfigDict(from_attributes=True)
 

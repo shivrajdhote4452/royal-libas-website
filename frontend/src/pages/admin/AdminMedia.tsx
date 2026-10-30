@@ -282,7 +282,10 @@ export const AdminMedia: React.FC = () => {
     if (typeFilter !== 'all' && assetType !== typeFilter) return false;
 
     // Usage Filter
-    const isUsed = asset.used_in_products && asset.used_in_products.length > 0;
+    const isUsed = Boolean(
+      (asset.used_in_products && asset.used_in_products.length > 0) ||
+      (asset.used_editorial && asset.used_editorial.length > 0)
+    );
     if (usageFilter === 'used' && !isUsed) return false;
     if (usageFilter === 'unused' && isUsed) return false;
 
@@ -600,7 +603,10 @@ export const AdminMedia: React.FC = () => {
             const posterUrl = isVideo
               ? asset.url.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg')
               : displayUrl;
-            const hasUsage = asset.used_in_products && asset.used_in_products.length > 0;
+            const hasUsage = Boolean(
+              (asset.used_in_products && asset.used_in_products.length > 0) ||
+              (asset.used_editorial && asset.used_editorial.length > 0)
+            );
 
             return (
               <div
@@ -644,7 +650,9 @@ export const AdminMedia: React.FC = () => {
                   {hasUsage ? (
                     <div className="absolute top-2 right-2 bg-emerald-700/90 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1 backdrop-blur-xs">
                       <Tag className="w-2.5 h-2.5" />
-                      In {asset.used_in_products!.length} {asset.used_in_products!.length === 1 ? 'Product' : 'Products'}
+                      {asset.used_in_products?.length
+                        ? `In ${asset.used_in_products.length} ${asset.used_in_products.length === 1 ? 'Product' : 'Products'}`
+                        : 'Active on Site'}
                     </div>
                   ) : (
                     <div className="absolute top-2 right-2 bg-gray-600/75 text-white text-[9px] px-1.5 py-0.5 rounded shadow-xs">
@@ -776,22 +784,39 @@ export const AdminMedia: React.FC = () => {
                   Are you sure you want to permanently delete <strong className="text-gray-900">{deleteConfirmAsset.filename}</strong> from Cloudinary?
                 </p>
 
-                {deleteConfirmAsset.used_in_products && deleteConfirmAsset.used_in_products.length > 0 && (
-                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1.5">
+                {((deleteConfirmAsset.used_in_products && deleteConfirmAsset.used_in_products.length > 0) ||
+                  (deleteConfirmAsset.used_editorial && deleteConfirmAsset.used_editorial.length > 0)) && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-2">
                     <div className="font-semibold flex items-center gap-1.5 text-amber-900">
                       <AlertCircle className="w-4 h-4 text-amber-600" />
-                      Notice: Asset in active use
+                      Notice: Asset is currently in active use
                     </div>
-                    <p className="text-[11px] text-amber-800">
-                      This asset is currently displayed in {deleteConfirmAsset.used_in_products.length} product(s):
-                    </p>
-                    <ul className="list-disc list-inside text-[11px] text-amber-800 space-y-0.5 max-h-24 overflow-y-auto">
-                      {deleteConfirmAsset.used_in_products.map((p) => (
-                        <li key={p.id}>{p.name}</li>
-                      ))}
-                    </ul>
-                    <p className="text-[10px] text-amber-700 font-medium pt-1">
-                      Deleting will also remove this asset from the product galleries above.
+                    {deleteConfirmAsset.used_in_products && deleteConfirmAsset.used_in_products.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-medium text-amber-800">
+                          Used in {deleteConfirmAsset.used_in_products.length} Product(s):
+                        </p>
+                        <ul className="list-disc list-inside text-[11px] text-amber-800 space-y-0.5 max-h-20 overflow-y-auto pl-1">
+                          {deleteConfirmAsset.used_in_products.map((p) => (
+                            <li key={p.id}>{p.name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {deleteConfirmAsset.used_editorial && deleteConfirmAsset.used_editorial.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-medium text-amber-800">
+                          Used in {deleteConfirmAsset.used_editorial.length} Storefront Placement(s):
+                        </p>
+                        <ul className="list-disc list-inside text-[11px] text-amber-800 space-y-0.5 pl-1">
+                          {deleteConfirmAsset.used_editorial.map((loc, idx) => (
+                            <li key={idx}>{loc}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-amber-700 font-medium pt-1 border-t border-amber-200/60">
+                      Force deleting will permanently remove the file and safely unlink it from all product galleries and storefront sections.
                     </p>
                   </div>
                 )}
@@ -809,7 +834,13 @@ export const AdminMedia: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => confirmDelete(Boolean(deleteConfirmAsset.used_in_products?.length))}
+                onClick={() => {
+                  const hasActiveUsage = Boolean(
+                    (deleteConfirmAsset.used_in_products && deleteConfirmAsset.used_in_products.length > 0) ||
+                    (deleteConfirmAsset.used_editorial && deleteConfirmAsset.used_editorial.length > 0)
+                  );
+                  confirmDelete(hasActiveUsage);
+                }}
                 disabled={isDeleting}
                 className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
               >
@@ -821,7 +852,9 @@ export const AdminMedia: React.FC = () => {
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    {deleteConfirmAsset.used_in_products?.length ? 'Force Delete & Remove' : 'Delete Permanently'}
+                    {(deleteConfirmAsset.used_in_products?.length || deleteConfirmAsset.used_editorial?.length)
+                      ? 'Force Delete & Remove'
+                      : 'Delete Permanently'}
                   </>
                 )}
               </button>
