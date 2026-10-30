@@ -795,15 +795,17 @@ export const ProductPage: React.FC = () => {
             )}
 
             {/* Assurance Strip */}
-            <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-100 text-center">
+            <div className={`grid ${settings.codEnabled ? 'grid-cols-4' : 'grid-cols-3'} gap-2 pt-3 border-t border-gray-100 text-center`}>
               <div className="flex flex-col items-center space-y-1">
                 <Truck className="w-4 h-4 text-[#B58A3C]" />
                 <span className="text-[10px] text-gray-700 font-medium">Free Shipping above ₹{settings.freeShippingThreshold}</span>
               </div>
-              <div className="flex flex-col items-center space-y-1">
-                <CreditCard className="w-4 h-4 text-[#B58A3C]" />
-                <span className="text-[10px] text-gray-700 font-medium">COD Available</span>
-              </div>
+              {settings.codEnabled && (
+                <div className="flex flex-col items-center space-y-1">
+                  <CreditCard className="w-4 h-4 text-[#B58A3C]" />
+                  <span className="text-[10px] text-gray-700 font-medium">COD Available</span>
+                </div>
+              )}
               <div className="flex flex-col items-center space-y-1">
                 <RefreshCw className="w-4 h-4 text-[#B58A3C]" />
                 <span className="text-[10px] text-gray-700 font-medium">Easy Exchange 7 days</span>
