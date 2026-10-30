@@ -13,8 +13,10 @@ import { fetchProducts } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
 import { FeaturedSlider } from '../components/FeaturedSlider';
 import { EditorialPoster } from '../components/EditorialPoster';
+import { useStoreSettings } from '../lib/settings';
 
 export const Home: React.FC = () => {
+  const { settings } = useStoreSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,11 +105,25 @@ export const Home: React.FC = () => {
             {/* Mobile-First Fashion Image Display (prominent visual on mobile before text) */}
             <div className="lg:hidden w-full">
               <div className="hero-motion-frame relative aspect-[4/3] sm:aspect-[16/11] overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900 group">
-                <img
-                  src="/images/editorial/hero_campaign.jpg"
-                  alt="Royal Libas A New Heirloom Campaign"
-                  className="hero-motion-image w-full h-full object-cover object-top"
-                />
+                {settings.heroImageUrl ? (
+                  <img
+                    src={settings.heroImageUrl}
+                    alt={settings.heroTitle || 'Royal Libas A New Heirloom Campaign'}
+                    className="hero-motion-image w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#180A0E] text-[#FCF8F0] border border-[#B58A3C]/30 select-none">
+                    <div className="w-12 h-12 rounded-full border border-[#D4AF67]/50 flex items-center justify-center mb-2">
+                      <span className="font-serif text-lg font-bold text-[#D4AF67]">RL</span>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-[0.25em] text-[#D4AF67] font-semibold">
+                      ATELIER EDIT 2026
+                    </span>
+                    <p className="font-serif text-base text-[#FCF8F0] mt-1 font-medium">
+                      Photo coming soon
+                    </p>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
                 <div className="absolute bottom-3 left-3 z-10">
                   <span className="inline-flex items-center px-2.5 py-1 text-[9.5px] font-bold tracking-[0.2em] uppercase bg-[#5E1224]/95 text-[#FCF8F0] border border-[#B58A3C]/50 shadow-md backdrop-blur-sm">
@@ -170,11 +186,28 @@ export const Home: React.FC = () => {
             {/* Right Column: Hero High-Resolution Fashion Photography (Desktop) */}
             <div className="hidden lg:block lg:col-span-7">
               <div className="hero-motion-frame relative aspect-[16/11] overflow-hidden border border-[#B58A3C]/45 shadow-[0_24px_60px_rgba(0,0,0,0.65)] bg-neutral-950 group">
-                <img
-                  src="/images/editorial/hero_campaign.jpg"
-                  alt="Royal Libas Noorani Embroidered Ensemble"
-                  className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-700 ease-out"
-                />
+                {settings.heroImageUrl ? (
+                  <img
+                    src={settings.heroImageUrl}
+                    alt={settings.heroTitle || 'Royal Libas Campaign'}
+                    className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-700 ease-out"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#180A0E] text-[#FCF8F0] border border-[#B58A3C]/30 select-none">
+                    <div className="w-16 h-16 rounded-full border border-[#D4AF67]/60 flex items-center justify-center mb-3 shadow-lg bg-[#180A0E]/60">
+                      <span className="font-serif text-2xl font-bold text-[#D4AF67]">RL</span>
+                    </div>
+                    <span className="text-xs uppercase tracking-[0.28em] text-[#D4AF67] font-semibold">
+                      ROYAL LIBAS ATELIER
+                    </span>
+                    <h3 className="font-serif text-2xl text-[#FCF8F0] mt-1 font-bold">
+                      {settings.heroTitle || 'Timeless Elegance'}
+                    </h3>
+                    <p className="text-xs text-[#FCF8F0]/70 mt-1 max-w-sm">
+                      Handcrafted silhouettes for modern celebrations. Real photography coming soon.
+                    </p>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
 
                 {/* Editorial Brand Accent */}
@@ -284,56 +317,94 @@ export const Home: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             {
-              title: 'KURTI SETS',
-              subtitle: '8 Handcrafted Styles',
-              image: '/images/editorial/cat_sarees.jpg',
-              href: '/shop?category=Kurti+Sets',
+              title: 'TWO PIECES',
+              subtitle: 'Co-ord Sets & Kurta Pant',
+              image: settings.categoryTwoPiecesImage,
+              href: '/shop?category=TWO+PIECES',
+              tag: 'Modern Silhouettes',
             },
             {
-              title: 'FESTIVE ENSEMBLES',
-              subtitle: '4 Royal Ensembles',
-              image: '/images/editorial/cat_lehengas.jpg',
-              href: '/shop?category=Festive+Sets',
+              title: 'SUIT SET',
+              subtitle: 'Three Pieces, Semi-party & Party Wear',
+              image: settings.categorySuitSetImage,
+              href: '/shop?category=SUIT+SET',
+              tag: 'Royal Ensembles',
             },
             {
-              title: 'CO-ORD SETS',
-              subtitle: '4 Modern Silhouettes',
-              image: '/images/editorial/cat_suits.jpg',
-              href: '/shop?category=Co-ord+Sets',
-            },
-            {
-              title: 'EVERYDAY COTTON',
-              subtitle: 'Curated Boutique Edit',
-              image: '/images/editorial/cat_anarkalis.jpg',
-              href: '/shop?collection=everyday-cotton',
+              title: 'HEAVY DRESS',
+              subtitle: 'Lehenga, Sharara, Gharara & Designer Wear',
+              image: settings.categoryHeavyDressImage,
+              href: '/shop?category=HEAVY+DRESS',
+              tag: 'Grand Occasions',
             },
           ].map((cat, idx) => (
             <Link
               key={idx}
               to={cat.href}
-              className={`reveal-card group relative aspect-[4/5] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/70 shadow-sm bg-neutral-900 block focus:outline-none stagger-${idx + 1}`}
+              className={`reveal-card group relative aspect-[4/5] sm:aspect-[3/4] overflow-hidden border border-[#E8DFD0] hover:border-[#B58A3C]/80 shadow-md bg-neutral-900 block focus:outline-none stagger-${idx + 1}`}
             >
-              <img
-                src={cat.image}
-                alt={cat.title}
-                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent group-hover:from-black/75 transition-colors" />
+              {cat.image ? (
+                <>
+                  <img
+                    src={cat.image}
+                    alt={cat.title}
+                    className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent group-hover:from-black/75 transition-colors pointer-events-none" />
+                </>
+              ) : (
+                <div className="relative w-full h-full bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#1A0B0E] flex flex-col justify-between p-6 select-none border border-[#B58A3C]/30">
+                  <div
+                    className="absolute inset-0 opacity-[0.08] pointer-events-none"
+                    style={{
+                      backgroundImage: `radial-gradient(circle at 50% 50%, #B58A3C 1px, transparent 1px)`,
+                      backgroundSize: '16px 16px',
+                    }}
+                  />
+                  <div className="absolute inset-3 border border-[#B58A3C]/20 pointer-events-none" />
+                  <div className="relative z-10 flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.22em] text-[#D4AF67] px-2.5 py-0.5 bg-[#5E1224]/90 border border-[#B58A3C]/40">
+                      {cat.tag}
+                    </span>
+                    <span className="font-serif text-sm font-bold text-[#D4AF67]">RL</span>
+                  </div>
 
-              {/* Clean HTML Labels - Sharp and Accessible */}
-              <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 flex flex-col justify-end text-left">
-                <span className="font-serif font-bold text-sm sm:text-base tracking-[0.16em] uppercase text-white group-hover:text-[#D4AF67] transition-colors flex items-center justify-between">
-                  <span>{cat.title}</span>
-                  <span className="transform group-hover:translate-x-1 transition-transform">&rarr;</span>
-                </span>
-                <span className="text-[10px] text-[#FCF8F0]/70 font-light tracking-wider mt-0.5">
-                  {cat.subtitle}
-                </span>
-              </div>
+                  <div className="relative z-10 text-center my-auto py-6">
+                    <div className="w-12 h-12 mx-auto rounded-full border border-[#D4AF67]/50 flex items-center justify-center mb-2.5 bg-[#1A0B0E]/60 shadow">
+                      <span className="font-serif text-base font-bold text-[#D4AF67]">RL</span>
+                    </div>
+                    <span className="text-[9.5px] uppercase tracking-[0.25em] text-[#D4AF67] block font-ui font-semibold">
+                      Photo coming soon
+                    </span>
+                  </div>
+
+                  <div className="relative z-10">
+                    <span className="font-serif font-bold text-lg tracking-[0.16em] uppercase text-white group-hover:text-[#D4AF67] transition-colors flex items-center justify-between">
+                      <span>{cat.title}</span>
+                      <span className="transform group-hover:translate-x-1.5 transition-transform">&rarr;</span>
+                    </span>
+                    <span className="text-[11px] text-[#FCF8F0]/80 font-light tracking-wider mt-1 block">
+                      {cat.subtitle}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {cat.image && (
+                <div className="absolute inset-x-0 bottom-0 p-5 flex flex-col justify-end text-left z-10">
+                  <span className="font-serif font-bold text-base sm:text-lg tracking-[0.16em] uppercase text-white group-hover:text-[#D4AF67] transition-colors flex items-center justify-between">
+                    <span>{cat.title}</span>
+                    <span className="transform group-hover:translate-x-1 transition-transform">&rarr;</span>
+                  </span>
+                  <span className="text-[11px] text-[#FCF8F0]/80 font-light tracking-wider mt-1">
+                    {cat.subtitle}
+                  </span>
+                </div>
+              )}
             </Link>
           ))}
         </div>
@@ -358,6 +429,7 @@ export const Home: React.FC = () => {
         ctaLink="/shop?collection=festive-edit"
         imageWebp="/images/posters/royal_occasion.webp"
         imageJpg="/images/posters/royal_occasion.jpg"
+        customImage={settings.posterOccasionImage}
         imageAlt="Festive occasion wear concept silhouette"
         layout="content-left"
       />
@@ -392,9 +464,10 @@ export const Home: React.FC = () => {
         }
         subtitle="Thoughtful silhouettes for moments made yours."
         ctaText="SHOP THE EDIT"
-        ctaLink="/shop?collection=everyday-cotton"
+        ctaLink="/shop?category=TWO+PIECES"
         imageWebp="/images/posters/everyday_elegance.webp"
         imageJpg="/images/posters/everyday_elegance.jpg"
+        customImage={settings.posterEverydayImage}
         imageAlt="Everyday contemporary ethnic wear concept silhouette"
         layout="content-right"
       />
@@ -405,12 +478,16 @@ export const Home: React.FC = () => {
           ======================================================== */}
       <section className="reveal-on-scroll relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
         <div className="relative min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] flex items-center">
-          <img
-            src="/images/editorial/festive_banner.jpg"
-            alt="The Festive Collection Campaign"
-            className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-center opacity-70"
-            loading="lazy"
-          />
+          {settings.festiveBannerImage ? (
+            <img
+              src={settings.festiveBannerImage}
+              alt="The Festive Collection Campaign"
+              className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-center opacity-75"
+              loading="lazy"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-r from-[#200A0F] via-[#330F17] to-[#1A060A] opacity-95 pointer-events-none" />
+          )}
           <div className="absolute inset-0 bg-gradient-to-r from-[#180A0E]/95 via-[#180A0E]/80 to-transparent pointer-events-none" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-20 w-full">
@@ -505,6 +582,7 @@ export const Home: React.FC = () => {
         ctaLink="/about"
         imageWebp="/images/posters/crafted_with_care.webp"
         imageJpg="/images/posters/crafted_with_care.jpg"
+        customImage={settings.posterStoryImage}
         imageAlt="Intricate zardozi and gold thread embroidery textile concept"
         layout="content-left"
       />

@@ -216,12 +216,29 @@ export const Contact: React.FC = () => {
           </div>
 
           {/* RIGHT: Editorial Fashion Portrait (lg:col-span-5) (PDF Page 11) */}
-          <div className="lg:col-span-5 min-h-[350px] lg:min-h-full bg-neutral-900 relative">
-            <img
-              src="/images/editorial/cat_lehengas.jpg"
-              alt="Royal Libas Atelier Editorial"
-              className="w-full h-full object-cover object-top"
-            />
+          <div className="lg:col-span-5 min-h-[350px] lg:min-h-full bg-[#2B1B1E] relative flex items-center justify-center">
+            {settings.heroImageUrl || settings.posterStoryImage ? (
+              <img
+                src={settings.heroImageUrl || settings.posterStoryImage || undefined}
+                alt="Royal Libas Atelier Editorial"
+                className="w-full h-full object-cover object-top"
+              />
+            ) : (
+              <div className="w-full h-full p-8 flex flex-col items-center justify-center text-center text-[#FCF8F0] border border-[#B58A3C]/30 select-none bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#1A0B0E]">
+                <div className="w-16 h-16 rounded-full border border-[#D4AF67]/60 flex items-center justify-center mb-4 bg-[#1A0B0E]/60 shadow-lg">
+                  <span className="font-serif text-2xl font-bold text-[#D4AF67]">RL</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-[0.28em] text-[#D4AF67] font-semibold">
+                  ROYAL LIBAS
+                </span>
+                <h3 className="font-serif text-xl font-bold mt-1 text-[#FCF8F0]">
+                  Atelier Concierge
+                </h3>
+                <p className="text-xs text-[#FCF8F0]/70 mt-2 max-w-xs font-light">
+                  Personalized bespoke assistance for festive styling, custom sizing, and boutique orders.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

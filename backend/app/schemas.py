@@ -705,6 +705,13 @@ class StoreSettingResponse(BaseModel):
     hero_cta_text: str = 'Explore The Collection'
     hero_cta_link: str = '/shop'
     hero_image_url: Optional[str] = None
+    category_two_pieces_image: Optional[str] = None
+    category_suit_set_image: Optional[str] = None
+    category_heavy_dress_image: Optional[str] = None
+    festive_banner_image: Optional[str] = None
+    poster_occasion_image: Optional[str] = None
+    poster_everyday_image: Optional[str] = None
+    poster_story_image: Optional[str] = None
     whatsapp_number: str
     support_email: str
     support_phone: str = '+91 98112 23344'
@@ -729,6 +736,13 @@ class StoreSettingUpdate(BaseModel):
     hero_cta_text: Optional[str] = None
     hero_cta_link: Optional[str] = None
     hero_image_url: Optional[str] = None
+    category_two_pieces_image: Optional[str] = None
+    category_suit_set_image: Optional[str] = None
+    category_heavy_dress_image: Optional[str] = None
+    festive_banner_image: Optional[str] = None
+    poster_occasion_image: Optional[str] = None
+    poster_everyday_image: Optional[str] = None
+    poster_story_image: Optional[str] = None
     whatsapp_number: Optional[str] = None
     support_email: Optional[str] = None
     support_phone: Optional[str] = None

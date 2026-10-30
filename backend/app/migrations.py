@@ -69,6 +69,13 @@ def run_migrations(engine: Engine) -> None:
             setting_cols = [
                 ("cod_enabled", "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE"),
                 ("online_payment_enabled", "BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE"),
+                ("category_two_pieces_image", "VARCHAR(500)", "VARCHAR(500)"),
+                ("category_suit_set_image", "VARCHAR(500)", "VARCHAR(500)"),
+                ("category_heavy_dress_image", "VARCHAR(500)", "VARCHAR(500)"),
+                ("festive_banner_image", "VARCHAR(500)", "VARCHAR(500)"),
+                ("poster_occasion_image", "VARCHAR(500)", "VARCHAR(500)"),
+                ("poster_everyday_image", "VARCHAR(500)", "VARCHAR(500)"),
+                ("poster_story_image", "VARCHAR(500)", "VARCHAR(500)"),
             ]
 
             for col_name, sqlite_type, pg_type in setting_cols:

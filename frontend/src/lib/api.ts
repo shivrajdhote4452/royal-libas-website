@@ -28,7 +28,7 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
 }
 
 export async function fetchProductBySlug(slug: string): Promise<Product> {
-  const response = await fetch(`${API_BASE_URL}/products/${slug}`);
+  const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(slug.trim())}`);
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error(`Product not found`);

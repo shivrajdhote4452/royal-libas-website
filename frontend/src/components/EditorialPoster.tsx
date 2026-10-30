@@ -12,6 +12,7 @@ export interface EditorialPosterProps {
   imageWebp: string;
   imageJpg: string;
   imageAlt: string;
+  customImage?: string | null;
   tagline?: string;
   layout?: 'content-left' | 'content-right';
 }
@@ -27,6 +28,7 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
   imageWebp,
   imageJpg,
   imageAlt,
+  customImage,
   tagline,
   layout = theme === 'everyday' ? 'content-right' : 'content-left',
 }) => {
@@ -74,16 +76,26 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
     >
       {/* Background Poster Picture with WebP & JPG Progressive Fallbacks */}
       <div className="poster-image-frame pointer-events-none">
-        <picture>
-          <source type="image/webp" srcSet={imageWebp} />
+        {customImage ? (
           <img
-            src={imageJpg}
+            src={customImage}
             alt={imageAlt}
             loading="lazy"
             decoding="async"
             className={`poster-motion-img ${imagePositionClass}`}
           />
-        </picture>
+        ) : (
+          <picture>
+            <source type="image/webp" srcSet={imageWebp} />
+            <img
+              src={imageJpg}
+              alt={imageAlt}
+              loading="lazy"
+              decoding="async"
+              className={`poster-motion-img ${imagePositionClass}`}
+            />
+          </picture>
+        )}
         {/* Soft Vignette & Contrast Overlay */}
         <div className={`absolute inset-0 ${overlayGradient} pointer-events-none`} />
       </div>

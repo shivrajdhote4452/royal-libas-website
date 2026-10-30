@@ -1,8 +1,10 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { useStoreSettings } from '../lib/settings';
 
 export const About: React.FC = () => {
+  const { settings } = useStoreSettings();
   useEffect(() => {
     document.title = 'About Us & Tanya’s Story | Royal Libas';
     window.scrollTo(0, 0);
@@ -38,12 +40,29 @@ export const About: React.FC = () => {
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16 items-center">
           {/* Editorial Campaign Photography */}
-          <div className="relative mx-auto w-full aspect-[4/5] rounded-none overflow-hidden shadow-2xl border border-[#B58A3C]/40 bg-neutral-900">
-            <img
-              src="/images/editorial/brand_story_hero.jpg"
-              alt="Royal Libas Living Heritage"
-              className="w-full h-full object-cover object-center"
-            />
+          <div className="relative mx-auto w-full aspect-[4/5] rounded-none overflow-hidden shadow-2xl border border-[#B58A3C]/40 bg-[#2B1B1E] flex items-center justify-center">
+            {settings.posterStoryImage || settings.heroImageUrl ? (
+              <img
+                src={settings.posterStoryImage || settings.heroImageUrl || undefined}
+                alt="Royal Libas Living Heritage"
+                className="w-full h-full object-cover object-center"
+              />
+            ) : (
+              <div className="p-8 text-center text-[#FCF8F0] select-none bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#1A0B0E] w-full h-full flex flex-col items-center justify-center">
+                <div className="w-16 h-16 rounded-full border border-[#D4AF67]/60 flex items-center justify-center mb-4 bg-[#1A0B0E]/60 shadow-lg">
+                  <span className="font-serif text-2xl font-bold text-[#D4AF67]">RL</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-[0.28em] text-[#D4AF67] font-semibold">
+                  ROYAL LIBAS
+                </span>
+                <h3 className="font-serif text-2xl font-bold mt-1 text-[#FCF8F0]">
+                  Living Heritage
+                </h3>
+                <p className="text-xs text-[#FCF8F0]/70 mt-2 max-w-xs font-light">
+                  A celebration of master Indian weavers and contemporary silhouettes.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Living Heritage Narrative */}

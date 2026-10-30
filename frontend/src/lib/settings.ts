@@ -10,6 +10,18 @@ export interface StoreSettings {
   instagramHandle: string;
   codEnabled: boolean;
   onlinePaymentEnabled: boolean;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  heroCtaText?: string;
+  heroCtaLink?: string;
+  heroImageUrl?: string | null;
+  categoryTwoPiecesImage?: string | null;
+  categorySuitSetImage?: string | null;
+  categoryHeavyDressImage?: string | null;
+  festiveBannerImage?: string | null;
+  posterOccasionImage?: string | null;
+  posterEverydayImage?: string | null;
+  posterStoryImage?: string | null;
 }
 
 const SETTINGS_STORAGE_KEY = 'royal_libas_store_settings';
@@ -23,6 +35,18 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   instagramHandle: '@royal_libas_by_tanya',
   codEnabled: false,
   onlinePaymentEnabled: true,
+  heroTitle: "Timeless Elegance, Handcrafted Regality",
+  heroSubtitle: "Pure handloom chanderi, tissue silks, and festive velvets made for the discerning connoisseur.",
+  heroCtaText: "Explore The Collection",
+  heroCtaLink: "/shop",
+  heroImageUrl: null,
+  categoryTwoPiecesImage: null,
+  categorySuitSetImage: null,
+  categoryHeavyDressImage: null,
+  festiveBannerImage: null,
+  posterOccasionImage: null,
+  posterEverydayImage: null,
+  posterStoryImage: null,
 };
 
 export function getStoreSettings(): StoreSettings {
@@ -38,6 +62,14 @@ export function getStoreSettings(): StoreSettings {
       standardShippingFee: Number(parsed.standardShippingFee) || DEFAULT_STORE_SETTINGS.standardShippingFee,
       codEnabled: typeof parsed.codEnabled === 'boolean' ? parsed.codEnabled : DEFAULT_STORE_SETTINGS.codEnabled,
       onlinePaymentEnabled: typeof parsed.onlinePaymentEnabled === 'boolean' ? parsed.onlinePaymentEnabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
+      heroImageUrl: parsed.heroImageUrl ?? null,
+      categoryTwoPiecesImage: parsed.categoryTwoPiecesImage ?? null,
+      categorySuitSetImage: parsed.categorySuitSetImage ?? null,
+      categoryHeavyDressImage: parsed.categoryHeavyDressImage ?? null,
+      festiveBannerImage: parsed.festiveBannerImage ?? null,
+      posterOccasionImage: parsed.posterOccasionImage ?? null,
+      posterEverydayImage: parsed.posterEverydayImage ?? null,
+      posterStoryImage: parsed.posterStoryImage ?? null,
     };
   } catch {
     return DEFAULT_STORE_SETTINGS;
@@ -74,6 +106,18 @@ export function useStoreSettings(): {
           instagramHandle: serverData.instagram_handle || DEFAULT_STORE_SETTINGS.instagramHandle,
           codEnabled: typeof serverData.cod_enabled === 'boolean' ? serverData.cod_enabled : DEFAULT_STORE_SETTINGS.codEnabled,
           onlinePaymentEnabled: typeof serverData.online_payment_enabled === 'boolean' ? serverData.online_payment_enabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
+          heroTitle: serverData.hero_title || DEFAULT_STORE_SETTINGS.heroTitle,
+          heroSubtitle: serverData.hero_subtitle || DEFAULT_STORE_SETTINGS.heroSubtitle,
+          heroCtaText: serverData.hero_cta_text || DEFAULT_STORE_SETTINGS.heroCtaText,
+          heroCtaLink: serverData.hero_cta_link || DEFAULT_STORE_SETTINGS.heroCtaLink,
+          heroImageUrl: serverData.hero_image_url || null,
+          categoryTwoPiecesImage: serverData.category_two_pieces_image || null,
+          categorySuitSetImage: serverData.category_suit_set_image || null,
+          categoryHeavyDressImage: serverData.category_heavy_dress_image || null,
+          festiveBannerImage: serverData.festive_banner_image || null,
+          posterOccasionImage: serverData.poster_occasion_image || null,
+          posterEverydayImage: serverData.poster_everyday_image || null,
+          posterStoryImage: serverData.poster_story_image || null,
         };
         saveStoreSettings(synced);
         setSettings(synced);
@@ -106,4 +150,3 @@ export function useStoreSettings(): {
 
   return { settings, updateSettings, syncWithServer };
 }
-

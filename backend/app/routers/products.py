@@ -93,17 +93,29 @@ def list_products(
 
 @router.get("/products/{slug}", response_model=ProductDetailResponse)
 def get_product_by_slug(slug: str, db: Session = Depends(get_db)):
-    """Retrieve complete product details, ordered images, live variant stock, and fabric info by slug."""
-    product = (
+    """Retrieve complete product details, ordered images, live variant stock, and fabric info by slug or ID."""
+    clean_slug = slug.strip()
+    norm_slug = clean_slug.replace(" ", "-").lower()
+
+    query = (
         db.query(Product)
         .options(
             joinedload(Product.variants),
             joinedload(Product.images),
             joinedload(Product.collections),
         )
-        .filter(Product.slug == slug)
-        .first()
     )
+
+    product = (
+        query.filter(
+            (Product.slug == clean_slug)
+            | (Product.slug == norm_slug)
+            | (Product.name.ilike(clean_slug))
+        ).first()
+    )
+
+    if not product and clean_slug.isdigit():
+        product = query.filter(Product.id == int(clean_slug)).first()
 
     if not product:
         raise HTTPException(

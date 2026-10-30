@@ -14,6 +14,7 @@ import { Product, Collection } from '../types/product';
 import { fetchProducts, fetchCollections } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
 import { useWishlist } from '../context/WishlistContext';
+import { useStoreSettings } from '../lib/settings';
 
 // Verified palette color mappings for catalog variant swatches
 const COLOR_HEX_MAP: Record<string, string> = {
@@ -51,6 +52,7 @@ export const MAIN_CATEGORIES_CONFIG = [
 ];
 
 export const Shop: React.FC = () => {
+  const { settings } = useStoreSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const { wishlist } = useWishlist();
 
@@ -298,11 +300,25 @@ export const Shop: React.FC = () => {
             </p>
           </div>
           <div className="md:col-span-5 aspect-[16/10] sm:aspect-[4/3] rounded-none overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900">
-            <img
-              src="/images/editorial/shop_banner.jpg"
-              alt="The Royal Libas Atelier Collection"
-              className="w-full h-full object-cover object-right"
-            />
+            {settings.heroImageUrl ? (
+              <img
+                src={settings.heroImageUrl}
+                alt="The Royal Libas Atelier Collection"
+                className="w-full h-full object-cover object-right"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#1A0B0E] p-6 flex flex-col items-center justify-center text-center select-none text-[#FCF8F0]">
+                <div className="w-12 h-12 rounded-full border border-[#D4AF67]/50 flex items-center justify-center mb-2 bg-[#1A0B0E]/60 shadow">
+                  <span className="font-serif text-base font-bold text-[#D4AF67]">RL</span>
+                </div>
+                <span className="text-[10px] uppercase tracking-[0.25em] text-[#D4AF67] font-semibold">
+                  ROYAL LIBAS ATELIER
+                </span>
+                <span className="text-xs text-[#FCF8F0]/70 mt-1 font-serif">
+                  Handcrafted Catalogue 2026
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </section>

@@ -2524,6 +2524,13 @@ def admin_get_settings(
         hero_cta_text=setting.hero_cta_text,
         hero_cta_link=setting.hero_cta_link,
         hero_image_url=setting.hero_image_url,
+        category_two_pieces_image=setting.category_two_pieces_image,
+        category_suit_set_image=setting.category_suit_set_image,
+        category_heavy_dress_image=setting.category_heavy_dress_image,
+        festive_banner_image=setting.festive_banner_image,
+        poster_occasion_image=setting.poster_occasion_image,
+        poster_everyday_image=setting.poster_everyday_image,
+        poster_story_image=setting.poster_story_image,
         whatsapp_number=setting.whatsapp_number,
         support_email=setting.support_email,
         support_phone=setting.support_phone,
@@ -2568,6 +2575,20 @@ def admin_update_settings(
         setting.hero_cta_link = payload.hero_cta_link.strip()
     if payload.hero_image_url is not None:
         setting.hero_image_url = payload.hero_image_url.strip() or None
+    if payload.category_two_pieces_image is not None:
+        setting.category_two_pieces_image = payload.category_two_pieces_image.strip() or None
+    if payload.category_suit_set_image is not None:
+        setting.category_suit_set_image = payload.category_suit_set_image.strip() or None
+    if payload.category_heavy_dress_image is not None:
+        setting.category_heavy_dress_image = payload.category_heavy_dress_image.strip() or None
+    if payload.festive_banner_image is not None:
+        setting.festive_banner_image = payload.festive_banner_image.strip() or None
+    if payload.poster_occasion_image is not None:
+        setting.poster_occasion_image = payload.poster_occasion_image.strip() or None
+    if payload.poster_everyday_image is not None:
+        setting.poster_everyday_image = payload.poster_everyday_image.strip() or None
+    if payload.poster_story_image is not None:
+        setting.poster_story_image = payload.poster_story_image.strip() or None
     if payload.whatsapp_number is not None:
         setting.whatsapp_number = payload.whatsapp_number.strip()
     if payload.support_email is not None:
@@ -2613,6 +2634,13 @@ def admin_update_settings(
         hero_cta_text=setting.hero_cta_text,
         hero_cta_link=setting.hero_cta_link,
         hero_image_url=setting.hero_image_url,
+        category_two_pieces_image=setting.category_two_pieces_image,
+        category_suit_set_image=setting.category_suit_set_image,
+        category_heavy_dress_image=setting.category_heavy_dress_image,
+        festive_banner_image=setting.festive_banner_image,
+        poster_occasion_image=setting.poster_occasion_image,
+        poster_everyday_image=setting.poster_everyday_image,
+        poster_story_image=setting.poster_story_image,
         whatsapp_number=setting.whatsapp_number,
         support_email=setting.support_email,
         support_phone=setting.support_phone,

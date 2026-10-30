@@ -61,9 +61,18 @@ export const AdminProducts: React.FC = () => {
   const [assignSubcat, setAssignSubcat] = useState<string>('Co-ord Sets');
   const [newCare, setNewCare] = useState('Dry clean only');
   const [newFit, setNewFit] = useState('Tailored Regular Fit');
-  const [newStatus, setNewStatus] = useState<'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('PUBLISHED');
+  const [newStatus, setNewStatus] = useState<'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('DRAFT');
+  const [newDescription, setNewDescription] = useState('');
   const [initialPrice, setInitialPrice] = useState('2999');
   const [newMrp, setNewMrp] = useState('3999');
+  const [newSizeStock, setNewSizeStock] = useState<Record<string, { enabled: boolean; stock: string; price: string }>>({
+    XS: { enabled: false, stock: '0', price: '' },
+    S: { enabled: true, stock: '0', price: '' },
+    M: { enabled: true, stock: '0', price: '' },
+    L: { enabled: true, stock: '0', price: '' },
+    XL: { enabled: false, stock: '0', price: '' },
+    XXL: { enabled: false, stock: '0', price: '' },
+  });
 
   // Variant Add State
   const [addingVariantForId, setAddingVariantForId] = useState<number | null>(null);
@@ -278,22 +287,35 @@ export const AdminProducts: React.FC = () => {
       return;
     }
 
+    const selectedVariants = Object.entries(newSizeStock)
+      .filter(([_, data]) => data.enabled)
+      .map(([size, data]) => {
+        const vPrice = parseFloat(data.price) || priceNum;
+        const vStockRaw = parseInt(data.stock, 10);
+        const stock = isNaN(vStockRaw) ? 0 : Math.max(0, vStockRaw);
+        return {
+          size,
+          selling_price: vPrice,
+          mrp: mrpNum,
+          stock,
+        };
+      });
+
     const payload = {
       name: newProductName.trim(),
       slug: slug,
       category: newCategory,
       subcategory: newSubcategory,
-      fabric: newFabric,
-      care: newCare,
-      fit: newFit,
+      fabric: newFabric.trim() || null,
+      care: newCare.trim() || null,
+      fit: newFit.trim() || null,
       status: newStatus,
-      description: `Boutique luxury ${newCategory.toLowerCase()} handcrafted with fine artisanal details.`,
+      description: newDescription.trim() || null,
       is_active: newStatus === 'PUBLISHED',
-      variants: [
-        { size: 'S', selling_price: priceNum, mrp: mrpNum, stock: 8 },
-        { size: 'M', selling_price: priceNum, mrp: mrpNum, stock: 12 },
-        { size: 'L', selling_price: priceNum, mrp: mrpNum, stock: 6 },
-      ],
+      variants:
+        selectedVariants.length > 0
+          ? selectedVariants
+          : [{ size: 'Free Size', selling_price: priceNum, mrp: mrpNum, stock: 0 }],
       images: newImages.map((item, idx) => ({
         url: item.url,
         sort_order: idx + 1,
@@ -846,24 +868,34 @@ export const AdminProducts: React.FC = () => {
                             </div>
 
                             <div className="p-1 bg-[#FCF8F0] border-t border-gray-200 flex items-center justify-between">
-                              <div className="flex items-center gap-0.5">
+                              <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   disabled={idx === 0}
                                   onClick={() => handleReorder(product.id, idx, idx - 1)}
-                                  className="p-2 sm:p-1.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[32px] min-h-[32px] flex items-center justify-center text-xs"
+                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[28px] min-h-[28px] flex items-center justify-center text-xs"
                                   title="Move earlier"
                                 >
-                                  <ArrowLeft className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                                  <ArrowLeft className="w-3 h-3" />
                                 </button>
+                                {idx > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReorder(product.id, idx, 0)}
+                                    className="text-[9.5px] px-1.5 py-0.5 bg-[#FAF5EC] hover:bg-[#B58A3C] hover:text-white text-[#B58A3C] border border-[#B58A3C]/40 rounded font-semibold transition-colors"
+                                    title="Set this as main cover photo"
+                                  >
+                                    ★ Cover
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   disabled={idx === (photosMap[product.id]?.length || 0) - 1}
                                   onClick={() => handleReorder(product.id, idx, idx + 1)}
-                                  className="p-2 sm:p-1.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[32px] min-h-[32px] flex items-center justify-center text-xs"
+                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[28px] min-h-[28px] flex items-center justify-center text-xs"
                                   title="Move later"
                                 >
-                                  <ArrowRight className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                                  <ArrowRight className="w-3 h-3" />
                                 </button>
                               </div>
 
@@ -1073,6 +1105,19 @@ export const AdminProducts: React.FC = () => {
 
               <div>
                 <label className="block font-semibold text-gray-700 mb-1">
+                  Product Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Enter authentic product details, embroidery, or occasion notes..."
+                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">
                   Wash Care
                 </label>
                 <input
@@ -1082,6 +1127,82 @@ export const AdminProducts: React.FC = () => {
                   placeholder="Dry clean only"
                   className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
                 />
+              </div>
+
+              {/* Sizes and Live Inventory Inputs */}
+              <div className="bg-[#FAF7F2] p-3 rounded-lg border border-[#E8DFD0] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-gray-900 text-xs">
+                    Sizes &amp; Initial Stock (Stock of 0 stays 0)
+                  </span>
+                  <span className="text-[10px] text-gray-500">
+                    Enable sizes for this product
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {Object.entries(newSizeStock).map(([sizeKey, data]) => (
+                    <div
+                      key={sizeKey}
+                      className={`p-2 rounded border flex flex-col gap-1.5 transition-colors ${
+                        data.enabled
+                          ? 'bg-white border-[#5E1224]/40 shadow-xs'
+                          : 'bg-gray-100/60 border-gray-200 opacity-60'
+                      }`}
+                    >
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs text-gray-800">
+                        <input
+                          type="checkbox"
+                          checked={data.enabled}
+                          onChange={(e) =>
+                            setNewSizeStock((prev) => ({
+                              ...prev,
+                              [sizeKey]: { ...prev[sizeKey], enabled: e.target.checked },
+                            }))
+                          }
+                          className="rounded text-[#5E1224] focus:ring-[#5E1224]"
+                        />
+                        <span>Size {sizeKey}</span>
+                      </label>
+
+                      {data.enabled && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1 text-[11px]">
+                            <span className="text-gray-500 w-10">Stock:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={data.stock}
+                              onChange={(e) =>
+                                setNewSizeStock((prev) => ({
+                                  ...prev,
+                                  [sizeKey]: { ...prev[sizeKey], stock: e.target.value },
+                                }))
+                              }
+                              className="w-full px-1.5 py-0.5 border rounded text-xs font-semibold focus:outline-none focus:border-[#5E1224]"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px]">
+                            <span className="text-gray-500 w-10">₹:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder={initialPrice}
+                              value={data.price}
+                              onChange={(e) =>
+                                setNewSizeStock((prev) => ({
+                                  ...prev,
+                                  [sizeKey]: { ...prev[sizeKey], price: e.target.value },
+                                }))
+                              }
+                              className="w-full px-1.5 py-0.5 border rounded text-xs focus:outline-none focus:border-[#5E1224]"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -1189,9 +1310,14 @@ export const AdminProducts: React.FC = () => {
                 )}
               </div>
 
-              <p className="text-[11px] text-gray-500 bg-[#FCF8F0] p-2.5 rounded border border-[#E8DFD0]">
-                Initial stock for sizes <strong>S</strong> (8 units), <strong>M</strong> (12 units), and <strong>L</strong> (6 units) will be created automatically. You can add extra sizes anytime.
-              </p>
+              <div className="text-[11px] text-gray-600 bg-[#FCF8F0] p-2.5 rounded border border-[#E8DFD0] space-y-1">
+                <p>
+                  <strong>Default Status:</strong> New products default to <strong>DRAFT</strong> so you can review descriptions, real stock, and photos before publishing to the storefront.
+                </p>
+                <p className="text-[10px] text-gray-500">
+                  <strong>Upload Limits:</strong> Images (JPEG, PNG, WebP up to 10MB) &bull; Videos (MP4, WebM, MOV up to 60MB).
+                </p>
+              </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button

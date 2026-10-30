@@ -512,20 +512,11 @@ def seed_database(session_factory=None):
             db.query(ProductImage).filter(ProductImage.product_id == product.id).delete()
             db.flush()
 
-            for order_idx, (view_type, alt_text) in enumerate(views):
-                img_url = f"/images/products/{pdata['img_key']}_{view_type}.jpg"
-                p_img = ProductImage(
-                    product_id=product.id,
-                    url=img_url,
-                    sort_order=order_idx,
-                    alt_text=alt_text,
-                )
-                db.add(p_img)
-
+            # Leave product clean with royal branded placeholder until client uploads real photos
             db.flush()
 
         db.commit()
-        print("Catalogue seed complete: 16 sample products seeded with 64 sample boutique photos.")
+        print("Catalogue seed complete: 16 products ready for real photo uploads and inventory.")
     except Exception as e:
         db.rollback()
         print(f"Error during seeding: {e}")

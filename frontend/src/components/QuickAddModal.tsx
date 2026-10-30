@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Minus, Plus, ShoppingBag, Check, ArrowRight } from 'lucide-react';
 import { useQuickAdd } from '../context/QuickAddContext';
 import { useCart } from '../context/CartContext';
+import { ProductPlaceholder } from './ProductPlaceholder';
 import { formatPrice } from '../lib/api';
 import { ProductVariant } from '../types/product';
 
@@ -113,9 +114,12 @@ export const QuickAddModal: React.FC = () => {
             {imageUrl ? (
               <img src={imageUrl} alt={activeProduct.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full bg-[#5B111A] text-white flex items-center justify-center font-serif text-sm">
-                RL
-              </div>
+              <ProductPlaceholder
+                title={activeProduct.name}
+                category={activeProduct.category || undefined}
+                compact={true}
+                className="w-full h-full"
+              />
             )}
           </div>
 

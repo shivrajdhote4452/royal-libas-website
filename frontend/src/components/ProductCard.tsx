@@ -5,6 +5,7 @@ import { Product } from '../types/product';
 import { formatPrice } from '../lib/api';
 import { useWishlist } from '../context/WishlistContext';
 import { useQuickAdd } from '../context/QuickAddContext';
+import { ProductPlaceholder } from './ProductPlaceholder';
 
 interface ProductCardProps {
   product: Product;
@@ -67,7 +68,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const firstVariant = product.variants && product.variants.length > 0 ? product.variants[0] : null;
   const sellingPrice = product.min_price ?? (firstVariant ? firstVariant.selling_price : 0);
   const mrp = firstVariant?.mrp ?? null;
-  const isSoldOut = product.total_stock === 0 || product.badges.includes('Sold Out');
+  const isSoldOut = product.total_stock === 0 || Boolean(product.badges?.includes('Sold Out'));
 
   const inWishlist = isInWishlist(product.id);
   const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
@@ -128,18 +129,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               }}
             />
           ) : (
-            /* Graceful Placeholder when no images exist or both fail */
-            <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center select-none bg-[#5E1224] text-[#FCF8F0]">
-              <div className="w-10 h-10 rounded-full border border-[#D4AF67]/40 flex items-center justify-center mb-2">
-                <span className="font-serif text-base font-bold text-[#D4AF67]">RL</span>
-              </div>
-              <p className="font-serif font-semibold text-xs line-clamp-2 px-2 text-[#FCF8F0]">
-                {product.name}
-              </p>
-              <span className="text-[9px] uppercase tracking-[0.2em] text-[#D4AF67] mt-1 font-ui">
-                Royal Libas Atelier
-              </span>
-            </div>
+            <ProductPlaceholder
+              title={product.name}
+              category={product.category || undefined}
+              className="absolute inset-0 w-full h-full"
+            />
           )}
 
           {/* Secondary image rendered in DOM for desktop preloading and smooth hover crossfade */}

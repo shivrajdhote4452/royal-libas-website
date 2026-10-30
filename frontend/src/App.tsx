@@ -44,6 +44,7 @@ import { AdminSettings } from './pages/admin/AdminSettings';
 import { CartDrawer } from './components/CartDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { BackToTop } from './components/BackToTop';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const StorefrontLayout: React.FC = () => {
   const location = useLocation();
@@ -66,7 +67,8 @@ const StorefrontLayout: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <CartProvider>
+    <ErrorBoundary>
+      <CartProvider>
       <WishlistProvider>
         <QuickAddProvider>
           <BrowserRouter>
@@ -120,6 +122,7 @@ export const App: React.FC = () => {
         </QuickAddProvider>
       </WishlistProvider>
     </CartProvider>
+    </ErrorBoundary>
   );
 };
 

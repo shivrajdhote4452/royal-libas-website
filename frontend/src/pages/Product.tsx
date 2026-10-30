@@ -25,6 +25,7 @@ import { fetchProductBySlug, formatPrice, fetchProducts, fetchActiveCoupons } fr
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { ProductCard } from '../components/ProductCard';
+import { ProductPlaceholder } from '../components/ProductPlaceholder';
 import { useStoreSettings } from '../lib/settings';
 
 const RECENTLY_VIEWED_KEY = 'royal_libas_recently_viewed';
@@ -64,10 +65,14 @@ export const ProductPage: React.FC = () => {
       if (!id) return;
       try {
         setLoading(true);
-        const data = await fetchProductBySlug(id);
+        const cleanId = decodeURIComponent(id).trim();
+        const data = await fetchProductBySlug(cleanId);
         if (isMounted) {
           setProduct(data);
           document.title = `${data.name} | Royal Libas by Tanya`;
+          if (cleanId !== data.slug) {
+            navigate(`/product/${data.slug}`, { replace: true });
+          }
           setError(null);
           // Pre-select first available variant
           const firstAvailable = data.variants.find((v) => v.stock > 0);
@@ -376,10 +381,11 @@ export const ProductPage: React.FC = () => {
                   />
                 )
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-[#5B111A] text-white p-8 text-center">
-                  <span className="font-serif text-3xl font-bold mb-2">RL</span>
-                  <p className="font-serif text-lg">{product.name}</p>
-                </div>
+                <ProductPlaceholder
+                  title={product.name}
+                  category={product.category || undefined}
+                  className="w-full h-full"
+                />
               )}
 
               {/* Badges */}
