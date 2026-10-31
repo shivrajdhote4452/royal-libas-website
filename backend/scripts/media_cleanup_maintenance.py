@@ -25,6 +25,7 @@ from app.services.cloudinary_service import (
     list_cloudinary_folders,
     delete_cloudinary_folder,
 )
+from app.services.media_usage_service import get_asset_usage_references
 
 # Known 25 obsolete numbered/combination folders and their target named equivalents
 OBSOLETE_FOLDER_MAPPINGS = {
@@ -104,27 +105,9 @@ def audit_cleanup_candidates(db: Session) -> Dict[str, Any]:
     ).all()
 
     sample_candidates = []
-    setting = db.query(StoreSetting).first()
-    all_products = db.query(Product).all()
-
     for sa in sample_assets:
-        # Check product references
-        prod_refs = (
-            db.query(Product.name)
-            .join(ProductImage, ProductImage.product_id == Product.id)
-            .filter((ProductImage.url == sa.url) | (ProductImage.public_id == sa.public_id))
-            .all()
-        )
-        prod_names = [p[0] for p in prod_refs]
-
-        # Check editorial references
-        editorial_refs = []
-        if setting:
-            if setting.hero_image_url and sa.url in setting.hero_image_url:
-                editorial_refs.append("Hero Banner")
-            if setting.festive_banner_image and sa.url in setting.festive_banner_image:
-                editorial_refs.append("Festive Banner")
-
+        prod_usages, editorial_usages = get_asset_usage_references(sa, db)
+        prod_names = [p["name"] for p in prod_usages]
         sample_candidates.append({
             "id": sa.id,
             "filename": sa.filename,
@@ -135,8 +118,9 @@ def audit_cleanup_candidates(db: Session) -> Dict[str, Any]:
             "format": sa.format,
             "url": sa.url,
             "used_in_products": prod_names,
-            "used_editorial": editorial_refs,
-            "is_in_use": bool(prod_names or editorial_refs),
+            "product_usages": prod_usages,
+            "used_editorial": editorial_usages,
+            "is_in_use": bool(prod_usages or editorial_usages),
             "recommendation": "Preserve in Cloudinary; hide from boutique view via hide_samples toggle",
         })
 
@@ -155,6 +139,7 @@ def run_cleanup_maintenance(
     print("=" * 65)
     print(">>> ROYAL LIBAS MEDIA CLEANUP & RECONCILIATION AUDIT <<<")
     print(f"Mode: {'DRY-RUN PREVIEW (No changes)' if dry_run else 'EXECUTION (Confirmed by Owner)'}")
+    print(f"Remote Deletion: {'ENABLED' if remove_remote_folders else 'LOCAL-ONLY RECONCILIATION'}")
     print("=" * 65)
 
     db = db_session or SessionLocal()
@@ -189,27 +174,73 @@ def run_cleanup_maintenance(
     reconciled_local_folders = 0
     reconciled_remote_folders = 0
     remote_folder_errors = []
+    folder_outcomes = []
 
     if not dry_run:
         print("\n[Step 4] Executing Obsolete Empty Folder Reconciliation...")
         for sf in safe_to_reconcile:
             db_folder = db.query(MediaFolder).filter(MediaFolder.id == sf["id"]).first()
-            if db_folder:
-                folder_path = db_folder.path
-                db.delete(db_folder)
-                reconciled_local_folders += 1
-                print(f"  - Removed local folder record: {folder_path}")
+            if not db_folder:
+                continue
 
-                if remove_remote_folders and is_cloudinary_configured():
+            folder_path = db_folder.path
+            remote_success = False
+
+            if remove_remote_folders:
+                if is_cloudinary_configured():
                     c_del = delete_cloudinary_folder(folder_path)
-                    if c_del.get("success"):
+                    if not c_del.get("success"):
+                        # Remote deletion failed: PRESERVE local record and record failure
+                        err_msg = c_del.get("error", "Cloudinary remote folder deletion failed")
+                        remote_folder_errors.append({
+                            "folder": folder_path,
+                            "error": err_msg,
+                            "status": "remote_deletion_failed",
+                        })
+                        folder_outcomes.append({
+                            "folder": folder_path,
+                            "local_deleted": False,
+                            "remote_deleted": False,
+                            "status": "remote_failed_local_preserved",
+                            "error": err_msg,
+                        })
+                        print(f"    [REMOTE FAILED - LOCAL PRESERVED] Could not delete remote folder {folder_path}: {err_msg}")
+                        continue
+                    else:
+                        remote_success = True
                         reconciled_remote_folders += 1
                         print(f"    [REMOTE OK] Deleted remote empty folder in Cloudinary: {folder_path}")
-                    else:
-                        remote_folder_errors.append({"folder": folder_path, "error": c_del.get("error")})
-                        print(f"    [REMOTE WARN] Could not delete remote folder: {c_del.get('error')}")
 
-        db.commit()
+            # Reconcile local DB record (either after remote success, or during local-only reconciliation)
+            try:
+                db.delete(db_folder)
+                db.commit()
+                reconciled_local_folders += 1
+                folder_outcomes.append({
+                    "folder": folder_path,
+                    "local_deleted": True,
+                    "remote_deleted": remote_success,
+                    "status": "reconciled_successfully",
+                })
+                print(f"  - Removed local folder record: {folder_path}")
+            except Exception as db_del_err:
+                db.rollback()
+                err_msg = str(db_del_err)
+                remote_folder_errors.append({
+                    "folder": folder_path,
+                    "error": err_msg,
+                    "status": "recoverable_reconciliation_needed",
+                    "remote_deleted": remote_success,
+                })
+                folder_outcomes.append({
+                    "folder": folder_path,
+                    "local_deleted": False,
+                    "remote_deleted": remote_success,
+                    "status": "recoverable_db_failure",
+                    "error": err_msg,
+                })
+                print(f"  [DB ERROR - RECOVERABLE] Remote deleted={remote_success} but local DB delete failed for {folder_path}: {err_msg}")
+
         print(f"\nReconciliation complete: {reconciled_local_folders} local DB records removed.")
         if remove_remote_folders:
             print(f"Remote Cloudinary empty folders cleaned: {reconciled_remote_folders} (Errors: {len(remote_folder_errors)})")
@@ -222,7 +253,17 @@ def run_cleanup_maintenance(
     if close_db:
         db.close()
 
+    if dry_run:
+        overall_status = "preview_only"
+    elif not remote_folder_errors:
+        overall_status = "success"
+    elif reconciled_local_folders > 0 or reconciled_remote_folders > 0:
+        overall_status = "partial_failure"
+    else:
+        overall_status = "failed"
+
     return {
+        "status": overall_status,
         "dry_run": dry_run,
         "protected_folders_count": len(protected_folders),
         "total_obsolete_candidates": len(obsolete_folders),
@@ -232,6 +273,7 @@ def run_cleanup_maintenance(
         "reconciled_local_folders": reconciled_local_folders,
         "reconciled_remote_folders": reconciled_remote_folders,
         "remote_folder_errors": remote_folder_errors,
+        "folder_outcomes": folder_outcomes,
         "obsolete_mappings": OBSOLETE_FOLDER_MAPPINGS,
     }
 

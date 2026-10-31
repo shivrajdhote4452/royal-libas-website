@@ -1723,53 +1723,20 @@ def admin_export_orders_csv(
 import logging
 admin_media_logger = logging.getLogger("royal_libas.admin.media")
 
+from app.services.media_usage_service import (
+    match_asset_to_url,
+    get_asset_usage_references,
+)
+
 
 def _matches_asset(img_url: Optional[str], asset: MediaAsset) -> bool:
-    if not img_url:
-        return False
-    if asset.url and asset.url == img_url:
-        return True
-    if asset.public_id and asset.public_id in img_url:
-        return True
-    return False
+    return match_asset_to_url(img_url, asset)
 
 
 def _check_asset_references(asset: MediaAsset, db: Session) -> Tuple[List[MediaAssetProductUsage], List[str]]:
     """Helper to find all locations across products and editorial content referencing an asset."""
-    filters = [ProductImage.url == asset.url]
-    if asset.public_id:
-        filters.append(ProductImage.public_id == asset.public_id)
-
-    matches = (
-        db.query(Product.id, Product.name, Product.slug)
-        .join(ProductImage, ProductImage.product_id == Product.id)
-        .filter(or_(*filters))
-        .distinct()
-        .all()
-    )
-    product_usages = [MediaAssetProductUsage(id=m.id, name=m.name, slug=m.slug) for m in matches]
-
-    editorial_usages = []
-    # Check all StoreSetting editorial and category image attributes
-    setting = db.query(StoreSetting).first()
-    if setting:
-        if _matches_asset(setting.hero_image_url, asset):
-            editorial_usages.append("Homepage Hero Banner")
-        if _matches_asset(setting.category_two_pieces_image, asset):
-            editorial_usages.append("Category Card: Two Pieces")
-        if _matches_asset(setting.category_suit_set_image, asset):
-            editorial_usages.append("Category Card: Suit Set")
-        if _matches_asset(setting.category_heavy_dress_image, asset):
-            editorial_usages.append("Category Card: Heavy Dress")
-        if _matches_asset(setting.festive_banner_image, asset):
-            editorial_usages.append("Festive Announcement Banner")
-        if _matches_asset(setting.poster_occasion_image, asset):
-            editorial_usages.append("Editorial Poster: Occasion Wear")
-        if _matches_asset(setting.poster_everyday_image, asset):
-            editorial_usages.append("Editorial Poster: Everyday Luxury")
-        if _matches_asset(setting.poster_story_image, asset):
-            editorial_usages.append("Editorial Poster: Tanya's Heritage Story")
-
+    prod_usages, editorial_usages = get_asset_usage_references(asset, db)
+    product_usages = [MediaAssetProductUsage(id=m["id"], name=m["name"], slug=m["slug"]) for m in prod_usages]
     return product_usages, editorial_usages
 
 
@@ -2041,7 +2008,11 @@ def admin_media_cleanup_execute(
         )
 
     from scripts.media_cleanup_maintenance import run_cleanup_maintenance
-    result = run_cleanup_maintenance(dry_run=False, remove_remote_folders=payload.clean_remote_folders)
+    result = run_cleanup_maintenance(
+        dry_run=False,
+        remove_remote_folders=payload.clean_remote_folders,
+        db_session=db,
+    )
 
     log_activity(
         db,
@@ -2053,7 +2024,7 @@ def admin_media_cleanup_execute(
     )
 
     return MediaCleanupExecuteResponse(
-        status="success",
+        status=result.get("status", "success"),
         reconciled_local_folders=result["reconciled_local_folders"],
         reconciled_remote_folders=result["reconciled_remote_folders"],
         remote_folder_errors=result["remote_folder_errors"],

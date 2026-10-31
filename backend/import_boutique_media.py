@@ -170,15 +170,23 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
 
     # 2. Register all folders in DB & Cloudinary
     print("\n[Step 2] Synchronizing boutique folder hierarchy...")
+    remote_confirmed_folders = set()
     for d_info in all_dirs:
+        remote_confirmed = False
+        if not dry_run:
+            try:
+                c_res = create_cloudinary_folder(d_info["path"])
+                if c_res.get("success"):
+                    remote_confirmed = True
+                    remote_confirmed_folders.add(d_info["path"])
+                else:
+                    print(f"  [WARN] Cloudinary folder creation failed for {d_info['path']}: {c_res.get('error')}")
+            except Exception as f_err:
+                print(f"  [WARN] Cloudinary folder creation exception for {d_info['path']}: {f_err}")
+
         db_folder = db.query(MediaFolder).filter(MediaFolder.path == d_info["path"]).first()
         if not db_folder:
             if not dry_run:
-                try:
-                    create_cloudinary_folder(d_info["path"])
-                except Exception:
-                    pass
-                
                 db_folder = MediaFolder(
                     name=d_info["name"],
                     path=d_info["path"],
@@ -187,7 +195,8 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                 db.add(db_folder)
                 db.commit()
                 status_note = "[EMPTY FOLDER PRESERVED]" if d_info["is_empty"] else ""
-                print(f"  + Created folder: {d_info['path']} {status_note}")
+                remote_tag = "[REMOTE OK]" if remote_confirmed else "[LOCAL ONLY]"
+                print(f"  + Created folder: {d_info['path']} {status_note} {remote_tag}")
         else:
             if d_info["is_empty"]:
                 print(f"  [OK] Preserved empty folder: {d_info['path']}")
@@ -195,6 +204,7 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
     # 3. Process each file: reconcile by SHA-256 hash or public_id
     print(f"\n[Step 3] Reconciling and organizing {len(all_files)} boutique media files...")
     reorganized_count = 0
+    reused_count = 0
     imported_count = 0
     failed_count = 0
 
@@ -222,25 +232,60 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
         if existing_db_asset:
             need_folder_move = existing_db_asset.folder != target_folder
             
-            if need_folder_move and not dry_run:
-                move_res = move_cloudinary_asset_folder(
-                    existing_db_asset.public_id,
-                    target_folder,
-                    resource_type=existing_db_asset.resource_type,
-                )
-                if not move_res.get("success", False):
-                    print(f"  [WARN] Failed to move Cloudinary asset folder for {existing_db_asset.public_id}: {move_res.get('error')}")
+            if need_folder_move:
+                if not dry_run:
+                    move_res = move_cloudinary_asset_folder(
+                        existing_db_asset.public_id,
+                        target_folder,
+                        resource_type=existing_db_asset.resource_type,
+                    )
+                    if not move_res.get("success", False):
+                        # Remote move failed: preserve previous local folder and record failure
+                        failed_count += 1
+                        err_msg = move_res.get("error", "Cloudinary asset move failed")
+                        print(f"  [FAIL - LOCAL PRESERVED] Failed to move Cloudinary asset folder for {existing_db_asset.public_id}: {err_msg}")
+                        manifest["files"][rel_key] = {
+                            "status": "move_failed",
+                            "error": err_msg,
+                            "db_id": existing_db_asset.id,
+                            "asset_id": existing_db_asset.cloudinary_asset_id,
+                            "cloudinary_asset_id": existing_db_asset.cloudinary_asset_id,
+                            "public_id": existing_db_asset.public_id,
+                            "cloud_name": existing_db_asset.cloud_name or CLOUDINARY_CLOUD_NAME,
+                            "folder": existing_db_asset.folder,
+                            "target_folder": target_folder,
+                            "filename": filename,
+                            "display_name": existing_db_asset.display_name or os.path.splitext(filename)[0],
+                            "relative_source_path": rel_key,
+                            "content_hash": content_hash,
+                            "secure_url": existing_db_asset.secure_url or existing_db_asset.url,
+                            "url": existing_db_asset.url,
+                            "resource_type": existing_db_asset.resource_type,
+                            "format": existing_db_asset.format or fmt,
+                            "width": existing_db_asset.width,
+                            "height": existing_db_asset.height,
+                            "duration": float(existing_db_asset.duration) if existing_db_asset.duration is not None else None,
+                            "file_size": existing_db_asset.file_size or file_size,
+                            "mime_type": existing_db_asset.mime_type or mime_type,
+                            "reused": True,
+                        }
+                        save_manifest(manifest)
+                        continue
+                    else:
+                        existing_db_asset.folder = target_folder
+                        reorganized_count += 1
+                else:
+                    reorganized_count += 1
+            else:
+                reused_count += 1
 
             if not dry_run:
-                existing_db_asset.folder = target_folder
                 existing_db_asset.relative_source_path = rel_key
                 existing_db_asset.filename = filename
                 existing_db_asset.display_name = os.path.splitext(filename)[0]
                 existing_db_asset.alt_text = os.path.splitext(filename)[0]
                 existing_db_asset.delivery_type = existing_db_asset.delivery_type or "upload"
                 db.commit()
-
-            reorganized_count += 1
 
             # Preserve FULL metadata in manifest
             manifest["files"][rel_key] = {
@@ -257,7 +302,7 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                 "display_name": existing_db_asset.display_name or os.path.splitext(filename)[0],
                 "relative_source_path": rel_key,
                 "content_hash": content_hash,
-                "folder": target_folder,
+                "folder": existing_db_asset.folder,
                 "resource_type": existing_db_asset.resource_type,
                 "format": existing_db_asset.format or fmt,
                 "width": existing_db_asset.width,
@@ -419,12 +464,23 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
     print("=" * 65)
     print(f"Source Folder:        {source_path}")
     print(f"Total Source Files:   {len(all_files)}")
-    print(f"Reorganized/Reconciled: {reorganized_count}")
+    print(f"Reorganized:          {reorganized_count}")
+    print(f"Reused (Unchanged):   {reused_count}")
     print(f"New Uploads:          {imported_count}")
     print(f"Failures:             {failed_count}")
     print(f"Boutique Folders:     {len(all_dirs)}")
     print(f"Manifest Saved At:    {MANIFEST_PATH}")
     print("=" * 65)
+
+    return {
+        "source_dir": source_path,
+        "total_source_files": len(all_files),
+        "reorganized": reorganized_count,
+        "reused": reused_count,
+        "imported": imported_count,
+        "failed": failed_count,
+        "boutique_folders": len(all_dirs),
+    }
 
 
 if __name__ == "__main__":
