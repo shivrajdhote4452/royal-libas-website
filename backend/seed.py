@@ -602,6 +602,11 @@ def seed_database(session_factory=None, allow_production_sample_seed: bool = Fal
                 print(f"  [*] Preserved existing coupon: {coupon.code}")
 
         # 4. Safe Sample Product Seeding (Routine: NEVER overwrite existing products or variants, NEVER delete images)
+        real_designs_count = db.query(Product).filter(Product.source_folder.like("Photos for royal libas/%")).count()
+        if real_designs_count > 0:
+            print(f"  [*] Real boutique catalogue detected ({real_designs_count} designs found with source_folder). Skipping sample product insertion.")
+            db.commit()
+            return
         created_count = 0
         preserved_count = 0
 

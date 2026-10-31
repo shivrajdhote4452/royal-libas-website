@@ -94,38 +94,40 @@ export const Header: React.FC = () => {
         }`}
       >
         {/* Top Announcement Bar (Handbook Section 03 & Configured Business Rules) */}
-        <div className="bg-[#5E1224] text-[#FCF8F0] text-[10.5px] sm:text-xs py-2 px-4 sm:px-8 tracking-[0.16em] uppercase font-medium flex items-center justify-between transition-all duration-300">
-          <div className="hidden md:block w-36 text-[10px] text-[#D4AF67] tracking-widest font-serif whitespace-nowrap">
+        <div className="bg-[#5E1224] text-[#FCF8F0] text-[9.5px] sm:text-[10.5px] py-1.5 px-4 sm:px-8 tracking-[0.16em] sm:tracking-[0.2em] uppercase font-medium flex items-center justify-between transition-all duration-300">
+          <div className="hidden md:block w-36 text-[8.5px] sm:text-[9.5px] text-[#D4AF67] tracking-[0.22em] font-serif whitespace-nowrap">
             ROYAL LIBAS BY TANYA
           </div>
           <div className="flex-1 text-center">
-            <span className="font-medium tracking-[0.18em]">{dynamicAnnouncement}</span>
+            <span className="font-medium tracking-[0.16em] sm:tracking-[0.2em]">{dynamicAnnouncement}</span>
           </div>
-          <div className="hidden md:flex items-center gap-1.5 text-[10.5px] text-[#FCF8F0] font-medium tracking-wider">
+          <div className="hidden md:flex items-center gap-1.5 text-[8.5px] sm:text-[9.5px] text-[#FCF8F0] font-medium tracking-wider">
             <span>INDIA (INR) ▾</span>
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div
             className={`flex items-center justify-between transition-all duration-250 ease-out ${
               isScrolled ? 'h-14 sm:h-16' : 'h-16 sm:h-20'
             }`}
           >
-            {/* Mobile Hamburger Button */}
-            <div className="flex items-center lg:hidden">
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(true)}
-                className="p-2 text-[#2B1B1E] hover:text-[#5E1224] focus:outline-none"
-                aria-label="Open Navigation Menu"
-              >
-                <Menu className="w-6 h-6" />
-              </button>
-            </div>
+            {/* Left Nav (Desktop Editorial - 3 Main Category Groups) & Mobile Hamburger */}
+            <div className="flex items-center">
+              {/* Mobile Hamburger Button */}
+              <div className="flex items-center lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="p-2 text-[#2B1B1E] hover:text-[#5E1224] focus:outline-none"
+                  aria-label="Open Navigation Menu"
+                >
+                  <Menu className="w-6 h-6" />
+                </button>
+              </div>
 
-            {/* Left Nav (Desktop Editorial - 3 Main Category Groups) */}
-            <nav className="hidden lg:flex items-center space-x-4 xl:space-x-5 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.15em] font-ui">
+              {/* Left Nav (Desktop Editorial - 3 Main Category Groups) */}
+              <nav className="hidden lg:flex items-center space-x-3.5 xl:space-x-5 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.12em] xl:tracking-[0.15em] font-ui">
               <Link
                 to="/shop?sort=newest"
                 className={`transition-colors py-1 hover:text-[#5E1224] ${
@@ -360,23 +362,26 @@ export const Header: React.FC = () => {
                 </div>
               </div>
             </nav>
+            </div>
 
-            {/* Center Logo - Floral Motif Identity */}
-            <Link
-              to="/"
-              className="group flex flex-col items-center justify-center focus:outline-none py-0.5 transition-transform duration-200 hover:scale-[1.01]"
-              aria-label="Royal Libas by Tanya Homepage"
-            >
-              <BrandLogo
-                layout="compact"
-                emblemSize={isScrolled ? 18 : 22}
-                taglineText="BY TANYA"
-              />
-            </Link>
+            {/* Center Logo - Floral Motif Identity, Exactly Centered in Header */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex items-center justify-center z-10 pointer-events-auto">
+              <Link
+                to="/"
+                className="group flex flex-col items-center justify-center focus:outline-none py-0.5 transition-transform duration-200 hover:scale-[1.01]"
+                aria-label="Royal Libas by Tanya Homepage"
+              >
+                <BrandLogo
+                  layout="compact"
+                  emblemSize={isScrolled ? 18 : 22}
+                  taglineText="BY TANYA"
+                />
+              </Link>
+            </div>
 
             {/* Right Nav (Desktop Editorial + Action Icons) */}
-            <div className="flex items-center space-x-4 sm:space-x-6">
-              <nav className="hidden lg:flex items-center space-x-6 text-xs font-semibold uppercase tracking-[0.18em] font-ui">
+            <div className="flex items-center space-x-3 sm:space-x-5 ml-auto">
+              <nav className="hidden lg:flex items-center space-x-5 xl:space-x-6 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui">
                 <Link
                   to="/about"
                   className={`transition-colors py-1 hover:text-[#5E1224] ${

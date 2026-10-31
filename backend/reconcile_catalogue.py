@@ -5,6 +5,16 @@ in the MediaAsset registry under 'Photos for royal libas'.
 Safely archives legacy sample products without breaking existing orders,
 seeds the 3 canonical boutique collections, and applies temporary setup values.
 
+Safety Guarantees:
+- Never archives manually created products (including those without source_folder).
+- Only archives explicitly manifested legacy sample products (IDs 1-18 or legacy demo slugs).
+- Stable source identity matching solely on Product.source_folder.
+- Resolves slug conflicts safely without adopting or overwriting existing products.
+- Leaves unverified specifications (fabric, fit, care, description) blank (None).
+- Selectively removes previously generated specifications from imported records while preserving owner edits.
+- Reverts unreviewed placeholder 'Aafreen Beige Botanical Three-Piece Suit' to DRAFT.
+- Preserves all order items, payments, customer records, and poster CMS settings.
+
 Usage:
     python backend/reconcile_catalogue.py --dry-run
     python backend/reconcile_catalogue.py --confirm
@@ -15,7 +25,7 @@ import os
 import re
 import sys
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import create_engine, func, case
 from sqlalchemy.orm import Session, sessionmaker
@@ -34,6 +44,12 @@ from app.models import (
     ProductVariant,
     StockAdjustment,
     product_collections,
+)
+from app.services.product_service import (
+    CANONICAL_TAXONOMY,
+    CATEGORY_TO_COLLECTION_SLUG,
+    sync_product_category_and_collections,
+    validate_category_and_subcategory,
 )
 
 # Canonical Taxonomy Mapping
@@ -72,12 +88,6 @@ SUBCATEGORY_MAP: Dict[str, str] = {
     "sharara-gharara": "Sharara / Gharara",
 }
 
-CATEGORY_TO_COLLECTION_SLUG: Dict[str, str] = {
-    "TWO PIECES": "two-pieces",
-    "SUIT SET": "suit-set",
-    "HEAVY DRESS": "heavy-dress",
-}
-
 CANONICAL_COLLECTIONS: List[Tuple[str, str, str]] = [
     (
         "TWO PIECES",
@@ -97,6 +107,29 @@ CANONICAL_COLLECTIONS: List[Tuple[str, str, str]] = [
 ]
 
 LEGACY_COLLECTION_SLUGS = ["festive-edit", "everyday-cotton", "bestsellers"]
+
+# Explicit legacy demo catalogue provenance manifest
+LEGACY_SAMPLE_SLUGS: Set[str] = {
+    "noorani-chanderi-kurti-set",
+    "chandni-raat-modal-silk-co-ord",
+    "zari-mahal-velvet-anarkali-suit",
+    "gulabi-rooh-handblock-cotton-set",
+    "sitara-tissue-silk-kurti-set",
+    "bagicha-muslin-tiered-angrakha",
+    "mehtab-georgette-gharara-suit",
+    "roza-pure-mulmul-everyday-co-ord",
+    "afreen-organza-embroidered-suit",
+    "dastaan-raw-silk-straight-kurti-set",
+    "firdaus-chanderi-peplum-sharara",
+    "ruhaniyat-handwoven-cotton-kurti-set",
+    "subah-pintuck-everyday-co-ord",
+    "nazm-silk-blend-tunic-cigarette-pant",
+    "ishqiyya-chiffon-printed-kurti-set",
+    "riwayat-brocade-festive-kurti-palazzo",
+    "test-silk-co-ord-set",
+    "gulabi-zari-chanderi-set",
+}
+LEGACY_SAMPLE_IDS: Set[int] = set(range(1, 19))
 
 DEFAULT_SIZES = ["S", "M", "L", "XL", "XXL"]
 DEFAULT_PRICE = Decimal("1999.00")
@@ -144,16 +177,13 @@ def parse_folder_taxonomy(folder_path: str) -> Optional[Tuple[str, str, str]]:
     """
     parts = [p.strip() for p in folder_path.replace("\\", "/").split("/") if p.strip()]
 
-    # Must be under Photos for royal libas
     if not parts:
         return None
 
-    # Handle optional leading 'Photos for royal libas'
     if parts[0].lower() == "photos for royal libas":
         parts = parts[1:]
 
     if len(parts) < 3:
-        # Parent or subcategory folder, not a leaf design folder
         return None
 
     raw_cat = parts[0].lower()
@@ -174,7 +204,7 @@ def parse_folder_taxonomy(folder_path: str) -> Optional[Tuple[str, str, str]]:
 
 
 def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
-    """Execute or simulate catalogue reconciliation."""
+    """Execute or simulate catalogue reconciliation with full provenance protection."""
     summary = {
         "legacy_products_archived": 0,
         "legacy_products_already_archived": 0,
@@ -185,6 +215,9 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
         "products_already_existing": 0,
         "variants_created": 0,
         "images_attached": 0,
+        "unverified_specs_cleaned": 0,
+        "aafreen_reverted_to_draft": False,
+        "slug_conflicts_resolved": 0,
         "dry_run": dry_run,
         "created_products_list": [],
     }
@@ -226,12 +259,13 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
             else:
                 print(f"  [Collection] Legacy collection already archived: {leg_col.name} ({legacy_slug})")
 
-    # 2. Archive Legacy Sample Products
-    print("\n--- 2. Archiving Legacy Sample Products ---")
+    # 2. Archive ONLY Explicit Legacy Demo Products (Provenance Protected)
+    print("\n--- 2. Archiving Explicit Legacy Demo Products ---")
     legacy_sample_products = (
         db.query(Product)
         .filter(
-            (Product.source_folder == None) | (~Product.source_folder.like("Photos for royal libas/%"))
+            (Product.id.in_(LEGACY_SAMPLE_IDS))
+            | (Product.slug.in_(LEGACY_SAMPLE_SLUGS))
         )
         .all()
     )
@@ -244,7 +278,7 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
                 prod.status = "ARCHIVED"
                 prod.is_active = False
             summary["legacy_products_archived"] += 1
-            print(f"  [Archive] Product #{prod.id} '{prod.name}' -> ARCHIVED (is_active=False)")
+            print(f"  [Archive] Legacy demo product #{prod.id} '{prod.name}' -> ARCHIVED (is_active=False)")
 
     # 3. Discover Design Folders and Attached Assets
     print("\n--- 3. Discovering Design Folders from Media Registry ---")
@@ -268,20 +302,27 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
     summary["designs_discovered"] = len(design_folders)
     print(f"  Total valid individual design folders discovered: {len(design_folders)}")
 
-    # 4. Create or Verify Real Design Products
+    # 4. Create or Verify Real Design Products (Stable Source Identity)
     print("\n--- 4. Creating Real Design Products in DRAFT Status ---")
 
     for folder_path, (cat, subcat, leaf) in sorted(design_folders.items()):
         clean_name = clean_name_from_folder(leaf)
         base_slug = slugify(clean_name)
 
-        # Check if already reconciled
+        # Stable Source Identity: match ONLY by source_folder
         existing_prod = db.query(Product).filter(Product.source_folder == folder_path).first()
-        if not existing_prod:
-            existing_prod = db.query(Product).filter(Product.slug == base_slug).first()
 
         if existing_prod:
             summary["products_already_existing"] += 1
+            # Ensure canonical collection membership is consistent
+            if not dry_run:
+                sync_product_category_and_collections(
+                    product=existing_prod,
+                    category=existing_prod.category,
+                    subcategory=existing_prod.subcategory,
+                    explicit_collection_ids=None,
+                    db=db,
+                )
             print(f"  [Exists] Design #{existing_prod.id} '{existing_prod.name}' already present (status={existing_prod.status})")
             continue
 
@@ -291,29 +332,22 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
         cat_code = CAT_CODE_MAP.get(cat, "RL")
         subcat_code = SUBCAT_CODE_MAP.get(subcat, "GEN")
 
-        col_slug = CATEGORY_TO_COLLECTION_SLUG.get(cat, "suit-set")
-        target_col = canonical_col_map.get(col_slug)
-        if not target_col and not dry_run:
-            target_col = db.query(Collection).filter(Collection.slug == col_slug).first()
-
-        desc = (
-            f"Artisanal {clean_name} handcrafted for Royal Libas. "
-            f"Exquisitely tailored in our signature atelier with intricate detailing, "
-            f"luxurious drape, and timeless silhouette. Details subject to owner review."
-        )
-
-        fabric = "Pure Silk / Artisan Chanderi"
-        care = "Dry clean only to preserve artisanal texture and embroidery"
-        fit = "Tailored Regular Fit"
+        # Disambiguate slug conflicts safely if another product already uses base_slug
+        candidate_slug = base_slug
+        slug_conflict = db.query(Product).filter(Product.slug == candidate_slug).first()
+        if slug_conflict:
+            candidate_slug = f"{base_slug}-{num_code}"
+            summary["slug_conflicts_resolved"] += 1
+            print(f"  [Slug Conflict] Resolved slug collision with product #{slug_conflict.id} -> '{candidate_slug}'")
 
         if not dry_run:
             new_prod = Product(
                 name=clean_name,
-                slug=base_slug,
-                description=desc,
-                fabric=fabric,
-                care=care,
-                fit=fit,
+                slug=candidate_slug,
+                description=None,  # Leave unverified description blank
+                fabric=None,       # Leave unverified fabric blank
+                care=None,         # Leave unverified care blank
+                fit=None,          # Leave unverified fit blank
                 category=cat,
                 subcategory=subcat,
                 source_folder=folder_path,
@@ -321,8 +355,13 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
                 is_active=False,
                 is_bestseller=False,
             )
-            if target_col:
-                new_prod.collections = [target_col]
+            sync_product_category_and_collections(
+                product=new_prod,
+                category=cat,
+                subcategory=subcat,
+                explicit_collection_ids=None,
+                db=db,
+            )
             db.add(new_prod)
             db.flush()
 
@@ -331,20 +370,15 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
                 db.query(MediaAsset)
                 .filter(MediaAsset.folder == folder_path)
                 .order_by(
-                    # Images first, then videos
                     case((MediaAsset.resource_type == "image", 1), else_=2),
                     MediaAsset.filename.asc(),
                 )
                 .all()
             )
 
-            primary_img_url = None
             sort_order = 1
             for asset in assets:
                 img_url = asset.secure_url or asset.url
-                if not primary_img_url and asset.resource_type == "image":
-                    primary_img_url = img_url
-
                 p_img = ProductImage(
                     product_id=new_prod.id,
                     media_asset_id=asset.id,
@@ -377,7 +411,6 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
                 db.flush()
                 summary["variants_created"] += 1
 
-                # Record Initial Stock Audit
                 adj = StockAdjustment(
                     variant_id=variant.id,
                     previous_stock=0,
@@ -396,7 +429,7 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
                 "name": clean_name,
                 "category": cat,
                 "subcategory": subcat,
-                "slug": base_slug,
+                "slug": candidate_slug,
                 "images_count": len(assets),
             })
             print(f"  [Created] #{new_prod.id} '{clean_name}' ({cat} › {subcat}) with {len(assets)} assets and 5 variants")
@@ -409,10 +442,54 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
                 "name": clean_name,
                 "category": cat,
                 "subcategory": subcat,
-                "slug": base_slug,
+                "slug": candidate_slug,
                 "images_count": assets_count,
             })
             print(f"  [Dry-Run Create] '{clean_name}' ({cat} › {subcat}) - {assets_count} assets, 5 variants")
+
+    # 5. Clean up unverified generated specifications on existing imported records
+    print("\n--- 5. Removing Unverified Generated Specifications ---")
+    cleaned_count = 0
+    imported_products = (
+        db.query(Product)
+        .filter(Product.source_folder.like("Photos for royal libas/%"))
+        .all()
+    )
+    for prod in imported_products:
+        altered = False
+        if prod.fabric == "Pure Silk / Artisan Chanderi":
+            if not dry_run:
+                prod.fabric = None
+            altered = True
+        if prod.care == "Dry clean only to preserve artisanal texture and embroidery":
+            if not dry_run:
+                prod.care = None
+            altered = True
+        if prod.fit == "Tailored Regular Fit":
+            if not dry_run:
+                prod.fit = None
+            altered = True
+        if prod.description and prod.description.startswith("Artisanal ") and "Details subject to owner review." in prod.description:
+            if not dry_run:
+                prod.description = None
+            altered = True
+
+        if altered:
+            cleaned_count += 1
+            print(f"  [Cleaned Specs] Product #{prod.id} '{prod.name}' cleared unverified generated claims")
+
+    summary["unverified_specs_cleaned"] = cleaned_count
+
+    # 6. Correct Unreviewed Placeholder Publication
+    print("\n--- 6. Correcting Unreviewed Placeholder Publication ---")
+    aafreen_folder = "Photos for royal libas/Suit Set/Three Pieces/03 - Aafreen Beige Botanical Three-Piece Suit"
+    aafreen = db.query(Product).filter(Product.source_folder == aafreen_folder).first()
+    if aafreen and (aafreen.status == "PUBLISHED" or aafreen.is_active):
+        if not dry_run:
+            aafreen.status = "DRAFT"
+            aafreen.is_active = False
+        summary["aafreen_reverted_to_draft"] = True
+        print(f"  [Reverted] Unreviewed placeholder #{aafreen.id} '{aafreen.name}' -> DRAFT (is_active=False)")
 
     if not dry_run:
         db.commit()

@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 
-from app.auth import get_current_admin, get_current_admin_optional
+from app.auth import get_current_admin, get_current_admin_optional, require_roles
 from app.database import get_db
-from app.models import Admin, Product, ProductVariant, ProductImage, Collection
+from app.models import Admin, Product, ProductVariant, ProductImage, Collection, StockAdjustment
 from app.schemas import (
     ProductCreate,
     ProductUpdate,
@@ -347,7 +347,7 @@ def admin_add_variant(
     id: int,
     payload: ProductVariantCreate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Add a new variant (size, colour, prices, stock) to an existing product."""
     product = db.query(Product).filter(Product.id == id).first()
@@ -356,6 +356,24 @@ def admin_add_variant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with id {id} not found",
         )
+
+    # Validate price and MRP
+    if payload.selling_price <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selling price must be greater than 0.",
+        )
+    if payload.mrp is not None:
+        if payload.mrp <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MRP must be greater than 0 when supplied.",
+            )
+        if payload.selling_price > payload.mrp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Selling price (₹{payload.selling_price}) cannot exceed MRP (₹{payload.mrp}).",
+            )
 
     # Check unique constraint on product + size + colour
     existing_variant = (
@@ -392,6 +410,21 @@ def admin_add_variant(
         stock=payload.stock,
     )
     db.add(variant)
+    db.flush()
+
+    if variant.stock > 0:
+        adj = StockAdjustment(
+            variant_id=variant.id,
+            previous_stock=0,
+            new_stock=variant.stock,
+            change_amount=variant.stock,
+            reason="INITIAL_SETUP",
+            note="Initial stock on variant creation",
+            actor_admin_id=current_admin.id,
+            actor_email=current_admin.email,
+        )
+        db.add(adj)
+
     db.commit()
     db.refresh(variant)
 
@@ -403,9 +436,9 @@ def admin_update_variant(
     id: int,
     payload: ProductVariantUpdate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
-    """Update price, stock, or attributes for an existing variant."""
+    """Update price, stock, or attributes for an existing variant with validation and audit trail."""
     variant = db.query(ProductVariant).filter(ProductVariant.id == id).first()
     if not variant:
         raise HTTPException(
@@ -413,12 +446,59 @@ def admin_update_variant(
             detail=f"Variant with id {id} not found",
         )
 
+    fields_set = payload.model_fields_set
+
+    # Validate final effective pricing combination
+    effective_price = payload.selling_price if payload.selling_price is not None else variant.selling_price
+    effective_mrp = payload.mrp if "mrp" in fields_set else variant.mrp
+
+    if effective_price <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selling price must be greater than 0.",
+        )
+
+    if effective_mrp is not None:
+        if effective_mrp <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MRP must be greater than 0 when supplied.",
+            )
+        if effective_price > effective_mrp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Selling price (₹{effective_price}) cannot exceed MRP (₹{effective_mrp}).",
+            )
+
     if payload.selling_price is not None:
         variant.selling_price = payload.selling_price
-    if payload.mrp is not None:
+
+    if "mrp" in fields_set:
         variant.mrp = payload.mrp
-    if payload.stock is not None:
-        variant.stock = payload.stock
+
+    if payload.stock is not None and payload.stock != variant.stock:
+        if payload.stock < 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stock count cannot be negative.",
+            )
+        previous_stock = variant.stock
+        new_stock = payload.stock
+        delta = new_stock - previous_stock
+
+        adj = StockAdjustment(
+            variant_id=variant.id,
+            previous_stock=previous_stock,
+            new_stock=new_stock,
+            change_amount=delta,
+            reason="QUICK_EDIT",
+            note="Quick stock adjustment from Products management",
+            actor_admin_id=current_admin.id,
+            actor_email=current_admin.email,
+        )
+        db.add(adj)
+        variant.stock = new_stock
+
     if payload.sku is not None:
         variant.sku = payload.sku
     if payload.colour is not None:

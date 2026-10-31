@@ -1,6 +1,8 @@
-from app.services.cloudinary_service import get_video_poster_url
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional, Set, Tuple
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+from app.services.cloudinary_service import get_video_poster_url
 from app.models import Product
 from app.schemas import (
     ProductListResponse,
@@ -8,6 +10,107 @@ from app.schemas import (
     ProductVariantResponse,
     ProductImageResponse,
 )
+
+CANONICAL_TAXONOMY: Dict[str, List[str]] = {
+    "TWO PIECES": ["Co-ord Sets", "Kurta Pant"],
+    "SUIT SET": ["Three Pieces", "Semi-party Wear", "Party Wear"],
+    "HEAVY DRESS": ["Lehenga", "Short Kurta", "Palazzo Set", "Designer Wear", "Sharara / Gharara"],
+}
+
+CATEGORY_TO_COLLECTION_SLUG: Dict[str, str] = {
+    "TWO PIECES": "two-pieces",
+    "SUIT SET": "suit-set",
+    "HEAVY DRESS": "heavy-dress",
+}
+
+CANONICAL_COLLECTION_SLUGS: Set[str] = set(CATEGORY_TO_COLLECTION_SLUG.values())
+CANONICAL_COLLECTION_NAMES: Set[str] = set(CATEGORY_TO_COLLECTION_SLUG.keys())
+
+
+def validate_category_and_subcategory(
+    category: Optional[str], subcategory: Optional[str]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Validate and normalize category and subcategory against canonical taxonomy.
+    Raises HTTPException(400) if an invalid category/subcategory combination is supplied.
+    """
+    if not category:
+        return category, subcategory
+
+    clean_cat = category.strip().upper()
+    if clean_cat not in CANONICAL_TAXONOMY:
+        valid_cats = ", ".join(CANONICAL_TAXONOMY.keys())
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid category '{category}'. Valid categories are: {valid_cats}",
+        )
+
+    clean_sub = None
+    if subcategory is not None and subcategory.strip():
+        sub_raw = subcategory.strip()
+        valid_subs = CANONICAL_TAXONOMY[clean_cat]
+        matched = next((s for s in valid_subs if s.lower() == sub_raw.lower()), None)
+        if not matched:
+            valid_subs_str = ", ".join(valid_subs)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid subcategory '{subcategory}' for category '{clean_cat}'. Valid subcategories are: {valid_subs_str}",
+            )
+        clean_sub = matched
+
+    return clean_cat, clean_sub
+
+
+def sync_product_category_and_collections(
+    product: Product,
+    category: Optional[str],
+    subcategory: Optional[str],
+    explicit_collection_ids: Optional[List[int]],
+    db: Session,
+) -> None:
+    """Synchronize category, subcategory, and ensure correct canonical collection membership.
+
+    Guarantees:
+    - Normalizes category & subcategory according to canonical taxonomy.
+    - Resolves explicit_collection_ids while ensuring canonical collection membership cannot be undone.
+    - Replaces any previous canonical main-group membership when category changes.
+    - Preserves unrelated editorial/marketing collection memberships.
+    """
+    clean_cat, clean_sub = validate_category_and_subcategory(category, subcategory)
+
+    if clean_cat is not None:
+        product.category = clean_cat
+    if subcategory is not None:
+        product.subcategory = clean_sub
+
+    # Determine base collections
+    from app.models import Collection
+
+    if explicit_collection_ids is not None:
+        base_cols = db.query(Collection).filter(Collection.id.in_(explicit_collection_ids)).all()
+    else:
+        base_cols = list(product.collections)
+
+    # Filter out existing canonical collection memberships
+    editorial_cols = [
+        c
+        for c in base_cols
+        if c.slug not in CANONICAL_COLLECTION_SLUGS
+        and (c.name or "").upper() not in CANONICAL_COLLECTION_NAMES
+    ]
+
+    effective_cat = (product.category or "").strip().upper()
+    if effective_cat in CATEGORY_TO_COLLECTION_SLUG:
+        target_slug = CATEGORY_TO_COLLECTION_SLUG[effective_cat]
+        canonical_col = db.query(Collection).filter(Collection.slug == target_slug).first()
+        if not canonical_col:
+            canonical_col = db.query(Collection).filter(Collection.name.ilike(effective_cat)).first()
+        if canonical_col:
+            product.collections = editorial_cols + [canonical_col]
+        else:
+            product.collections = editorial_cols
+    else:
+        product.collections = base_cols
+
 
 
 def derive_badges(product: Product, total_stock: int) -> List[str]:

@@ -131,7 +131,12 @@ from app.services.cloudinary_service import (
     MAX_VIDEO_SIZE_BYTES,
 )
 from app.services.payment_service import sync_cashfree_payment_status
-from app.services.product_service import build_product_detail_response, build_variant_response
+from app.services.product_service import (
+    build_product_detail_response,
+    build_variant_response,
+    validate_category_and_subcategory,
+    sync_product_category_and_collections,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -4015,26 +4020,32 @@ def admin_create_product(
     prod_status = (payload.status or "PUBLISHED").upper().strip()
     is_active = (prod_status == "PUBLISHED") if payload.status else payload.is_active
 
+    clean_cat, clean_sub = validate_category_and_subcategory(payload.category, payload.subcategory)
+
     product = Product(
         name=payload.name.strip(),
         slug=payload.slug.strip(),
-        description=payload.description,
-        fabric=payload.fabric,
-        care=payload.care,
-        fit=payload.fit,
+        description=payload.description.strip() if payload.description else None,
+        fabric=payload.fabric.strip() if payload.fabric else None,
+        care=payload.care.strip() if payload.care else None,
+        fit=payload.fit.strip() if payload.fit else None,
         size_chart=payload.size_chart,
         size_chart_id=payload.size_chart_id,
-        category=payload.category,
-        subcategory=payload.subcategory,
+        category=clean_cat,
+        subcategory=clean_sub,
         source_folder=getattr(payload, "source_folder", None),
         status=prod_status,
         is_bestseller=payload.is_bestseller,
         is_active=is_active,
     )
 
-    if payload.collection_ids:
-        collections = db.query(Collection).filter(Collection.id.in_(payload.collection_ids)).all()
-        product.collections = collections
+    sync_product_category_and_collections(
+        product=product,
+        category=clean_cat,
+        subcategory=clean_sub,
+        explicit_collection_ids=payload.collection_ids,
+        db=db,
+    )
 
     if payload.variants:
         for v in payload.variants:
@@ -4094,47 +4105,47 @@ def admin_update_product(
             )
         product.slug = payload.slug
 
-    if payload.name is not None:
+    fields_set = payload.model_fields_set
+
+    if "name" in fields_set and payload.name is not None:
         product.name = payload.name.strip()
-    if payload.description is not None:
-        product.description = payload.description
-    if payload.fabric is not None:
-        product.fabric = payload.fabric
-    if payload.care is not None:
-        product.care = payload.care
-    if payload.fit is not None:
-        product.fit = payload.fit
-    if payload.size_chart is not None:
+    if "description" in fields_set:
+        product.description = payload.description.strip() if payload.description else None
+    if "fabric" in fields_set:
+        product.fabric = payload.fabric.strip() if payload.fabric else None
+    if "care" in fields_set:
+        product.care = payload.care.strip() if payload.care else None
+    if "fit" in fields_set:
+        product.fit = payload.fit.strip() if payload.fit else None
+    if "size_chart" in fields_set:
         product.size_chart = payload.size_chart
-    if payload.size_chart_id is not None:
+    if "size_chart_id" in fields_set:
         product.size_chart_id = payload.size_chart_id
-    if payload.category is not None:
-        product.category = payload.category
-        # Automatically keep canonical main-group collection consistent with category
-        cat_upper = payload.category.upper().strip()
-        canonical_col = db.query(Collection).filter(Collection.name == cat_upper).first()
-        if canonical_col and canonical_col not in product.collections:
-            # Replace any other canonical main collection with the new one
-            canonical_names = {"TWO PIECES", "SUIT SET", "HEAVY DRESS"}
-            product.collections = [c for c in product.collections if c.name not in canonical_names] + [canonical_col]
-    if payload.subcategory is not None:
-        product.subcategory = payload.subcategory
-    if payload.source_folder is not None:
+    if "source_folder" in fields_set:
         product.source_folder = payload.source_folder
-    if payload.is_bestseller is not None:
+    if "is_bestseller" in fields_set and payload.is_bestseller is not None:
         product.is_bestseller = payload.is_bestseller
 
-    if payload.status is not None:
+    if "status" in fields_set and payload.status is not None:
         new_stat = payload.status.upper().strip()
         product.status = new_stat
         product.is_active = (new_stat == "PUBLISHED")
-    elif payload.is_active is not None:
+    elif "is_active" in fields_set and payload.is_active is not None:
         product.is_active = payload.is_active
         product.status = "PUBLISHED" if payload.is_active else "DRAFT"
 
-    if payload.collection_ids is not None:
-        collections = db.query(Collection).filter(Collection.id.in_(payload.collection_ids)).all()
-        product.collections = collections
+    # Enforce category, subcategory and canonical collection consistency
+    if "category" in fields_set or "subcategory" in fields_set or "collection_ids" in fields_set:
+        target_cat = payload.category if "category" in fields_set else product.category
+        target_sub = payload.subcategory if "subcategory" in fields_set else product.subcategory
+        target_col_ids = payload.collection_ids if "collection_ids" in fields_set else None
+        sync_product_category_and_collections(
+            product=product,
+            category=target_cat,
+            subcategory=target_sub,
+            explicit_collection_ids=target_col_ids,
+            db=db,
+        )
 
     if payload.images is not None:
         product.images = _process_product_images(payload.images, db, product.name)

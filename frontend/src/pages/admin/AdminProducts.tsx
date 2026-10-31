@@ -149,6 +149,7 @@ export const AdminProducts: React.FC = () => {
   // Inline editing state for variant
   const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
   const [editPrice, setEditPrice] = useState('');
+  const [editMrp, setEditMrp] = useState('');
   const [editStock, setEditStock] = useState('');
 
   // Image Gallery State for Existing Products
@@ -521,25 +522,48 @@ export const AdminProducts: React.FC = () => {
     }
   };
 
-  // Quick Stock / Price Update
+  // Quick Stock / Price / MRP Update
   const handleSaveVariantEdit = async (variantId: number) => {
     setActionLoading(true);
     setActionError(null);
     try {
-      const priceNum = editPrice !== '' ? parseFloat(editPrice) : undefined;
-      const stockNum = editStock !== '' ? parseInt(editStock, 10) : undefined;
+      const payload: { selling_price?: number; mrp?: number | null; stock?: number } = {};
 
-      if (priceNum !== undefined && (isNaN(priceNum) || priceNum <= 0)) {
-        throw new Error('Price must be greater than ₹0');
-      }
-      if (stockNum !== undefined && (isNaN(stockNum) || stockNum < 0)) {
-        throw new Error('Stock must be a non-negative number (0 or greater).');
+      if (editPrice.trim() !== '') {
+        const priceNum = parseFloat(editPrice);
+        if (isNaN(priceNum) || priceNum <= 0) {
+          throw new Error('Price must be greater than ₹0');
+        }
+        payload.selling_price = priceNum;
       }
 
-      await adminUpdateVariant(token, variantId, {
-        selling_price: priceNum,
-        stock: stockNum,
-      });
+      if (editStock.trim() !== '') {
+        const stockNum = parseInt(editStock, 10);
+        if (isNaN(stockNum) || stockNum < 0) {
+          throw new Error('Stock must be a non-negative number (0 or greater).');
+        }
+        payload.stock = stockNum;
+      }
+
+      // MRP can be explicitly cleared (empty string -> null) or set to a positive number
+      if (editMrp.trim() === '') {
+        payload.mrp = null;
+      } else {
+        const mrpNum = parseFloat(editMrp);
+        if (isNaN(mrpNum) || mrpNum <= 0) {
+          throw new Error('MRP must be greater than ₹0 (or leave blank to clear)');
+        }
+        payload.mrp = mrpNum;
+      }
+
+      // Client-side cross validation if both selling_price and mrp are present
+      if (payload.selling_price !== undefined && payload.mrp !== undefined && payload.mrp !== null) {
+        if (payload.selling_price > payload.mrp) {
+          throw new Error(`Selling price (${formatPrice(payload.selling_price)}) cannot exceed MRP (${formatPrice(payload.mrp)}).`);
+        }
+      }
+
+      await adminUpdateVariant(token, variantId, payload);
 
       setEditingVariantId(null);
       await loadProducts();
@@ -947,7 +971,7 @@ export const AdminProducts: React.FC = () => {
                                   Price: {formatPrice(v.selling_price)}
                                 </div>
                                 <span className="text-[11px] text-gray-400">
-                                  MRP: {formatPrice(v.mrp)}
+                                  MRP: {v.mrp !== null && v.mrp !== undefined ? formatPrice(v.mrp) : '—'}
                                 </span>
                               </div>
                             </div>
@@ -962,6 +986,19 @@ export const AdminProducts: React.FC = () => {
                                     value={editPrice}
                                     onChange={(e) => setEditPrice(e.target.value)}
                                     className="w-20 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5E1224]"
+                                    placeholder="Price"
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-gray-500">MRP:</span>
+                                  <input
+                                    type="number"
+                                    value={editMrp}
+                                    onChange={(e) => setEditMrp(e.target.value)}
+                                    className="w-24 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5E1224]"
+                                    placeholder="e.g. 2499 (or blank)"
+                                    title="Leave blank to clear MRP"
                                   />
                                 </div>
 
@@ -1033,6 +1070,7 @@ export const AdminProducts: React.FC = () => {
                                   onClick={() => {
                                     setEditingVariantId(v.id);
                                     setEditPrice(String(v.selling_price));
+                                    setEditMrp(v.mrp !== null && v.mrp !== undefined ? String(v.mrp) : '');
                                     setEditStock(String(v.stock));
                                   }}
                                   className="p-2 text-gray-500 hover:text-[#5E1224] rounded hover:bg-gray-100 min-w-[36px] min-h-[36px] flex items-center justify-center"
