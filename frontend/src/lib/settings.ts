@@ -26,6 +26,17 @@ export interface StoreSettings {
 
 const SETTINGS_STORAGE_KEY = 'royal_libas_store_settings';
 
+export const DEFAULT_EDITORIAL_IMAGES = {
+  heroImageUrl: '/images/editorial/hero_campaign.jpg',
+  categoryTwoPiecesImage: '/images/editorial/cat_suits.jpg',
+  categorySuitSetImage: '/images/editorial/cat_lehengas.jpg',
+  categoryHeavyDressImage: '/images/editorial/cat_anarkalis.jpg',
+  festiveBannerImage: '/images/editorial/festive_banner.jpg',
+  posterOccasionImage: '/images/posters/royal_occasion.jpg',
+  posterEverydayImage: '/images/posters/everyday_elegance.jpg',
+  posterStoryImage: '/images/posters/crafted_with_care.jpg',
+};
+
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   freeShippingThreshold: 1500,
   standardShippingFee: 99,
@@ -39,14 +50,14 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   heroSubtitle: "Pure handloom chanderi, tissue silks, and festive velvets made for the discerning connoisseur.",
   heroCtaText: "Explore The Collection",
   heroCtaLink: "/shop",
-  heroImageUrl: null,
-  categoryTwoPiecesImage: null,
-  categorySuitSetImage: null,
-  categoryHeavyDressImage: null,
-  festiveBannerImage: null,
-  posterOccasionImage: null,
-  posterEverydayImage: null,
-  posterStoryImage: null,
+  heroImageUrl: DEFAULT_EDITORIAL_IMAGES.heroImageUrl,
+  categoryTwoPiecesImage: DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage,
+  categorySuitSetImage: DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage,
+  categoryHeavyDressImage: DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage,
+  festiveBannerImage: DEFAULT_EDITORIAL_IMAGES.festiveBannerImage,
+  posterOccasionImage: DEFAULT_EDITORIAL_IMAGES.posterOccasionImage,
+  posterEverydayImage: DEFAULT_EDITORIAL_IMAGES.posterEverydayImage,
+  posterStoryImage: DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
 };
 
 export function getStoreSettings(): StoreSettings {
@@ -62,14 +73,14 @@ export function getStoreSettings(): StoreSettings {
       standardShippingFee: Number(parsed.standardShippingFee) || DEFAULT_STORE_SETTINGS.standardShippingFee,
       codEnabled: typeof parsed.codEnabled === 'boolean' ? parsed.codEnabled : DEFAULT_STORE_SETTINGS.codEnabled,
       onlinePaymentEnabled: typeof parsed.onlinePaymentEnabled === 'boolean' ? parsed.onlinePaymentEnabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
-      heroImageUrl: parsed.heroImageUrl ?? null,
-      categoryTwoPiecesImage: parsed.categoryTwoPiecesImage ?? null,
-      categorySuitSetImage: parsed.categorySuitSetImage ?? null,
-      categoryHeavyDressImage: parsed.categoryHeavyDressImage ?? null,
-      festiveBannerImage: parsed.festiveBannerImage ?? null,
-      posterOccasionImage: parsed.posterOccasionImage ?? null,
-      posterEverydayImage: parsed.posterEverydayImage ?? null,
-      posterStoryImage: parsed.posterStoryImage ?? null,
+      heroImageUrl: parsed.heroImageUrl || DEFAULT_EDITORIAL_IMAGES.heroImageUrl,
+      categoryTwoPiecesImage: parsed.categoryTwoPiecesImage || DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage,
+      categorySuitSetImage: parsed.categorySuitSetImage || DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage,
+      categoryHeavyDressImage: parsed.categoryHeavyDressImage || DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage,
+      festiveBannerImage: parsed.festiveBannerImage || DEFAULT_EDITORIAL_IMAGES.festiveBannerImage,
+      posterOccasionImage: parsed.posterOccasionImage || DEFAULT_EDITORIAL_IMAGES.posterOccasionImage,
+      posterEverydayImage: parsed.posterEverydayImage || DEFAULT_EDITORIAL_IMAGES.posterEverydayImage,
+      posterStoryImage: parsed.posterStoryImage || DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
     };
   } catch {
     return DEFAULT_STORE_SETTINGS;
@@ -112,14 +123,14 @@ export function useStoreSettings(): {
           heroSubtitle: serverData.hero_subtitle || DEFAULT_STORE_SETTINGS.heroSubtitle,
           heroCtaText: serverData.hero_cta_text || DEFAULT_STORE_SETTINGS.heroCtaText,
           heroCtaLink: serverData.hero_cta_link || DEFAULT_STORE_SETTINGS.heroCtaLink,
-          heroImageUrl: serverData.hero_image_url || null,
-          categoryTwoPiecesImage: serverData.category_two_pieces_image || null,
-          categorySuitSetImage: serverData.category_suit_set_image || null,
-          categoryHeavyDressImage: serverData.category_heavy_dress_image || null,
-          festiveBannerImage: serverData.festive_banner_image || null,
-          posterOccasionImage: serverData.poster_occasion_image || null,
-          posterEverydayImage: serverData.poster_everyday_image || null,
-          posterStoryImage: serverData.poster_story_image || null,
+          heroImageUrl: serverData.hero_image_url || DEFAULT_EDITORIAL_IMAGES.heroImageUrl,
+          categoryTwoPiecesImage: serverData.category_two_pieces_image || DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage,
+          categorySuitSetImage: serverData.category_suit_set_image || DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage,
+          categoryHeavyDressImage: serverData.category_heavy_dress_image || DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage,
+          festiveBannerImage: serverData.festive_banner_image || DEFAULT_EDITORIAL_IMAGES.festiveBannerImage,
+          posterOccasionImage: serverData.poster_occasion_image || DEFAULT_EDITORIAL_IMAGES.posterOccasionImage,
+          posterEverydayImage: serverData.poster_everyday_image || DEFAULT_EDITORIAL_IMAGES.posterEverydayImage,
+          posterStoryImage: serverData.poster_story_image || DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
         };
         saveStoreSettings(synced);
         setSettings(synced);

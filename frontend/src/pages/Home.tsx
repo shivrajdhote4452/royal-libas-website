@@ -105,9 +105,9 @@ export const Home: React.FC = () => {
             {/* Mobile-First Fashion Image Display (prominent visual on mobile before text) */}
             <div className="lg:hidden w-full">
               <div className="hero-motion-frame relative aspect-[4/3] sm:aspect-[16/11] overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900 group">
-                {settings.heroImageUrl ? (
+                {settings.heroImageUrl || '/images/editorial/hero_campaign.jpg' ? (
                   <img
-                    src={settings.heroImageUrl}
+                    src={settings.heroImageUrl || '/images/editorial/hero_campaign.jpg'}
                     alt={settings.heroTitle || 'Royal Libas A New Heirloom Campaign'}
                     className="hero-motion-image w-full h-full object-cover object-top"
                   />
@@ -186,9 +186,9 @@ export const Home: React.FC = () => {
             {/* Right Column: Hero High-Resolution Fashion Photography (Desktop) */}
             <div className="hidden lg:block lg:col-span-7">
               <div className="hero-motion-frame relative aspect-[16/11] overflow-hidden border border-[#B58A3C]/45 shadow-[0_24px_60px_rgba(0,0,0,0.65)] bg-neutral-950 group">
-                {settings.heroImageUrl ? (
+                {settings.heroImageUrl || '/images/editorial/hero_campaign.jpg' ? (
                   <img
-                    src={settings.heroImageUrl}
+                    src={settings.heroImageUrl || '/images/editorial/hero_campaign.jpg'}
                     alt={settings.heroTitle || 'Royal Libas Campaign'}
                     className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-700 ease-out"
                   />
@@ -322,21 +322,21 @@ export const Home: React.FC = () => {
             {
               title: 'TWO PIECES',
               subtitle: 'Co-ord Sets & Kurta Pant',
-              image: settings.categoryTwoPiecesImage,
+              image: settings.categoryTwoPiecesImage || '/images/editorial/cat_suits.jpg',
               href: '/shop?category=TWO+PIECES',
               tag: 'Modern Silhouettes',
             },
             {
               title: 'SUIT SET',
               subtitle: 'Three Pieces, Semi-party & Party Wear',
-              image: settings.categorySuitSetImage,
+              image: settings.categorySuitSetImage || '/images/editorial/cat_lehengas.jpg',
               href: '/shop?category=SUIT+SET',
               tag: 'Royal Ensembles',
             },
             {
               title: 'HEAVY DRESS',
               subtitle: 'Lehenga, Sharara, Gharara & Designer Wear',
-              image: settings.categoryHeavyDressImage,
+              image: settings.categoryHeavyDressImage || '/images/editorial/cat_anarkalis.jpg',
               href: '/shop?category=HEAVY+DRESS',
               tag: 'Grand Occasions',
             },
@@ -478,9 +478,9 @@ export const Home: React.FC = () => {
           ======================================================== */}
       <section className="reveal-on-scroll relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
         <div className="relative min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] flex items-center">
-          {settings.festiveBannerImage ? (
+          {settings.festiveBannerImage || '/images/editorial/festive_banner.jpg' ? (
             <img
-              src={settings.festiveBannerImage}
+              src={settings.festiveBannerImage || '/images/editorial/festive_banner.jpg'}
               alt="The Festive Collection Campaign"
               className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-center opacity-75"
               loading="lazy"

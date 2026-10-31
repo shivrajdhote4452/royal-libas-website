@@ -41,9 +41,9 @@ export const About: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16 items-center">
           {/* Editorial Campaign Photography */}
           <div className="relative mx-auto w-full aspect-[4/5] rounded-none overflow-hidden shadow-2xl border border-[#B58A3C]/40 bg-[#2B1B1E] flex items-center justify-center">
-            {settings.posterStoryImage || settings.heroImageUrl ? (
+            {settings.posterStoryImage || settings.heroImageUrl || '/images/editorial/brand_story_hero.jpg' ? (
               <img
-                src={settings.posterStoryImage || settings.heroImageUrl || undefined}
+                src={settings.posterStoryImage || settings.heroImageUrl || '/images/editorial/brand_story_hero.jpg'}
                 alt="Royal Libas Living Heritage"
                 className="w-full h-full object-cover object-center"
               />

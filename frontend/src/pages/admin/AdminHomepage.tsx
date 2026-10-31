@@ -23,6 +23,7 @@ interface ImageFieldProps {
   label: string;
   recommendation: string;
   value: string;
+  defaultImageUrl?: string;
   onChange: (val: string) => void;
   onOpenMediaModal: (fieldSetter: (val: string) => void) => void;
   onDirectUpload: (file: File, fieldSetter: (val: string) => void) => Promise<void>;
@@ -34,12 +35,16 @@ const MediaFieldRow: React.FC<ImageFieldProps> = ({
   label,
   recommendation,
   value,
+  defaultImageUrl,
   onChange,
   onOpenMediaModal,
   onDirectUpload,
   uploading,
   aspectRatioLabel = '4:5 Portrait',
 }) => {
+  const displayImage = value || defaultImageUrl;
+  const isCustom = Boolean(value);
+
   return (
     <div className="bg-white p-4 border border-[#E5D9C5] rounded-xl shadow-sm space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -52,31 +57,37 @@ const MediaFieldRow: React.FC<ImageFieldProps> = ({
             {recommendation} &bull; <span className="font-medium text-[#5E1224]">{aspectRatioLabel}</span>
           </p>
         </div>
-        {value && (
+        {isCustom ? (
           <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 self-start sm:self-auto">
-            Active Image Configured ✓
+            Custom Image Active ✓
           </span>
-        )}
+        ) : defaultImageUrl ? (
+          <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 self-start sm:self-auto">
+            Default Asset Active
+          </span>
+        ) : null}
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-start">
         {/* Preview Container */}
         <div className="w-28 sm:w-32 h-36 sm:h-40 bg-[#FCF8F0] border border-[#E8DFD0] rounded-lg overflow-hidden shrink-0 flex items-center justify-center relative shadow-inner group">
-          {value ? (
+          {displayImage ? (
             <>
               <img
-                src={value}
+                src={displayImage}
                 alt={label}
                 className="w-full h-full object-cover object-top"
               />
-              <button
-                type="button"
-                onClick={() => onChange('')}
-                className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-red-700 text-white rounded-full transition-colors opacity-0 group-hover:opacity-100"
-                title="Remove photo"
-              >
-                <X className="w-3 h-3" />
-              </button>
+              {isCustom && (
+                <button
+                  type="button"
+                  onClick={() => onChange('')}
+                  className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-red-700 text-white rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                  title="Reset to default image"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </>
           ) : (
             <div className="p-3 text-center text-[#5E1224]/60">
@@ -411,6 +422,7 @@ export const AdminHomepage: React.FC = () => {
             recommendation="Recommended 1800 x 1200 px landscape fashion photograph"
             aspectRatioLabel="16:11 or 4:3 Wide"
             value={heroImageUrl}
+            defaultImageUrl="/images/editorial/hero_campaign.jpg"
             onChange={setHeroImageUrl}
             onOpenMediaModal={handleOpenMediaModal}
             onDirectUpload={handleDirectUpload}
@@ -437,6 +449,7 @@ export const AdminHomepage: React.FC = () => {
               recommendation="Contemporary two-piece silhouette portrait"
               aspectRatioLabel="4:5 Portrait (800 x 1000 px)"
               value={catTwoPiecesImage}
+              defaultImageUrl="/images/editorial/cat_suits.jpg"
               onChange={setCatTwoPiecesImage}
               onOpenMediaModal={handleOpenMediaModal}
               onDirectUpload={handleDirectUpload}
@@ -448,6 +461,7 @@ export const AdminHomepage: React.FC = () => {
               recommendation="Regal three-piece suit set or party wear portrait"
               aspectRatioLabel="4:5 Portrait (800 x 1000 px)"
               value={catSuitSetImage}
+              defaultImageUrl="/images/editorial/cat_lehengas.jpg"
               onChange={setCatSuitSetImage}
               onOpenMediaModal={handleOpenMediaModal}
               onDirectUpload={handleDirectUpload}
@@ -459,6 +473,7 @@ export const AdminHomepage: React.FC = () => {
               recommendation="Grand celebration lehenga or sharara silhouette portrait"
               aspectRatioLabel="4:5 Portrait (800 x 1000 px)"
               value={catHeavyDressImage}
+              defaultImageUrl="/images/editorial/cat_anarkalis.jpg"
               onChange={setCatHeavyDressImage}
               onOpenMediaModal={handleOpenMediaModal}
               onDirectUpload={handleDirectUpload}
@@ -486,6 +501,7 @@ export const AdminHomepage: React.FC = () => {
               recommendation="Rich wide banner for celebrations and festive edits"
               aspectRatioLabel="16:9 Wide Banner (1600 x 900 px)"
               value={festiveBannerImage}
+              defaultImageUrl="/images/editorial/festive_banner.jpg"
               onChange={setFestiveBannerImage}
               onOpenMediaModal={handleOpenMediaModal}
               onDirectUpload={handleDirectUpload}
@@ -497,6 +513,7 @@ export const AdminHomepage: React.FC = () => {
               recommendation="Opulent celebration atmosphere with dark maroon mood"
               aspectRatioLabel="Vertical / Square (1200 x 1200 px)"
               value={posterOccasionImage}
+              defaultImageUrl="/images/posters/royal_occasion.jpg"
               onChange={setPosterOccasionImage}
               onOpenMediaModal={handleOpenMediaModal}
               onDirectUpload={handleDirectUpload}
@@ -508,6 +525,7 @@ export const AdminHomepage: React.FC = () => {
               recommendation="Bright daytime ivory aesthetic for relaxed elegance"
               aspectRatioLabel="Vertical / Square (1200 x 1200 px)"
               value={posterEverydayImage}
+              defaultImageUrl="/images/posters/everyday_elegance.jpg"
               onChange={setPosterEverydayImage}
               onOpenMediaModal={handleOpenMediaModal}
               onDirectUpload={handleDirectUpload}
@@ -519,6 +537,7 @@ export const AdminHomepage: React.FC = () => {
               recommendation="Intimate artisan craft, hand-embroidery, or textile close-up"
               aspectRatioLabel="Vertical / Square (1200 x 1200 px)"
               value={posterStoryImage}
+              defaultImageUrl="/images/posters/crafted_with_care.jpg"
               onChange={setPosterStoryImage}
               onOpenMediaModal={handleOpenMediaModal}
               onDirectUpload={handleDirectUpload}

@@ -68,6 +68,13 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
       ? 'poster-img-everyday'
       : 'poster-img-story';
 
+  const isCustomOverride = Boolean(
+    customImage &&
+    customImage.trim() !== '' &&
+    customImage !== imageJpg &&
+    customImage !== imageWebp
+  );
+
   return (
     <section
       id={id}
@@ -76,9 +83,9 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
     >
       {/* Background Poster Picture with WebP & JPG Progressive Fallbacks */}
       <div className="poster-image-frame pointer-events-none">
-        {customImage ? (
+        {isCustomOverride ? (
           <img
-            src={customImage}
+            src={customImage!}
             alt={imageAlt}
             loading="lazy"
             decoding="async"

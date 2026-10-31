@@ -217,9 +217,9 @@ export const Contact: React.FC = () => {
 
           {/* RIGHT: Editorial Fashion Portrait (lg:col-span-5) (PDF Page 11) */}
           <div className="lg:col-span-5 min-h-[350px] lg:min-h-full bg-[#2B1B1E] relative flex items-center justify-center">
-            {settings.heroImageUrl || settings.posterStoryImage ? (
+            {settings.heroImageUrl || settings.posterStoryImage || '/images/editorial/cat_lehengas.jpg' ? (
               <img
-                src={settings.heroImageUrl || settings.posterStoryImage || undefined}
+                src={settings.heroImageUrl || settings.posterStoryImage || '/images/editorial/cat_lehengas.jpg'}
                 alt="Royal Libas Atelier Editorial"
                 className="w-full h-full object-cover object-top"
               />
