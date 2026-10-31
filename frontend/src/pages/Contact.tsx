@@ -6,6 +6,13 @@ import { useStoreSettings } from '../lib/settings';
 export const Contact: React.FC = () => {
   const { settings, syncWithServer } = useStoreSettings();
   const [submitted, setSubmitted] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
+
+  const DEFAULT_CONTACT_IMAGE = '/images/editorial/cat_lehengas.jpg';
+  const rawImage = settings.heroImageUrl || settings.posterStoryImage;
+  const effectiveContactImage = (!imgFailed && rawImage && !rawImage.includes('res.cloudinary.com/demo/'))
+    ? rawImage
+    : DEFAULT_CONTACT_IMAGE;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -217,28 +224,15 @@ export const Contact: React.FC = () => {
 
           {/* RIGHT: Editorial Fashion Portrait (lg:col-span-5) (PDF Page 11) */}
           <div className="lg:col-span-5 min-h-[350px] lg:min-h-full bg-[#2B1B1E] relative flex items-center justify-center">
-            {settings.heroImageUrl || settings.posterStoryImage || '/images/editorial/cat_lehengas.jpg' ? (
-              <img
-                src={settings.heroImageUrl || settings.posterStoryImage || '/images/editorial/cat_lehengas.jpg'}
-                alt="Royal Libas Atelier Editorial"
-                className="w-full h-full object-cover object-top"
-              />
-            ) : (
-              <div className="w-full h-full p-8 flex flex-col items-center justify-center text-center text-[#FCF8F0] border border-[#B58A3C]/30 select-none bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#1A0B0E]">
-                <div className="w-16 h-16 rounded-full border border-[#D4AF67]/60 flex items-center justify-center mb-4 bg-[#1A0B0E]/60 shadow-lg">
-                  <span className="font-serif text-2xl font-bold text-[#D4AF67]">RL</span>
-                </div>
-                <span className="text-[10px] uppercase tracking-[0.28em] text-[#D4AF67] font-semibold">
-                  ROYAL LIBAS
-                </span>
-                <h3 className="font-serif text-xl font-bold mt-1 text-[#FCF8F0]">
-                  Atelier Concierge
-                </h3>
-                <p className="text-xs text-[#FCF8F0]/70 mt-2 max-w-xs font-light">
-                  Personalized bespoke assistance for festive styling, custom sizing, and boutique orders.
-                </p>
-              </div>
-            )}
+            <img
+              src={effectiveContactImage}
+              alt="Royal Libas Atelier Editorial"
+              className="w-full h-full object-cover object-top"
+              onError={() => {
+                if (effectiveContactImage !== DEFAULT_CONTACT_IMAGE) setImgFailed(true);
+              }}
+            />
+
           </div>
         </div>
       </div>

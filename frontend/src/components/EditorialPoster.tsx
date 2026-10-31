@@ -68,11 +68,24 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
       ? 'poster-img-everyday'
       : 'poster-img-story';
 
+  const [customFailed, setCustomFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setCustomFailed(false);
+  }, [customImage]);
+
+  const isDemo = Boolean(
+    customImage &&
+    (customImage.includes('res.cloudinary.com/demo/') || customImage.includes('sample_'))
+  );
+
   const isCustomOverride = Boolean(
     customImage &&
     customImage.trim() !== '' &&
     customImage !== imageJpg &&
-    customImage !== imageWebp
+    customImage !== imageWebp &&
+    !isDemo &&
+    !customFailed
   );
 
   return (
@@ -89,6 +102,7 @@ export const EditorialPoster: React.FC<EditorialPosterProps> = ({
             alt={imageAlt}
             loading="lazy"
             decoding="async"
+            onError={() => setCustomFailed(true)}
             className={`poster-motion-img ${imagePositionClass}`}
           />
         ) : (

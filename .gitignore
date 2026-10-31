@@ -9,6 +9,7 @@ test_logo.py
 *.db
 *.sqlite
 *.sqlite3
+*backup*.json
 
 # Local references and docs (Do NOT commit phase-wise plan PDF)
 *.pdf

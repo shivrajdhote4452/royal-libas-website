@@ -37,6 +37,24 @@ export const DEFAULT_EDITORIAL_IMAGES = {
   posterStoryImage: '/images/posters/crafted_with_care.jpg',
 };
 
+export function isDemoImageUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  return (
+    /res\.cloudinary\.com\/demo\//i.test(trimmed) ||
+    /sample_(hero|occasion|everyday|story|festive|two_pieces|suit_set|heavy_dress)/i.test(trimmed)
+  );
+}
+
+export function sanitizeSettingUrl(url: string | null | undefined, defaultUrl: string): string {
+  if (!url || typeof url !== 'string') return defaultUrl;
+  const trimmed = url.trim();
+  if (!trimmed || isDemoImageUrl(trimmed)) {
+    return defaultUrl;
+  }
+  return trimmed;
+}
+
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   freeShippingThreshold: 1500,
   standardShippingFee: 99,
@@ -66,22 +84,39 @@ export function getStoreSettings(): StoreSettings {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_STORE_SETTINGS;
     const parsed = JSON.parse(raw);
-    return {
+
+    let hadDemo = false;
+    const cleanUrl = (val: string | null | undefined, defaultVal: string) => {
+      if (val && isDemoImageUrl(val)) {
+        hadDemo = true;
+        return defaultVal;
+      }
+      return sanitizeSettingUrl(val, defaultVal);
+    };
+
+    const sanitized: StoreSettings = {
       ...DEFAULT_STORE_SETTINGS,
       ...parsed,
       freeShippingThreshold: Number(parsed.freeShippingThreshold) || DEFAULT_STORE_SETTINGS.freeShippingThreshold,
       standardShippingFee: Number(parsed.standardShippingFee) || DEFAULT_STORE_SETTINGS.standardShippingFee,
       codEnabled: typeof parsed.codEnabled === 'boolean' ? parsed.codEnabled : DEFAULT_STORE_SETTINGS.codEnabled,
       onlinePaymentEnabled: typeof parsed.onlinePaymentEnabled === 'boolean' ? parsed.onlinePaymentEnabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
-      heroImageUrl: parsed.heroImageUrl || DEFAULT_EDITORIAL_IMAGES.heroImageUrl,
-      categoryTwoPiecesImage: parsed.categoryTwoPiecesImage || DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage,
-      categorySuitSetImage: parsed.categorySuitSetImage || DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage,
-      categoryHeavyDressImage: parsed.categoryHeavyDressImage || DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage,
-      festiveBannerImage: parsed.festiveBannerImage || DEFAULT_EDITORIAL_IMAGES.festiveBannerImage,
-      posterOccasionImage: parsed.posterOccasionImage || DEFAULT_EDITORIAL_IMAGES.posterOccasionImage,
-      posterEverydayImage: parsed.posterEverydayImage || DEFAULT_EDITORIAL_IMAGES.posterEverydayImage,
-      posterStoryImage: parsed.posterStoryImage || DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
+      heroImageUrl: cleanUrl(parsed.heroImageUrl, DEFAULT_EDITORIAL_IMAGES.heroImageUrl),
+      categoryTwoPiecesImage: cleanUrl(parsed.categoryTwoPiecesImage, DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage),
+      categorySuitSetImage: cleanUrl(parsed.categorySuitSetImage, DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage),
+      categoryHeavyDressImage: cleanUrl(parsed.categoryHeavyDressImage, DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage),
+      festiveBannerImage: cleanUrl(parsed.festiveBannerImage, DEFAULT_EDITORIAL_IMAGES.festiveBannerImage),
+      posterOccasionImage: cleanUrl(parsed.posterOccasionImage, DEFAULT_EDITORIAL_IMAGES.posterOccasionImage),
+      posterEverydayImage: cleanUrl(parsed.posterEverydayImage, DEFAULT_EDITORIAL_IMAGES.posterEverydayImage),
+      posterStoryImage: cleanUrl(parsed.posterStoryImage, DEFAULT_EDITORIAL_IMAGES.posterStoryImage),
     };
+
+    // If cached browser settings had demo URLs, overwrite immediately to prevent stale overrides
+    if (hadDemo) {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(sanitized));
+    }
+
+    return sanitized;
   } catch {
     return DEFAULT_STORE_SETTINGS;
   }
@@ -123,14 +158,14 @@ export function useStoreSettings(): {
           heroSubtitle: serverData.hero_subtitle || DEFAULT_STORE_SETTINGS.heroSubtitle,
           heroCtaText: serverData.hero_cta_text || DEFAULT_STORE_SETTINGS.heroCtaText,
           heroCtaLink: serverData.hero_cta_link || DEFAULT_STORE_SETTINGS.heroCtaLink,
-          heroImageUrl: serverData.hero_image_url || DEFAULT_EDITORIAL_IMAGES.heroImageUrl,
-          categoryTwoPiecesImage: serverData.category_two_pieces_image || DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage,
-          categorySuitSetImage: serverData.category_suit_set_image || DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage,
-          categoryHeavyDressImage: serverData.category_heavy_dress_image || DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage,
-          festiveBannerImage: serverData.festive_banner_image || DEFAULT_EDITORIAL_IMAGES.festiveBannerImage,
-          posterOccasionImage: serverData.poster_occasion_image || DEFAULT_EDITORIAL_IMAGES.posterOccasionImage,
-          posterEverydayImage: serverData.poster_everyday_image || DEFAULT_EDITORIAL_IMAGES.posterEverydayImage,
-          posterStoryImage: serverData.poster_story_image || DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
+          heroImageUrl: sanitizeSettingUrl(serverData.hero_image_url, DEFAULT_EDITORIAL_IMAGES.heroImageUrl),
+          categoryTwoPiecesImage: sanitizeSettingUrl(serverData.category_two_pieces_image, DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage),
+          categorySuitSetImage: sanitizeSettingUrl(serverData.category_suit_set_image, DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage),
+          categoryHeavyDressImage: sanitizeSettingUrl(serverData.category_heavy_dress_image, DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage),
+          festiveBannerImage: sanitizeSettingUrl(serverData.festive_banner_image, DEFAULT_EDITORIAL_IMAGES.festiveBannerImage),
+          posterOccasionImage: sanitizeSettingUrl(serverData.poster_occasion_image, DEFAULT_EDITORIAL_IMAGES.posterOccasionImage),
+          posterEverydayImage: sanitizeSettingUrl(serverData.poster_everyday_image, DEFAULT_EDITORIAL_IMAGES.posterEverydayImage),
+          posterStoryImage: sanitizeSettingUrl(serverData.poster_story_image, DEFAULT_EDITORIAL_IMAGES.posterStoryImage),
         };
         saveStoreSettings(synced);
         setSettings(synced);

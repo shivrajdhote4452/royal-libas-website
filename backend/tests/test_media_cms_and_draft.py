@@ -34,6 +34,30 @@ class TestMediaCmsAndDraft(unittest.TestCase):
                 db.commit()
                 db.refresh(owner)
             cls.token = create_access_token(data={"sub": str(owner.id), "role": owner.role})
+
+            # Save initial store settings so tests never permanently modify them
+            st = db.query(StoreSetting).filter(StoreSetting.id == 1).first()
+            cls._saved_settings = {}
+            if st:
+                for k in [
+                    "hero_image_url", "category_two_pieces_image", "category_suit_set_image",
+                    "category_heavy_dress_image", "festive_banner_image", "poster_occasion_image",
+                    "poster_everyday_image", "poster_story_image"
+                ]:
+                    cls._saved_settings[k] = getattr(st, k, None)
+        finally:
+            db.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        db = SessionLocal()
+        try:
+            if hasattr(cls, "_saved_settings") and cls._saved_settings:
+                st = db.query(StoreSetting).filter(StoreSetting.id == 1).first()
+                if st:
+                    for k, v in cls._saved_settings.items():
+                        setattr(st, k, v)
+                    db.commit()
         finally:
             db.close()
 
@@ -59,14 +83,14 @@ class TestMediaCmsAndDraft(unittest.TestCase):
         headers = {"Authorization": f"Bearer {self.token}"}
 
         payload = {
-            "hero_image_url": "https://res.cloudinary.com/demo/image/upload/sample_hero.jpg",
-            "category_two_pieces_image": "https://res.cloudinary.com/demo/image/upload/sample_two_pieces.jpg",
-            "category_suit_set_image": "https://res.cloudinary.com/demo/image/upload/sample_suit_set.jpg",
-            "category_heavy_dress_image": "https://res.cloudinary.com/demo/image/upload/sample_heavy_dress.jpg",
-            "festive_banner_image": "https://res.cloudinary.com/demo/image/upload/sample_festive_banner.jpg",
-            "poster_occasion_image": "https://res.cloudinary.com/demo/image/upload/sample_occasion.jpg",
-            "poster_everyday_image": "https://res.cloudinary.com/demo/image/upload/sample_everyday.jpg",
-            "poster_story_image": "https://res.cloudinary.com/demo/image/upload/sample_story.jpg",
+            "hero_image_url": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_hero.jpg",
+            "category_two_pieces_image": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_two_pieces.jpg",
+            "category_suit_set_image": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_suit_set.jpg",
+            "category_heavy_dress_image": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_heavy_dress.jpg",
+            "festive_banner_image": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_festive_banner.jpg",
+            "poster_occasion_image": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_occasion.jpg",
+            "poster_everyday_image": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_everyday.jpg",
+            "poster_story_image": "https://res.cloudinary.com/zkgaklhl/image/upload/v1/cms/test_story.jpg",
         }
 
         # Update via Admin

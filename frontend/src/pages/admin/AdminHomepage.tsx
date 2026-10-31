@@ -42,8 +42,16 @@ const MediaFieldRow: React.FC<ImageFieldProps> = ({
   uploading,
   aspectRatioLabel = '4:5 Portrait',
 }) => {
-  const displayImage = value || defaultImageUrl;
-  const isCustom = Boolean(value);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [value]);
+
+  const isDemo = Boolean(value && (value.includes('res.cloudinary.com/demo/') || value.includes('sample_')));
+  const isDefault = !value || value === defaultImageUrl || isDemo;
+  const isCustom = Boolean(value && !isDefault);
+  const displayImage = (!loadError && isCustom) ? value : (defaultImageUrl || value);
 
   return (
     <div className="bg-white p-4 border border-[#E5D9C5] rounded-xl shadow-sm space-y-3">
@@ -57,15 +65,19 @@ const MediaFieldRow: React.FC<ImageFieldProps> = ({
             {recommendation} &bull; <span className="font-medium text-[#5E1224]">{aspectRatioLabel}</span>
           </p>
         </div>
-        {isCustom ? (
+        {loadError ? (
+          <span className="text-[10px] font-semibold text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 self-start sm:self-auto">
+            Custom Image Failed &bull; Default Active
+          </span>
+        ) : isCustom ? (
           <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 self-start sm:self-auto">
             Custom Image Active ✓
           </span>
-        ) : defaultImageUrl ? (
+        ) : (
           <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 self-start sm:self-auto">
             Default Asset Active
           </span>
-        ) : null}
+        )}
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-start">
@@ -76,6 +88,9 @@ const MediaFieldRow: React.FC<ImageFieldProps> = ({
               <img
                 src={displayImage}
                 alt={label}
+                onError={() => {
+                  if (isCustom) setLoadError(true);
+                }}
                 className="w-full h-full object-cover object-top"
               />
               {isCustom && (
@@ -202,16 +217,21 @@ export const AdminHomepage: React.FC = () => {
       setHeroSubtitle(data.hero_subtitle || 'Pure handloom chanderi, tissue silks, and festive velvets made for the discerning connoisseur.');
       setHeroCtaText(data.hero_cta_text || 'Explore The Collection');
       setHeroCtaLink(data.hero_cta_link || '/shop');
-      setHeroImageUrl(data.hero_image_url || '');
+      const sanitizeIncoming = (url?: string | null) => {
+        if (!url) return '';
+        if (url.includes('res.cloudinary.com/demo/') || url.includes('sample_')) return '';
+        return url;
+      };
+      setHeroImageUrl(sanitizeIncoming(data.hero_image_url));
 
-      setCatTwoPiecesImage(data.category_two_pieces_image || '');
-      setCatSuitSetImage(data.category_suit_set_image || '');
-      setCatHeavyDressImage(data.category_heavy_dress_image || '');
+      setCatTwoPiecesImage(sanitizeIncoming(data.category_two_pieces_image));
+      setCatSuitSetImage(sanitizeIncoming(data.category_suit_set_image));
+      setCatHeavyDressImage(sanitizeIncoming(data.category_heavy_dress_image));
 
-      setFestiveBannerImage(data.festive_banner_image || '');
-      setPosterOccasionImage(data.poster_occasion_image || '');
-      setPosterEverydayImage(data.poster_everyday_image || '');
-      setPosterStoryImage(data.poster_story_image || '');
+      setFestiveBannerImage(sanitizeIncoming(data.festive_banner_image));
+      setPosterOccasionImage(sanitizeIncoming(data.poster_occasion_image));
+      setPosterEverydayImage(sanitizeIncoming(data.poster_everyday_image));
+      setPosterStoryImage(sanitizeIncoming(data.poster_story_image));
     } catch (err: any) {
       setNotification({ type: 'error', message: err.message || 'Failed to load homepage settings' });
     } finally {

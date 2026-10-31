@@ -21,6 +21,27 @@ export const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Safeguard against broken custom images with zero error loops
+  const [heroImgFailed, setHeroImgFailed] = useState(false);
+  const [festiveImgFailed, setFestiveImgFailed] = useState(false);
+  const [failedCatImages, setFailedCatImages] = useState<Record<string, boolean>>({});
+
+  const DEFAULT_HERO_IMAGE = '/images/editorial/hero_campaign.jpg';
+  const effectiveHeroImage = (!heroImgFailed && settings.heroImageUrl && !settings.heroImageUrl.includes('res.cloudinary.com/demo/'))
+    ? settings.heroImageUrl
+    : DEFAULT_HERO_IMAGE;
+
+  const DEFAULT_FESTIVE_BANNER = '/images/editorial/festive_banner.jpg';
+  const effectiveFestiveImage = (!festiveImgFailed && settings.festiveBannerImage && !settings.festiveBannerImage.includes('res.cloudinary.com/demo/'))
+    ? settings.festiveBannerImage
+    : DEFAULT_FESTIVE_BANNER;
+
+  const DEFAULT_CAT_IMAGES: Record<string, string> = {
+    'TWO PIECES': '/images/editorial/cat_suits.jpg',
+    'SUIT SET': '/images/editorial/cat_lehengas.jpg',
+    'HEAVY DRESS': '/images/editorial/cat_anarkalis.jpg',
+  };
+
   useEffect(() => {
     document.title = 'Royal Libas by Tanya | Handcrafted Festive Silhouettes & Couture';
     let isMounted = true;
@@ -105,25 +126,15 @@ export const Home: React.FC = () => {
             {/* Mobile-First Fashion Image Display (prominent visual on mobile before text) */}
             <div className="lg:hidden w-full">
               <div className="hero-motion-frame relative aspect-[4/3] sm:aspect-[16/11] overflow-hidden border border-[#B58A3C]/40 shadow-2xl bg-neutral-900 group">
-                {settings.heroImageUrl || '/images/editorial/hero_campaign.jpg' ? (
-                  <img
-                    src={settings.heroImageUrl || '/images/editorial/hero_campaign.jpg'}
-                    alt={settings.heroTitle || 'Royal Libas A New Heirloom Campaign'}
-                    className="hero-motion-image w-full h-full object-cover object-top"
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#180A0E] text-[#FCF8F0] border border-[#B58A3C]/30 select-none">
-                    <div className="w-12 h-12 rounded-full border border-[#D4AF67]/50 flex items-center justify-center mb-2">
-                      <span className="font-serif text-lg font-bold text-[#D4AF67]">RL</span>
-                    </div>
-                    <span className="text-[10px] uppercase tracking-[0.25em] text-[#D4AF67] font-semibold">
-                      ATELIER EDIT 2026
-                    </span>
-                    <p className="font-serif text-base text-[#FCF8F0] mt-1 font-medium">
-                      Photo coming soon
-                    </p>
-                  </div>
-                )}
+                <img
+                  src={effectiveHeroImage}
+                  alt={settings.heroTitle || 'Royal Libas A New Heirloom Campaign'}
+                  className="hero-motion-image w-full h-full object-cover object-top"
+                  onError={() => {
+                    if (effectiveHeroImage !== DEFAULT_HERO_IMAGE) setHeroImgFailed(true);
+                  }}
+                />
+
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
                 <div className="absolute bottom-3 left-3 z-10">
                   <span className="inline-flex items-center px-2.5 py-1 text-[9.5px] font-bold tracking-[0.2em] uppercase bg-[#5E1224]/95 text-[#FCF8F0] border border-[#B58A3C]/50 shadow-md backdrop-blur-sm">
@@ -186,28 +197,15 @@ export const Home: React.FC = () => {
             {/* Right Column: Hero High-Resolution Fashion Photography (Desktop) */}
             <div className="hidden lg:block lg:col-span-7">
               <div className="hero-motion-frame relative aspect-[16/11] overflow-hidden border border-[#B58A3C]/45 shadow-[0_24px_60px_rgba(0,0,0,0.65)] bg-neutral-950 group">
-                {settings.heroImageUrl || '/images/editorial/hero_campaign.jpg' ? (
-                  <img
-                    src={settings.heroImageUrl || '/images/editorial/hero_campaign.jpg'}
-                    alt={settings.heroTitle || 'Royal Libas Campaign'}
-                    className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-700 ease-out"
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-[#2B1B1E] via-[#3E161D] to-[#180A0E] text-[#FCF8F0] border border-[#B58A3C]/30 select-none">
-                    <div className="w-16 h-16 rounded-full border border-[#D4AF67]/60 flex items-center justify-center mb-3 shadow-lg bg-[#180A0E]/60">
-                      <span className="font-serif text-2xl font-bold text-[#D4AF67]">RL</span>
-                    </div>
-                    <span className="text-xs uppercase tracking-[0.28em] text-[#D4AF67] font-semibold">
-                      ROYAL LIBAS ATELIER
-                    </span>
-                    <h3 className="font-serif text-2xl text-[#FCF8F0] mt-1 font-bold">
-                      {settings.heroTitle || 'Timeless Elegance'}
-                    </h3>
-                    <p className="text-xs text-[#FCF8F0]/70 mt-1 max-w-sm">
-                      Handcrafted silhouettes for modern celebrations. Real photography coming soon.
-                    </p>
-                  </div>
-                )}
+                <img
+                  src={effectiveHeroImage}
+                  alt={settings.heroTitle || 'Royal Libas Campaign'}
+                  className="hero-motion-image w-full h-full object-cover object-top group-hover:scale-[1.03] transition-transform duration-700 ease-out"
+                  onError={() => {
+                    if (effectiveHeroImage !== DEFAULT_HERO_IMAGE) setHeroImgFailed(true);
+                  }}
+                />
+
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
 
                 {/* Editorial Brand Accent */}
@@ -322,21 +320,27 @@ export const Home: React.FC = () => {
             {
               title: 'TWO PIECES',
               subtitle: 'Co-ord Sets & Kurta Pant',
-              image: settings.categoryTwoPiecesImage || '/images/editorial/cat_suits.jpg',
+              image: (!failedCatImages['TWO PIECES'] && settings.categoryTwoPiecesImage && !settings.categoryTwoPiecesImage.includes('res.cloudinary.com/demo/'))
+                ? settings.categoryTwoPiecesImage
+                : DEFAULT_CAT_IMAGES['TWO PIECES'],
               href: '/shop?category=TWO+PIECES',
               tag: 'Modern Silhouettes',
             },
             {
               title: 'SUIT SET',
               subtitle: 'Three Pieces, Semi-party & Party Wear',
-              image: settings.categorySuitSetImage || '/images/editorial/cat_lehengas.jpg',
+              image: (!failedCatImages['SUIT SET'] && settings.categorySuitSetImage && !settings.categorySuitSetImage.includes('res.cloudinary.com/demo/'))
+                ? settings.categorySuitSetImage
+                : DEFAULT_CAT_IMAGES['SUIT SET'],
               href: '/shop?category=SUIT+SET',
               tag: 'Royal Ensembles',
             },
             {
               title: 'HEAVY DRESS',
               subtitle: 'Lehenga, Sharara, Gharara & Designer Wear',
-              image: settings.categoryHeavyDressImage || '/images/editorial/cat_anarkalis.jpg',
+              image: (!failedCatImages['HEAVY DRESS'] && settings.categoryHeavyDressImage && !settings.categoryHeavyDressImage.includes('res.cloudinary.com/demo/'))
+                ? settings.categoryHeavyDressImage
+                : DEFAULT_CAT_IMAGES['HEAVY DRESS'],
               href: '/shop?category=HEAVY+DRESS',
               tag: 'Grand Occasions',
             },
@@ -353,6 +357,12 @@ export const Home: React.FC = () => {
                     alt={cat.title}
                     className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
                     loading="lazy"
+                    onError={() => {
+                      const defaultImg = DEFAULT_CAT_IMAGES[cat.title];
+                      if (cat.image !== defaultImg) {
+                        setFailedCatImages((prev) => ({ ...prev, [cat.title]: true }));
+                      }
+                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent group-hover:from-black/75 transition-colors pointer-events-none" />
                 </>
@@ -478,16 +488,16 @@ export const Home: React.FC = () => {
           ======================================================== */}
       <section className="reveal-on-scroll relative overflow-hidden bg-[#2B1B1E] text-[#FCF8F0] border-y border-[#B58A3C]/30 my-6">
         <div className="relative min-h-[380px] sm:min-h-[460px] lg:min-h-[520px] flex items-center">
-          {settings.festiveBannerImage || '/images/editorial/festive_banner.jpg' ? (
-            <img
-              src={settings.festiveBannerImage || '/images/editorial/festive_banner.jpg'}
-              alt="The Festive Collection Campaign"
-              className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-center opacity-75"
-              loading="lazy"
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-r from-[#200A0F] via-[#330F17] to-[#1A060A] opacity-95 pointer-events-none" />
-          )}
+          <img
+            src={effectiveFestiveImage}
+            alt="The Festive Collection Campaign"
+            className="editorial-motion-image absolute inset-0 w-full h-full object-cover object-center opacity-75"
+            loading="lazy"
+            onError={() => {
+              if (effectiveFestiveImage !== DEFAULT_FESTIVE_BANNER) setFestiveImgFailed(true);
+            }}
+          />
+
           <div className="absolute inset-0 bg-gradient-to-r from-[#180A0E]/95 via-[#180A0E]/80 to-transparent pointer-events-none" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-20 w-full">
