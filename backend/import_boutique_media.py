@@ -70,11 +70,16 @@ def detect_file_type(filename: str) -> tuple[str, str, str]:
         return "image", ext, "application/octet-stream"
 
 
-def load_or_create_manifest() -> Dict[str, Any]:
-    if os.path.exists(MANIFEST_PATH):
+def load_or_create_manifest(manifest_path: Optional[str] = None) -> Dict[str, Any]:
+    target_path = manifest_path or MANIFEST_PATH
+    if os.path.exists(target_path):
         try:
-            with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+            with open(target_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                data.setdefault("folders", [])
+                data.setdefault("folder_operations", {})
+                data.setdefault("files", {})
+                return data
         except Exception as e:
             print(f"[WARN] Failed to load existing manifest ({e}), starting fresh.")
     return {
@@ -84,18 +89,26 @@ def load_or_create_manifest() -> Dict[str, Any]:
         "updated_at": datetime.now().isoformat(),
         "total_files": 0,
         "folders": [],
+        "folder_operations": {},
         "files": {},
     }
 
 
-def save_manifest(manifest: Dict[str, Any]):
+def save_manifest(manifest: Dict[str, Any], manifest_path: Optional[str] = None):
+    target_path = manifest_path or MANIFEST_PATH
     manifest["updated_at"] = datetime.now().isoformat()
-    with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
+    with open(target_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
 
-def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, db_session: Optional[SessionLocal] = None):
+def run_import(
+    dry_run: bool = False,
+    custom_source_dir: Optional[str] = None,
+    db_session: Optional[SessionLocal] = None,
+    custom_manifest_path: Optional[str] = None,
+):
     source_path = custom_source_dir or SOURCE_DIR
+    manifest_file = custom_manifest_path or MANIFEST_PATH
     print("=" * 65)
     print(">>> ROYAL LIBAS BOUTIQUE MEDIA IMPORT <<<")
     print(f"Source Directory: {source_path}")
@@ -125,7 +138,7 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
 
     db = db_session or SessionLocal()
     close_db = db_session is None
-    manifest = load_or_create_manifest()
+    manifest = load_or_create_manifest(manifest_file)
     manifest["source_dir"] = source_path
     manifest["cloud_name"] = CLOUDINARY_CLOUD_NAME
 
@@ -166,25 +179,83 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
     print(f"Discovered {len(all_dirs)} directories and {len(all_files)} media files.")
     manifest["total_files"] = len(all_files)
     manifest["folders"] = [d["path"] for d in all_dirs]
-    save_manifest(manifest)
+    save_manifest(manifest, manifest_file)
 
     # 2. Register all folders in DB & Cloudinary
     print("\n[Step 2] Synchronizing boutique folder hierarchy...")
-    remote_confirmed_folders = set()
-    for d_info in all_dirs:
-        remote_confirmed = False
-        if not dry_run:
-            try:
-                c_res = create_cloudinary_folder(d_info["path"])
-                if c_res.get("success"):
-                    remote_confirmed = True
-                    remote_confirmed_folders.add(d_info["path"])
-                else:
-                    print(f"  [WARN] Cloudinary folder creation failed for {d_info['path']}: {c_res.get('error')}")
-            except Exception as f_err:
-                print(f"  [WARN] Cloudinary folder creation exception for {d_info['path']}: {f_err}")
+    local_folders_created = 0
+    local_folders_existing = 0
+    cloudinary_folders_confirmed = 0
+    cloudinary_folders_failed = 0
+    cloudinary_folders_unconfirmed = 0
+    folder_errors: List[Dict[str, Any]] = []
 
-        db_folder = db.query(MediaFolder).filter(MediaFolder.path == d_info["path"]).first()
+    folder_ops = manifest.setdefault("folder_operations", {})
+
+    for d_info in all_dirs:
+        folder_path = d_info["path"]
+        remote_confirmed = False
+        prev_op = folder_ops.get(folder_path, {})
+        prev_confirmed = prev_op.get("remote_confirmed", False)
+
+        if not dry_run:
+            if prev_confirmed:
+                remote_confirmed = True
+                cloudinary_folders_confirmed += 1
+            else:
+                try:
+                    c_res = create_cloudinary_folder(folder_path)
+                    if c_res.get("success"):
+                        remote_confirmed = True
+                        cloudinary_folders_confirmed += 1
+                        folder_ops[folder_path] = {
+                            "path": folder_path,
+                            "status": "confirmed",
+                            "remote_confirmed": True,
+                            "local_present": True,
+                            "error": None,
+                            "updated_at": datetime.now().isoformat(),
+                        }
+                    else:
+                        err_msg = c_res.get("error", "Cloudinary remote folder creation failed")
+                        remote_confirmed = False
+                        cloudinary_folders_failed += 1
+                        folder_errors.append({"path": folder_path, "error": err_msg, "status": "failed"})
+                        folder_ops[folder_path] = {
+                            "path": folder_path,
+                            "status": "failed",
+                            "remote_confirmed": False,
+                            "local_present": True,
+                            "error": err_msg,
+                            "updated_at": datetime.now().isoformat(),
+                        }
+                        print(f"  [WARN] Cloudinary folder creation failed for {folder_path}: {err_msg}")
+                except Exception as f_err:
+                    err_msg = str(f_err)
+                    remote_confirmed = False
+                    cloudinary_folders_failed += 1
+                    folder_errors.append({"path": folder_path, "error": err_msg, "status": "failed"})
+                    folder_ops[folder_path] = {
+                        "path": folder_path,
+                        "status": "failed",
+                        "remote_confirmed": False,
+                        "local_present": True,
+                        "error": err_msg,
+                        "updated_at": datetime.now().isoformat(),
+                    }
+                    print(f"  [WARN] Cloudinary folder creation exception for {folder_path}: {err_msg}")
+        else:
+            cloudinary_folders_unconfirmed += 1
+            folder_ops.setdefault(folder_path, {
+                "path": folder_path,
+                "status": "pending",
+                "remote_confirmed": False,
+                "local_present": False,
+                "error": None,
+                "updated_at": datetime.now().isoformat(),
+            })
+
+        db_folder = db.query(MediaFolder).filter(MediaFolder.path == folder_path).first()
         if not db_folder:
             if not dry_run:
                 db_folder = MediaFolder(
@@ -194,19 +265,29 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                 )
                 db.add(db_folder)
                 db.commit()
+                local_folders_created += 1
                 status_note = "[EMPTY FOLDER PRESERVED]" if d_info["is_empty"] else ""
-                remote_tag = "[REMOTE OK]" if remote_confirmed else "[LOCAL ONLY]"
-                print(f"  + Created folder: {d_info['path']} {status_note} {remote_tag}")
+                remote_tag = "[REMOTE OK]" if remote_confirmed else "[LOCAL ONLY - REMOTE FAILED/PENDING]"
+                print(f"  + Created folder: {folder_path} {status_note} {remote_tag}")
+            else:
+                local_folders_created += 1
         else:
+            local_folders_existing += 1
             if d_info["is_empty"]:
-                print(f"  [OK] Preserved empty folder: {d_info['path']}")
+                print(f"  [OK] Preserved empty folder: {folder_path}")
+
+    # Preserve folder_operations in manifest
+    manifest["folder_operations"] = folder_ops
+    save_manifest(manifest, manifest_file)
 
     # 3. Process each file: reconcile by SHA-256 hash or public_id
     print(f"\n[Step 3] Reconciling and organizing {len(all_files)} boutique media files...")
-    reorganized_count = 0
-    reused_count = 0
-    imported_count = 0
-    failed_count = 0
+    files_reorganized = 0
+    files_reused = 0
+    files_uploaded = 0
+    files_failed = 0
+    files_pending = 0
+    file_errors: List[Dict[str, Any]] = []
 
     for idx, f_info in enumerate(all_files, 1):
         rel_key = f_info["relative_path"]
@@ -241,8 +322,9 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                     )
                     if not move_res.get("success", False):
                         # Remote move failed: preserve previous local folder and record failure
-                        failed_count += 1
+                        files_failed += 1
                         err_msg = move_res.get("error", "Cloudinary asset move failed")
+                        file_errors.append({"file": rel_key, "error": err_msg, "status": "move_failed"})
                         print(f"  [FAIL - LOCAL PRESERVED] Failed to move Cloudinary asset folder for {existing_db_asset.public_id}: {err_msg}")
                         manifest["files"][rel_key] = {
                             "status": "move_failed",
@@ -269,15 +351,15 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                             "mime_type": existing_db_asset.mime_type or mime_type,
                             "reused": True,
                         }
-                        save_manifest(manifest)
+                        save_manifest(manifest, manifest_file)
                         continue
                     else:
                         existing_db_asset.folder = target_folder
-                        reorganized_count += 1
+                        files_reorganized += 1
                 else:
-                    reorganized_count += 1
+                    files_reorganized += 1
             else:
-                reused_count += 1
+                files_reused += 1
 
             if not dry_run:
                 existing_db_asset.relative_source_path = rel_key
@@ -312,7 +394,7 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                 "mime_type": existing_db_asset.mime_type or mime_type,
                 "reused": True,
             }
-            save_manifest(manifest)
+            save_manifest(manifest, manifest_file)
             continue
 
         # Check if manifest has an uncommitted upload result from an interrupted previous run
@@ -324,7 +406,7 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
         else:
             if dry_run:
                 print(f"[{idx}/{len(all_files)}] [DRY-RUN] Would upload: {filename} -> {target_folder}")
-                imported_count += 1
+                files_pending += 1
                 continue
 
             # Upload to Cloudinary with bounded retry
@@ -353,7 +435,8 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                         time.sleep(1)
                     else:
                         print(f"[{idx}/{len(all_files)}] [FAIL] Upload failed for {filename}: {up_err}")
-                        failed_count += 1
+                        files_failed += 1
+                        file_errors.append({"file": rel_key, "error": str(up_err), "status": "upload_failed"})
                         manifest["files"][rel_key] = {
                             "status": "failed",
                             "error": str(up_err),
@@ -362,7 +445,7 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                             "filename": filename,
                             "relative_source_path": rel_key,
                         }
-                        save_manifest(manifest)
+                        save_manifest(manifest, manifest_file)
                         uploaded_res = None
 
             if not uploaded_res:
@@ -374,13 +457,14 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
 
             if not public_id or not secure_url:
                 print(f"[{idx}/{len(all_files)}] [FAIL] Unconfirmed result for {filename}")
-                failed_count += 1
+                files_failed += 1
+                file_errors.append({"file": rel_key, "error": "Unconfirmed result: missing public_id or secure_url", "status": "upload_failed"})
                 manifest["files"][rel_key] = {
                     "status": "failed",
                     "error": "Unconfirmed result: missing public_id or secure_url",
                     "content_hash": content_hash,
                 }
-                save_manifest(manifest)
+                save_manifest(manifest, manifest_file)
                 continue
 
             upload_meta = {
@@ -407,7 +491,7 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
                 "filename": filename,
                 "relative_source_path": rel_key,
             }
-            save_manifest(manifest)
+            save_manifest(manifest, manifest_file)
 
         # Register in DB
         try:
@@ -437,48 +521,100 @@ def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, d
             db.commit()
             db.refresh(new_asset)
 
-            imported_count += 1
+            files_uploaded += 1
             manifest["files"][rel_key]["status"] = "registered"
             manifest["files"][rel_key]["db_id"] = new_asset.id
-            save_manifest(manifest)
+            save_manifest(manifest, manifest_file)
             print(f"[{idx}/{len(all_files)}] Imported: {filename} -> DB ID {new_asset.id}")
 
         except Exception as db_err:
             db.rollback()
             print(f"[{idx}/{len(all_files)}] [DB-ERROR] Failed to save {filename} to DB: {db_err}")
-            failed_count += 1
+            files_failed += 1
+            file_errors.append({"file": rel_key, "error": str(db_err), "status": "db_error"})
             # Status remains 'uploaded' with recoverable metadata so retry does not re-upload
             manifest["files"][rel_key]["status"] = "uploaded"
             manifest["files"][rel_key]["db_error"] = str(db_err)
-            save_manifest(manifest)
+            save_manifest(manifest, manifest_file)
 
     # NOTE: Routine import NEVER deletes assets or folders!
     # Cleanup is strictly a separate maintenance action with dry-run and explicit confirmation.
 
     if close_db:
         db.close()
-    save_manifest(manifest)
+    save_manifest(manifest, manifest_file)
+
+    # Determine accurate overall status
+    if dry_run:
+        overall_status = "pending"
+    elif files_failed > 0 or cloudinary_folders_failed > 0:
+        if (files_uploaded > 0 or files_reused > 0 or files_reorganized > 0 or
+            cloudinary_folders_confirmed > 0 or local_folders_created > 0 or local_folders_existing > 0):
+            overall_status = "partial_failure"
+        else:
+            overall_status = "failed"
+    elif cloudinary_folders_unconfirmed > 0 or files_pending > 0:
+        overall_status = "pending"
+    else:
+        overall_status = "complete"
 
     print("\n" + "=" * 65)
-    print(">>> MEDIA IMPORT & REORGANIZATION COMPLETE <<<")
+    print(">>> MEDIA IMPORT & REORGANIZATION SUMMARY <<<")
     print("=" * 65)
-    print(f"Source Folder:        {source_path}")
-    print(f"Total Source Files:   {len(all_files)}")
-    print(f"Reorganized:          {reorganized_count}")
-    print(f"Reused (Unchanged):   {reused_count}")
-    print(f"New Uploads:          {imported_count}")
-    print(f"Failures:             {failed_count}")
-    print(f"Boutique Folders:     {len(all_dirs)}")
-    print(f"Manifest Saved At:    {MANIFEST_PATH}")
+    print(f"Overall Status:               {overall_status.upper()}")
+    print(f"Source Folder:                {source_path}")
+    print("\n[1] Inventory:")
+    print(f"  - Source Files Discovered:  {len(all_files)}")
+    print(f"  - Source Folders:           {len(all_dirs)}")
+    print("\n[2] File Operations:")
+    print(f"  - Files Uploaded:           {files_uploaded}")
+    print(f"  - Files Reused (Unchanged): {files_reused}")
+    print(f"  - Files Reorganized:        {files_reorganized}")
+    print(f"  - Files Failed:             {files_failed}")
+    print(f"  - Files Pending:            {files_pending}")
+    print("\n[3] Folder Operations:")
+    print(f"  - Local Folders Created:    {local_folders_created}")
+    print(f"  - Local Folders Existing:   {local_folders_existing}")
+    print(f"  - Cloudinary Confirmed:     {cloudinary_folders_confirmed}")
+    print(f"  - Cloudinary Failed:        {cloudinary_folders_failed}")
+    print(f"  - Cloudinary Unconfirmed:   {cloudinary_folders_unconfirmed}")
+
+    if folder_errors:
+        print("\n[4] Cloudinary Folder Failures:")
+        for fe in folder_errors:
+            print(f"  [FOLDER FAIL] {fe['path']}: {fe['error']}")
+
+    if file_errors:
+        print("\n[5] File Failures:")
+        for fe in file_errors:
+            print(f"  [FILE FAIL] {fe['file']}: {fe['error']}")
+
+    print(f"\nManifest Saved At:            {manifest_file}")
     print("=" * 65)
 
     return {
+        "status": overall_status,
         "source_dir": source_path,
+        "source_files": len(all_files),
+        "source_folders": len(all_dirs),
+        "files_uploaded": files_uploaded,
+        "files_reused": files_reused,
+        "files_reorganized": files_reorganized,
+        "files_failed": files_failed,
+        "files_pending": files_pending,
+        "local_folders_created": local_folders_created,
+        "local_folders_existing": local_folders_existing,
+        "cloudinary_folders_confirmed": cloudinary_folders_confirmed,
+        "cloudinary_folders_failed": cloudinary_folders_failed,
+        "cloudinary_folders_unconfirmed": cloudinary_folders_unconfirmed,
+        "folder_errors": folder_errors,
+        "file_errors": file_errors,
+        # Backwards compatible alias keys for existing code & tests
         "total_source_files": len(all_files),
-        "reorganized": reorganized_count,
-        "reused": reused_count,
-        "imported": imported_count,
-        "failed": failed_count,
+        "reorganized": files_reorganized,
+        "reused": files_reused,
+        "imported": files_uploaded if not dry_run else files_pending,
+        "failed": files_failed,
         "boutique_folders": len(all_dirs),
     }
 

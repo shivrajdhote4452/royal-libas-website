@@ -40,7 +40,8 @@ def migrate_manifest_to_db(db_session: Optional[Session] = None, manifest_path: 
         folders_created = 0
         folders_existing = 0
 
-        for f_path in folders_list:
+        for f_entry in folders_list:
+            f_path = f_entry["path"] if isinstance(f_entry, dict) else f_entry
             existing = db.query(MediaFolder).filter(MediaFolder.path == f_path).first()
             if not existing:
                 parts = f_path.rsplit("/", 1)

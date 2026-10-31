@@ -285,7 +285,7 @@ class TestMediaCleanupAndSafety(unittest.TestCase):
                  patch("import_boutique_media.detect_cloudinary_folder_mode", return_value="dynamic"), \
                  patch("import_boutique_media.compute_sha256", return_value="hash_gulnaar_unique"), \
                  patch("import_boutique_media.move_cloudinary_asset_folder", mock_move), \
-                 patch("import_boutique_media.save_manifest", side_effect=lambda m: captured_manifest.update(m)):
+                 patch("import_boutique_media.save_manifest", side_effect=lambda m, *args: captured_manifest.update(m)):
                 summary = import_boutique_media.run_import(dry_run=False, custom_source_dir=temp_source, db_session=self.db)
 
         # Asset local folder MUST remain old_folder_path
