@@ -34,11 +34,11 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
         cls.admin_token = create_access_token({"sub": str(admin.id), "role": admin.role})
 
         # Ensure a test product with category TWO PIECES and subcategory Co-ord Sets
-        prod = cls.db.query(Product).filter(Product.slug == "test-coord-nav-item").first()
+        prod = cls.db.query(Product).filter(Product.slug == "test-coord-nav-item-active").first()
         if not prod:
             prod = Product(
                 name="Test Silk Co-ord Set",
-                slug="test-coord-nav-item",
+                slug="test-coord-nav-item-active",
                 category="TWO PIECES",
                 subcategory="Co-ord Sets",
                 fabric="Pure Silk",
@@ -59,7 +59,12 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
             )
             cls.db.add(variant)
             cls.db.commit()
+        if prod:
+            prod.status = "PUBLISHED"
+            prod.is_active = True
+            cls.db.commit()
         cls.test_product = prod
+        cls.test_variant = cls.db.query(ProductVariant).filter(ProductVariant.product_id == prod.id).first()
 
         # Ensure a test order for exchange testing
         order = cls.db.query(Order).filter(Order.order_code == "RL-2026-EXCH-TEST").first()
@@ -102,6 +107,10 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
     def tearDownClass(cls):
         # Clean up created return requests for test order
         cls.db.query(ReturnRequest).filter(ReturnRequest.order_id == cls.test_order.id).delete()
+        for v in cls.db.query(ProductVariant).filter(ProductVariant.sku == "RL-COORD-TEST-M").all():
+            cls.db.delete(v)
+        for p in cls.db.query(Product).filter(Product.slug == "test-coord-nav-item-active").all():
+            cls.db.delete(p)
         cls.db.commit()
         cls.db.close()
 
@@ -111,15 +120,15 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
         res = client.get("/products?category=TWO%20PIECES")
         self.assertEqual(res.status_code, 200)
         items = res.json()
-        self.assertTrue(any(p["slug"] == "test-coord-nav-item" for p in items))
+        self.assertTrue(any(p["slug"] == "test-coord-nav-item-active" for p in items))
 
         # 2. Filter by both category and subcategory
         res2 = client.get("/products?category=TWO%20PIECES&subcategory=Co-ord%20Sets")
         self.assertEqual(res2.status_code, 200)
         items2 = res2.json()
-        self.assertTrue(any(p["slug"] == "test-coord-nav-item" for p in items2))
+        self.assertTrue(any(p["slug"] == "test-coord-nav-item-active" for p in items2))
         for p in items2:
-            if p["slug"] == "test-coord-nav-item":
+            if p["slug"] == "test-coord-nav-item-active":
                 self.assertEqual(p["category"], "TWO PIECES")
                 self.assertEqual(p["subcategory"], "Co-ord Sets")
 
@@ -127,7 +136,7 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
         res3 = client.get("/products?category=TWO%20PIECES&subcategory=Kurta%20Pant")
         self.assertEqual(res3.status_code, 200)
         items3 = res3.json()
-        self.assertFalse(any(p["slug"] == "test-coord-nav-item" for p in items3))
+        self.assertFalse(any(p["slug"] == "test-coord-nav-item-active" for p in items3))
 
     def test_02_exchange_verification_rules(self):
         """Test customer exchange request authorization and security rules."""
@@ -222,7 +231,7 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
             "phone": "9811223344",
             "payment_method": "COD",
             "shipping_method": "STANDARD",
-            "items": [{"variant_id": self.test_product.variants[0].id, "quantity": 1}],
+            "items": [{"variant_id": self.test_variant.id, "quantity": 1}],
             "address": {
                 "name": "Test COD Buyer",
                 "phone": "9811223344",
