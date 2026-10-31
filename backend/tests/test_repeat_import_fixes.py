@@ -627,6 +627,282 @@ class TestRepeatImportFixes(unittest.TestCase):
         self.assertEqual(aafreen.status, "PUBLISHED")
         self.assertTrue(aafreen.is_active)
 
+    def test_13_validate_cloudinary_delivery_url_strict_host_and_scheme(self):
+        """13. Delivery URL validation enforces HTTPS and approved CDN hosts."""
+        from import_new_arrivals import validate_cloudinary_delivery_url
+
+        cloud = "galbyoxi"
+        pid = "Photos for royal libas/Two Pieces/sample_photo"
+
+        # Insecure HTTP
+        valid, r = validate_cloudinary_delivery_url(
+            f"http://res.cloudinary.com/{cloud}/image/upload/{pid}.png",
+            cloud, "image", pid
+        )
+        self.assertFalse(valid)
+        self.assertIn("HTTPS", r)
+
+        # Unrelated domain containing cloud & resource_type in path
+        valid, r = validate_cloudinary_delivery_url(
+            f"https://example.com/{cloud}/image/upload/{pid}.png",
+            cloud, "image", pid
+        )
+        self.assertFalse(valid)
+        self.assertIn("approved Cloudinary delivery host", r)
+
+        # Attacker domain with subdomain spoofing
+        valid, r = validate_cloudinary_delivery_url(
+            f"https://res.cloudinary.com.attacker.com/{cloud}/image/upload/{pid}.png",
+            cloud, "image", pid
+        )
+        self.assertFalse(valid)
+        self.assertIn("approved Cloudinary delivery host", r)
+
+        # Unconfigured custom domain
+        valid, r = validate_cloudinary_delivery_url(
+            f"https://cdn.custom-royallibas.com/{cloud}/image/upload/{pid}.png",
+            cloud, "image", pid, custom_domain=None
+        )
+        self.assertFalse(valid)
+        self.assertIn("approved Cloudinary delivery host", r)
+
+        # Configured custom domain
+        valid, r = validate_cloudinary_delivery_url(
+            f"https://cdn.custom-royallibas.com/{cloud}/image/upload/{pid}.png",
+            cloud, "image", pid, custom_domain="cdn.custom-royallibas.com"
+        )
+        self.assertTrue(valid)
+
+        # Standard CDN hosts: res.cloudinary.com and shard domains
+        for host in ["res.cloudinary.com", "api.cloudinary.com", "res-1.cloudinary.com", "res-4.cloudinary.com"]:
+            valid, r = validate_cloudinary_delivery_url(
+                f"https://{host}/{cloud}/image/upload/{pid}.png",
+                cloud, "image", pid
+            )
+            self.assertTrue(valid, f"Expected {host} to be valid: {r}")
+
+    def test_14_validate_cloudinary_delivery_url_transformations_and_nested_pids(self):
+        """14. Delivery URL handles version segments, transformations, and URL encoding."""
+        from import_new_arrivals import validate_cloudinary_delivery_url
+
+        cloud = "galbyoxi"
+        pid = "Photos for royal libas/Two Pieces/Gulmeher Co-ord Set/photo 01"
+
+        # Transformed + versioned + URL encoded
+        url = f"https://res.cloudinary.com/{cloud}/image/upload/c_fill,w_300/t_custom_thumb/v1698765432/Photos%20for%20royal%20libas/Two%20Pieces/Gulmeher%20Co-ord%20Set/photo%2001.png"
+        valid, r = validate_cloudinary_delivery_url(url, cloud, "image", pid)
+        self.assertTrue(valid, f"Failed on valid transformed/versioned URL: {r}")
+
+        # URL pointing to a different public ID
+        diff_url = f"https://res.cloudinary.com/{cloud}/image/upload/v1698765432/Photos%20for%20royal%20libas/Two%20Pieces/Gulmeher%20Co-ord%20Set/photo%2099_unrelated.png"
+        valid, r = validate_cloudinary_delivery_url(diff_url, cloud, "image", pid)
+        self.assertFalse(valid)
+        self.assertIn("does not match", r)
+
+        # Mismatched cloud name
+        diff_cloud = f"https://res.cloudinary.com/another_cloud/image/upload/v1698765432/Photos%20for%20royal%20libas/Two%20Pieces/Gulmeher%20Co-ord%20Set/photo%2001.png"
+        valid, r = validate_cloudinary_delivery_url(diff_cloud, cloud, "image", pid)
+        self.assertFalse(valid)
+        self.assertIn("cloud name", r)
+
+        # Mismatched resource type (video expected, image in url)
+        valid, r = validate_cloudinary_delivery_url(url, cloud, "video", pid)
+        self.assertFalse(valid)
+        self.assertIn("resource type", r)
+
+    def test_15_recovery_with_unrelated_or_mismatched_url_falls_back_to_upload(self):
+        """15. Recovery with an unrelated host or wrong public_id is rejected and uploads cleanly."""
+        rel_key = "Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set/gulmeher-dusty-mauve-waistcoat-co-ord-set-01.png"
+        content_hash = compute_sha256(self.photo_path)
+
+        # Poison the manifest with an unrelated URL
+        poisoned_manifest = {
+            "source_directory": self.source_dir,
+            "cloud_name": CLOUDINARY_CLOUD_NAME,
+            "files": {
+                rel_key: {
+                    "status": "uploaded",
+                    "content_hash": content_hash,
+                    "asset_id": "spoofed_asset_id_999",
+                    "public_id": "Photos for royal libas/Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set/spoofed",
+                    "cloud_name": CLOUDINARY_CLOUD_NAME,
+                    "resource_type": "image",
+                    "format": "png",
+                    "secure_url": f"https://example.com/{CLOUDINARY_CLOUD_NAME}/image/upload/unrelated-photo.png",
+                    "folder": "Photos for royal libas/Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set",
+                    "filename": self.photo_filename,
+                    "relative_source_path": rel_key,
+                }
+            }
+        }
+        with open(self.manifest_path, "w", encoding="utf-8") as f:
+            json.dump(poisoned_manifest, f, indent=2)
+
+        # Run import: recovery must reject the poisoned entry and perform a fresh validated upload
+        summary = import_new_arrivals(
+            dry_run=False,
+            confirm=True,
+            mock_upload=True,
+            source_dir=self.source_dir,
+            manifest_path=self.manifest_path,
+            db_session=self.db,
+        )
+        self.assertEqual(summary["media_assets_uploaded"], 1)
+
+        # Check DB asset: must have clean, validated delivery URL, not the spoofed example.com URL
+        asset = self.db.query(MediaAsset).first()
+        self.assertNotIn("example.com", asset.secure_url)
+        self.assertIn("res.cloudinary.com", asset.secure_url)
+
+        # Check manifest: must be overwritten with clean, valid registered metadata
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            updated_manifest = json.load(f)
+        saved_entry = updated_manifest["files"][rel_key]
+        self.assertEqual(saved_entry["status"], "registered")
+        self.assertIn("res.cloudinary.com", saved_entry["secure_url"])
+        self.assertNotIn("example.com", saved_entry["secure_url"])
+
+    def test_16_two_identical_files_in_same_run_commit_failure_prevents_false_registration(self):
+        """16. When two identical files in the same run share an uncommitted asset, commit failure leaves no false registered status."""
+        # Add a second identical file in the same design
+        second_photo_filename = "gulmeher-dusty-mauve-waistcoat-co-ord-set-02.png"
+        second_photo_path = os.path.join(self.design_dir, second_photo_filename)
+        shutil.copy2(self.photo_path, second_photo_path)
+
+        rel_key_1 = "Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set/gulmeher-dusty-mauve-waistcoat-co-ord-set-01.png"
+        rel_key_2 = "Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set/gulmeher-dusty-mauve-waistcoat-co-ord-set-02.png"
+
+        # Cause database commit to fail
+        failing_db = self.Session()
+        def fail_commit():
+            raise RuntimeError("Commit exploded on purpose")
+        failing_db.commit = fail_commit
+
+        try:
+            with self.assertRaises(RuntimeError):
+                import_new_arrivals(
+                    dry_run=False,
+                    confirm=True,
+                    mock_upload=True,
+                    source_dir=self.source_dir,
+                    manifest_path=self.manifest_path,
+                    db_session=failing_db,
+                )
+        finally:
+            failing_db.close()
+
+        # Check manifest: neither file 1 nor file 2 can be marked 'registered' or have db_id
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            manifest_after_fail = json.load(f)
+
+        f1 = manifest_after_fail.get("files", {}).get(rel_key_1)
+        f2 = manifest_after_fail.get("files", {}).get(rel_key_2)
+
+        self.assertIsNotNone(f1)
+        self.assertEqual(f1.get("status"), "uploaded")
+        self.assertNotIn("db_id", f1)
+
+        self.assertIsNotNone(f2)
+        # Crucial bug verification: File 2 re-used File 1's flushed asset; it must NOT have marked 'registered' before commit
+        self.assertEqual(f2.get("status"), "uploaded")
+        self.assertNotIn("db_id", f2)
+
+        # Retry with healthy session: must succeed without re-uploading and register both
+        retry_summary = import_new_arrivals(
+            dry_run=False,
+            confirm=True,
+            mock_upload=True,
+            source_dir=self.source_dir,
+            manifest_path=self.manifest_path,
+            db_session=self.db,
+        )
+        self.assertEqual(retry_summary["products_created"], 1)
+
+        # Check manifest after retry: both files must now be registered with valid db_id
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            manifest_after_retry = json.load(f)
+
+        f1_retry = manifest_after_retry.get("files", {}).get(rel_key_1)
+        f2_retry = manifest_after_retry.get("files", {}).get(rel_key_2)
+
+        self.assertEqual(f1_retry.get("status"), "registered")
+        self.assertIsNotNone(f1_retry.get("db_id"))
+        self.assertEqual(f2_retry.get("status"), "registered")
+        self.assertIsNotNone(f2_retry.get("db_id"))
+        # Both refer to the same committed MediaAsset ID
+        self.assertEqual(f1_retry.get("db_id"), f2_retry.get("db_id"))
+
+        # Verify no duplicate assets in DB
+        self.assertEqual(self.db.query(MediaAsset).count(), 1)
+        self.assertEqual(self.db.query(Product).count(), 1)
+
+    def test_17_previously_committed_assets_remain_registered_after_later_failure(self):
+        """17. Previously committed assets remain registered even if a subsequent transaction fails."""
+        # Run 1: Successfully commit initial product
+        import_new_arrivals(
+            dry_run=False,
+            confirm=True,
+            mock_upload=True,
+            source_dir=self.source_dir,
+            manifest_path=self.manifest_path,
+            db_session=self.db,
+        )
+        rel_key_1 = "Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set/gulmeher-dusty-mauve-waistcoat-co-ord-set-01.png"
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            m1 = json.load(f)
+        self.assertEqual(m1["files"][rel_key_1]["status"], "registered")
+        first_asset_id = m1["files"][rel_key_1]["db_id"]
+
+        # Run 2: Add a second design with a new photo, but fail commit
+        second_design_dir = os.path.join(self.source_dir, "Suit Set", "Three Pieces", "Aafreen Suit")
+        os.makedirs(second_design_dir, exist_ok=True)
+        second_photo = os.path.join(second_design_dir, "aafreen-01.png")
+        with open(second_photo, "wb") as f:
+            f.write(b"NEW_PHOTO_FOR_SECOND_DESIGN")
+        rel_key_2 = "Suit Set/Three Pieces/Aafreen Suit/aafreen-01.png"
+
+        failing_db = self.Session()
+        def fail_commit():
+            raise RuntimeError("Fail during second batch")
+        failing_db.commit = fail_commit
+
+        try:
+            with self.assertRaises(RuntimeError):
+                import_new_arrivals(
+                    dry_run=False,
+                    confirm=True,
+                    mock_upload=True,
+                    source_dir=self.source_dir,
+                    manifest_path=self.manifest_path,
+                    db_session=failing_db,
+                )
+        finally:
+            failing_db.close()
+
+        # Check manifest: First asset MUST remain registered with its valid db_id
+        with open(self.manifest_path, "r", encoding="utf-8") as f:
+            m2 = json.load(f)
+
+        self.assertEqual(m2["files"][rel_key_1]["status"], "registered")
+        self.assertEqual(m2["files"][rel_key_1]["db_id"], first_asset_id)
+        # Second asset must be in uploaded state, not registered
+        self.assertEqual(m2["files"][rel_key_2]["status"], "uploaded")
+        self.assertNotIn("db_id", m2["files"][rel_key_2])
+
+    def test_18_atomic_manifest_persistence_handles_write_safely(self):
+        """18. Atomic manifest persistence saves cleanly using temporary file and atomic replace."""
+        from import_new_arrivals import save_manifest_atomic
+
+        test_manifest = {"test_key": "test_val", "timestamp": "2026-11-01T00:00:00"}
+        atomic_path = os.path.join(self.temp_dir, "atomic_manifest.json")
+
+        save_manifest_atomic(test_manifest, atomic_path)
+        self.assertTrue(os.path.exists(atomic_path))
+
+        with open(atomic_path, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        self.assertEqual(loaded["test_key"], "test_val")
+
 
 if __name__ == "__main__":
     unittest.main()

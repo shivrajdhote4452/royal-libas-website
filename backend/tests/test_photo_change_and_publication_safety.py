@@ -193,7 +193,7 @@ class TestPhotoChangeAndPublicationSafety(unittest.TestCase):
                     "cloud_name": CLOUDINARY_CLOUD_NAME,
                     "resource_type": "image",
                     "public_id": "recovered_valid_pid",
-                    "secure_url": f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/image/upload/recovered_valid.png",
+                    "secure_url": f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/image/upload/recovered_valid_pid.png",
                     "format": "png",
                     "width": 1080,
                     "height": 1350,

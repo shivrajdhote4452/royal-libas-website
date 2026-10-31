@@ -38,7 +38,9 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
+import urllib.parse
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -53,6 +55,8 @@ from app.config import (
     CLOUDINARY_CLOUD_NAME,
     is_cloudinary_configured,
 )
+
+CLOUDINARY_CUSTOM_DOMAIN = os.getenv("CLOUDINARY_CUSTOM_DOMAIN", "").strip() or None
 from app.database import SessionLocal
 from app.models import (
     Collection,
@@ -160,6 +164,137 @@ def normalize_path(p: Optional[str]) -> str:
     return p.replace("\\", "/").strip().strip("/")
 
 
+APPROVED_CLOUDINARY_HOSTS = {
+    "res.cloudinary.com",
+    "api.cloudinary.com",
+}
+
+
+def is_approved_delivery_host(hostname: Optional[str], custom_domain: Optional[str] = None) -> bool:
+    """Check if hostname is an approved Cloudinary CDN host or configured custom domain."""
+    if not hostname:
+        return False
+    host = hostname.lower().strip()
+    if host in APPROVED_CLOUDINARY_HOSTS:
+        return True
+    if re.match(r"^res(-\d+)?\.cloudinary\.com$", host):
+        return True
+    effective_custom = custom_domain or CLOUDINARY_CUSTOM_DOMAIN
+    if effective_custom and effective_custom.strip():
+        if host == effective_custom.lower().strip():
+            return True
+    return False
+
+
+def validate_cloudinary_delivery_url(
+    url: Optional[str],
+    expected_cloud_name: str,
+    expected_resource_type: str,
+    expected_public_id: str,
+    expected_delivery_type: str = "upload",
+    custom_domain: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Perform structured, Cloudinary-aware validation of a delivery URL.
+
+    Validates:
+    - HTTPS scheme
+    - Approved host (res.cloudinary.com, shard domains, or explicitly configured custom domain)
+    - Cloud environment matches expected_cloud_name
+    - Resource type matches expected_resource_type ('image' or 'video')
+    - Delivery type matches expected_delivery_type ('upload', etc.)
+    - Path remainder resolves to the expected public_id (handling version segments,
+      transformations, nested folders, and URL decoding).
+    """
+    if not url or not isinstance(url, str):
+        return False, "Missing delivery URL"
+
+    url_str = url.strip()
+    try:
+        parsed = urllib.parse.urlsplit(url_str)
+    except Exception as e:
+        return False, f"Failed to parse delivery URL: {e}"
+
+    # 1. Scheme check: HTTPS required
+    if parsed.scheme.lower() != "https":
+        return False, f"Delivery URL must use HTTPS scheme, got: {parsed.scheme}"
+
+    # 2. Host check: Approved Cloudinary CDN host or configured custom domain
+    hostname = parsed.hostname
+    if not hostname or not is_approved_delivery_host(hostname, custom_domain):
+        return False, f"Delivery URL hostname '{hostname}' is not an approved Cloudinary delivery host"
+
+    # 3. Path segmentation check
+    raw_path = parsed.path.lstrip("/")
+    decoded_path = urllib.parse.unquote(raw_path)
+    segments = [s.strip() for s in decoded_path.split("/") if s.strip()]
+
+    # Cloudinary path format: /{cloud_name}/{resource_type}/{delivery_type}/[transformations...]/[v{version}/]{public_id}[.{format}]
+    if len(segments) < 4:
+        return False, f"Delivery URL path has too few segments ({len(segments)}): {decoded_path}"
+
+    url_cloud = segments[0]
+    if url_cloud != expected_cloud_name:
+        return False, f"Delivery URL cloud name '{url_cloud}' does not match expected '{expected_cloud_name}'"
+
+    url_res_type = segments[1]
+    if url_res_type != expected_resource_type:
+        return False, f"Delivery URL resource type '{url_res_type}' does not match expected '{expected_resource_type}'"
+
+    url_del_type = segments[2]
+    if url_del_type != expected_delivery_type:
+        return False, f"Delivery URL delivery type '{url_del_type}' does not match expected '{expected_delivery_type}'"
+
+    # 4. Public ID matching in remaining segments
+    remaining = segments[3:]
+    norm_expected_pid = urllib.parse.unquote(expected_public_id).replace("\\", "/").strip().strip("/")
+    expected_pid_segments = [s for s in norm_expected_pid.split("/") if s]
+
+    if len(remaining) < len(expected_pid_segments):
+        return False, f"Delivery URL does not contain enough segments for public_id '{norm_expected_pid}'"
+
+    # The public_id must occupy the tail of the remaining segments
+    pid_tail = remaining[-len(expected_pid_segments):]
+    prefix_segments = remaining[:-len(expected_pid_segments)]
+
+    # Validate prefix segments: each must be an optional version segment or valid transformation
+    version_count = 0
+    for seg in prefix_segments:
+        if re.match(r"^v\d+$", seg):
+            version_count += 1
+            if version_count > 1:
+                return False, f"Delivery URL contains multiple version segments in prefix: {prefix_segments}"
+            continue
+
+        is_named_transform = bool(re.match(r"^t_[a-zA-Z0-9_-]+$", seg))
+        is_param_transform = all(
+            bool(re.match(r"^[a-z]{1,4}_", param.strip()))
+            for param in seg.split(",")
+            if param.strip()
+        )
+        if not (is_named_transform or is_param_transform):
+            return False, f"Delivery URL contains invalid prefix segment '{seg}' before public_id"
+
+    # Compare tail segments with expected_pid_segments
+    for i in range(len(expected_pid_segments) - 1):
+        if pid_tail[i] != expected_pid_segments[i]:
+            return False, f"Delivery URL public_id folder segment '{pid_tail[i]}' does not match expected '{expected_pid_segments[i]}'"
+
+    final_url_seg = pid_tail[-1]
+    final_expected_seg = expected_pid_segments[-1]
+
+    if final_url_seg == final_expected_seg:
+        pass
+    else:
+        url_base, _ = os.path.splitext(final_url_seg)
+        expected_base, _ = os.path.splitext(final_expected_seg)
+        if url_base == final_expected_seg or url_base == expected_base:
+            pass
+        else:
+            return False, f"Delivery URL public_id '{'/'.join(pid_tail)}' does not match declared public_id '{norm_expected_pid}'"
+
+    return True, "Valid Cloudinary delivery URL"
+
+
 def validate_manifest_recovery_entry(
     entry: Optional[Dict[str, Any]],
     current_hash: str,
@@ -168,8 +303,9 @@ def validate_manifest_recovery_entry(
     expected_rel_path: str,
     expected_filename: str,
     expected_cloud_name: str,
+    custom_domain: Optional[str] = None,
 ) -> Tuple[bool, str]:
-    """Validate manifest recovery entry against current source file identity, folder, and environment.
+    """Validate manifest recovery entry against current source file identity, folder, environment, and delivery URL.
 
     Returns (is_valid, failure_reason).
     """
@@ -218,15 +354,19 @@ def validate_manifest_recovery_entry(
     if not public_id or not isinstance(public_id, str) or not public_id.strip():
         return False, "Missing or invalid public_id"
 
-    # Delivery URL check
+    # Structured Cloudinary delivery URL & identity validation
+    delivery_type = entry.get("delivery_type") or "upload"
     url = entry.get("secure_url") or entry.get("url")
-    if not url or not isinstance(url, str):
-        return False, "Missing delivery URL"
-
-    if expected_cloud_name not in url:
-        return False, f"Delivery URL does not match cloud name {expected_cloud_name}: {url}"
-    if expected_resource_type not in url:
-        return False, f"Delivery URL does not match resource type {expected_resource_type}: {url}"
+    is_valid_url, url_reason = validate_cloudinary_delivery_url(
+        url=url,
+        expected_cloud_name=expected_cloud_name,
+        expected_resource_type=expected_resource_type,
+        expected_public_id=public_id,
+        expected_delivery_type=delivery_type,
+        custom_domain=custom_domain,
+    )
+    if not is_valid_url:
+        return False, url_reason
 
     return True, "Valid recovery entry"
 
@@ -273,10 +413,35 @@ def load_or_create_manifest(manifest_path: str) -> Dict[str, Any]:
     }
 
 
-def save_manifest(manifest: Dict[str, Any], manifest_path: str):
+def save_manifest_atomic(manifest: Dict[str, Any], manifest_path: str):
+    """Save manifest to disk atomically using a temporary file and fsync."""
     manifest["updated_at"] = datetime.now().isoformat()
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
+    manifest_dir = os.path.dirname(os.path.abspath(manifest_path))
+    os.makedirs(manifest_dir, exist_ok=True)
+
+    fd, tmp_path = tempfile.mkstemp(
+        prefix="manifest_tmp_",
+        suffix=".json",
+        dir=manifest_dir,
+    )
+    try:
+        with open(fd, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, manifest_path)
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise e
+
+
+def save_manifest(manifest: Dict[str, Any], manifest_path: str):
+    """Backwards-compatible alias for atomic manifest persistence."""
+    save_manifest_atomic(manifest, manifest_path)
 
 
 def get_next_subcat_num(db: Session, cat: str, subcat: str) -> int:
@@ -370,6 +535,7 @@ def import_new_arrivals(
     manifest_path: str = DEFAULT_MANIFEST_PATH,
     db_session: Optional[Session] = None,
     reconcile_taxonomy: bool = False,
+    custom_domain: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute import workflow with full safety checks, changed-photo detection, and idempotency."""
     print("=" * 70)
@@ -379,6 +545,8 @@ def import_new_arrivals(
     print(f"Mode:                {'DRY-RUN (Simulated)' if dry_run else 'LIVE EXECUTION'}")
     print(f"Mock Uploads:        {mock_upload}")
     print(f"Reconcile Taxonomy:  {reconcile_taxonomy}")
+    if custom_domain:
+        print(f"Custom CDN Domain:   {custom_domain}")
     print("=" * 70)
 
     if not dry_run and not confirm:
@@ -472,6 +640,10 @@ def import_new_arrivals(
         asset_map: Dict[str, MediaAsset] = {}  # full_path -> MediaAsset
         pending_manifest_registrations: List[Tuple[str, MediaAsset]] = []
 
+        # Distinguish previously committed assets from assets created in this transaction
+        committed_asset_ids: Set[int] = {row[0] for row in db.query(MediaAsset.id).all()}
+        newly_flushed_asset_ids: Set[int] = set()
+
         for d in designs:
             target_folder = d["target_folder"]
             for f_info in d["files"]:
@@ -496,13 +668,10 @@ def import_new_arrivals(
                 ).first()
 
                 if db_asset:
-                    print(f"  [Reused Asset] #{db_asset.id} {filename} (hash match: {content_hash[:12]})")
                     asset_map[full_path] = db_asset
                     summary["media_assets_reused"] += 1
-                    # Ensure manifest is consistent with current registered asset
-                    manifest.setdefault("files", {})[rel_path] = {
-                        "status": "registered",
-                        "db_id": db_asset.id,
+
+                    asset_meta = {
                         "asset_id": db_asset.cloudinary_asset_id,
                         "public_id": db_asset.public_id,
                         "cloud_name": db_asset.cloud_name or CLOUDINARY_CLOUD_NAME,
@@ -520,7 +689,26 @@ def import_new_arrivals(
                         "filename": filename,
                         "relative_source_path": rel_path,
                     }
-                    save_manifest(manifest, manifest_path)
+
+                    # Distinguish previously committed assets from assets created in current transaction
+                    if db_asset.id in committed_asset_ids:
+                        print(f"  [Reused Committed Asset] #{db_asset.id} {filename} (hash match: {content_hash[:12]})")
+                        manifest.setdefault("files", {})[rel_path] = {
+                            "status": "registered",
+                            "db_id": db_asset.id,
+                            **asset_meta,
+                        }
+                        save_manifest_atomic(manifest, manifest_path)
+                    else:
+                        # Asset is uncommitted in current transaction: preserve as 'uploaded' until commit
+                        print(f"  [Reused Uncommitted Asset] #{db_asset.id} {filename} (hash match: {content_hash[:12]}, pending commit)")
+                        manifest.setdefault("files", {})[rel_path] = {
+                            "status": "uploaded",
+                            **asset_meta,
+                        }
+                        save_manifest_atomic(manifest, manifest_path)
+                        pending_manifest_registrations.append((rel_path, db_asset))
+
                     continue
 
                 # Check if this source file path had a previous asset with a DIFFERENT hash
@@ -546,6 +734,7 @@ def import_new_arrivals(
                     expected_rel_path=rel_path,
                     expected_filename=filename,
                     expected_cloud_name=CLOUDINARY_CLOUD_NAME,
+                    custom_domain=custom_domain,
                 )
 
                 upload_meta = None
@@ -585,7 +774,7 @@ def import_new_arrivals(
                             "filename": filename,
                             "relative_source_path": rel_path,
                         }
-                        save_manifest(manifest, manifest_path)
+                        save_manifest_atomic(manifest, manifest_path)
                     else:
                         # Live Cloudinary upload: upload as a new uniquely identified version
                         max_retries = 3
@@ -646,7 +835,7 @@ def import_new_arrivals(
                             "filename": filename,
                             "relative_source_path": rel_path,
                         }
-                        save_manifest(manifest, manifest_path)
+                        save_manifest_atomic(manifest, manifest_path)
 
                 # Register MediaAsset in DB transactionally
                 if not dry_run and upload_meta:
@@ -674,6 +863,7 @@ def import_new_arrivals(
                     )
                     db.add(new_asset)
                     db.flush()
+                    newly_flushed_asset_ids.add(new_asset.id)
                     asset_map[full_path] = new_asset
                     summary["media_assets_uploaded"] += 1
 
@@ -997,6 +1187,7 @@ def main():
     parser.add_argument("--confirm", action="store_true", default=False, help="Confirm live execution")
     parser.add_argument("--mock-upload", action="store_true", default=False, help="Mock Cloudinary uploads for local testing")
     parser.add_argument("--reconcile-taxonomy", action="store_true", default=False, help="Opt-in to overwrite owner-edited category and subcategory on existing products with folder taxonomy")
+    parser.add_argument("--custom-domain", default=CLOUDINARY_CUSTOM_DOMAIN, help="Custom delivery domain for Cloudinary")
     parser.add_argument("--source-dir", default=DEFAULT_SOURCE_DIR, help="Source folder path")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST_PATH, help="Manifest file path")
 
@@ -1013,6 +1204,7 @@ def main():
         source_dir=args.source_dir,
         manifest_path=args.manifest,
         reconcile_taxonomy=args.reconcile_taxonomy,
+        custom_domain=args.custom_domain,
     )
 
 
