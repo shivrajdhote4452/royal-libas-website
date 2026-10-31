@@ -298,18 +298,18 @@ def get_admin_dashboard(
         or 0
     )
 
-    # Low-stock (<= 5) and out-of-stock variants
+    # Low-stock (<= 5) and out-of-stock variants (only published sellable products trigger alerts)
     low_stock_count = (
         db.query(func.count(ProductVariant.id))
         .join(Product)
-        .filter(Product.is_active == True, ProductVariant.stock > 0, ProductVariant.stock <= 5)
+        .filter(Product.is_active == True, Product.status == "PUBLISHED", ProductVariant.stock > 0, ProductVariant.stock <= 5)
         .scalar()
         or 0
     )
     out_of_stock_count = (
         db.query(func.count(ProductVariant.id))
         .join(Product)
-        .filter(Product.is_active == True, ProductVariant.stock == 0)
+        .filter(Product.is_active == True, Product.status == "PUBLISHED", ProductVariant.stock == 0)
         .scalar()
         or 0
     )
@@ -348,11 +348,11 @@ def get_admin_dashboard(
         .all()
     )
 
-    # Low stock variant list
+    # Low stock variant list (only published sellable products)
     low_stock_records = (
         db.query(ProductVariant)
         .join(Product)
-        .filter(Product.is_active == True, ProductVariant.stock <= 5)
+        .filter(Product.is_active == True, Product.status == "PUBLISHED", ProductVariant.stock <= 5)
         .order_by(ProductVariant.stock.asc())
         .limit(10)
         .all()
@@ -1035,7 +1035,10 @@ def admin_refresh_fulfillment_tracking(
 
 @router.get("/inventory")
 def admin_list_inventory(
-    filter: Optional[str] = "all",
+    filter: Optional[str] = "working",
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    subcategory: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
@@ -1047,10 +1050,38 @@ def admin_list_inventory(
         .options(joinedload(ProductVariant.product).joinedload(Product.images))
     )
 
-    if filter == "low_stock":
-        query = query.filter(ProductVariant.stock > 0, ProductVariant.stock <= 5)
-    elif filter == "out_of_stock":
-        query = query.filter(ProductVariant.stock == 0)
+    norm_filter = (filter or "working").lower().strip()
+    if status:
+        query = query.filter(Product.status == status.upper().strip())
+    elif norm_filter == "archived":
+        query = query.filter(Product.status == "ARCHIVED")
+    elif norm_filter == "published":
+        query = query.filter(Product.status == "PUBLISHED", Product.is_active == True)
+    elif norm_filter == "draft":
+        query = query.filter(Product.status == "DRAFT")
+    elif norm_filter == "low_stock":
+        # Only published live products trigger real low-stock alerts (<=5)
+        query = query.filter(
+            Product.status == "PUBLISHED",
+            Product.is_active == True,
+            ProductVariant.stock > 0,
+            ProductVariant.stock <= 5,
+        )
+    elif norm_filter == "out_of_stock":
+        # Out of stock published live products
+        query = query.filter(
+            Product.status == "PUBLISHED",
+            Product.is_active == True,
+            ProductVariant.stock == 0,
+        )
+    elif norm_filter in ("working", "all"):
+        # Default working inventory excludes ARCHIVED legacy items
+        query = query.filter(Product.status != "ARCHIVED")
+
+    if category:
+        query = query.filter(Product.category.ilike(category.strip()))
+    if subcategory:
+        query = query.filter(Product.subcategory.ilike(subcategory.strip()))
 
     if search:
         s = f"%{search.strip()}%"
@@ -1067,14 +1098,19 @@ def admin_list_inventory(
     for v in variants:
         img_url = None
         if v.product.images:
-            img_url = sorted(v.product.images, key=lambda i: i.sort_order)[0].url
+            sorted_imgs = sorted(v.product.images, key=lambda i: i.sort_order)
+            first_img = next((img for img in sorted_imgs if getattr(img, "resource_type", "image") == "image"), None)
+            img_url = first_img.url if first_img else sorted_imgs[0].url
 
+        is_draft = (v.product.status == "DRAFT")
+        is_archived = (v.product.status == "ARCHIVED")
         results.append({
             "variant_id": v.id,
             "product_id": v.product.id,
             "product_name": v.product.name,
             "product_slug": v.product.slug,
             "category": v.product.category,
+            "subcategory": getattr(v.product, "subcategory", None),
             "primary_image": img_url,
             "size": v.size,
             "colour": v.colour,
@@ -1082,7 +1118,10 @@ def admin_list_inventory(
             "mrp": float(v.mrp) if v.mrp else None,
             "selling_price": float(v.selling_price),
             "stock": v.stock,
-            "is_available": (v.stock > 0),
+            "status": v.product.status,
+            "is_draft": is_draft,
+            "is_archived": is_archived,
+            "is_available": (v.stock > 0 and v.product.is_active and v.product.status == "PUBLISHED"),
             "is_product_active": v.product.is_active,
         })
     return results
@@ -3987,6 +4026,7 @@ def admin_create_product(
         size_chart_id=payload.size_chart_id,
         category=payload.category,
         subcategory=payload.subcategory,
+        source_folder=getattr(payload, "source_folder", None),
         status=prod_status,
         is_bestseller=payload.is_bestseller,
         is_active=is_active,
@@ -4070,8 +4110,17 @@ def admin_update_product(
         product.size_chart_id = payload.size_chart_id
     if payload.category is not None:
         product.category = payload.category
+        # Automatically keep canonical main-group collection consistent with category
+        cat_upper = payload.category.upper().strip()
+        canonical_col = db.query(Collection).filter(Collection.name == cat_upper).first()
+        if canonical_col and canonical_col not in product.collections:
+            # Replace any other canonical main collection with the new one
+            canonical_names = {"TWO PIECES", "SUIT SET", "HEAVY DRESS"}
+            product.collections = [c for c in product.collections if c.name not in canonical_names] + [canonical_col]
     if payload.subcategory is not None:
         product.subcategory = payload.subcategory
+    if payload.source_folder is not None:
+        product.source_folder = payload.source_folder
     if payload.is_bestseller is not None:
         product.is_bestseller = payload.is_bestseller
 

@@ -164,7 +164,7 @@ def run_migrations(engine: Engine) -> None:
                     else:
                         conn.execute(text(f"ALTER TABLE store_settings ADD COLUMN {col_name} {sqlite_type};"))
 
-        # 4. Product table migrations for subcategory
+        # 4. Product table migrations for subcategory and source_folder
         if "products" in existing_tables:
             existing_prod_cols = {col["name"] for col in inspector.get_columns("products")}
             if "subcategory" not in existing_prod_cols:
@@ -173,6 +173,44 @@ def run_migrations(engine: Engine) -> None:
                     conn.execute(text("ALTER TABLE products ADD COLUMN IF NOT EXISTS subcategory VARCHAR(100);"))
                 else:
                     conn.execute(text("ALTER TABLE products ADD COLUMN subcategory VARCHAR(100);"))
+            if "source_folder" not in existing_prod_cols:
+                logger.info("Adding column 'source_folder' to products table...")
+                if dialect_name == "postgresql":
+                    conn.execute(text("ALTER TABLE products ADD COLUMN IF NOT EXISTS source_folder VARCHAR(255);"))
+                else:
+                    conn.execute(text("ALTER TABLE products ADD COLUMN source_folder VARCHAR(255);"))
+                try:
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_products_source_folder ON products (source_folder);"))
+                except Exception as e:
+                    logger.warning(f"Index creation on products.source_folder: {e}")
+
+        # 5. Collection table migrations for is_active and canonical groups
+        if "collections" in existing_tables:
+            existing_col_cols = {col["name"] for col in inspector.get_columns("collections")}
+            if "is_active" not in existing_col_cols:
+                logger.info("Adding column 'is_active' to collections table...")
+                if dialect_name == "postgresql":
+                    conn.execute(text("ALTER TABLE collections ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;"))
+                else:
+                    conn.execute(text("ALTER TABLE collections ADD COLUMN is_active BOOLEAN DEFAULT 1;"))
+
+            # Seed canonical collection records if missing
+            canonical_collections = [
+                ("TWO PIECES", "two-pieces", "Boutique co-ord sets, kurta pants, and contemporary two-piece edits."),
+                ("SUIT SET", "suit-set", "Handcrafted three-pieces, semi-party wear, and formal party wear suit sets."),
+                ("HEAVY DRESS", "heavy-dress", "Occasion wear including lehengas, palazzo sets, designer wear, and shararas."),
+            ]
+            for col_name, col_slug, col_desc in canonical_collections:
+                exists = conn.execute(
+                    text("SELECT id FROM collections WHERE slug = :slug"),
+                    {"slug": col_slug}
+                ).fetchone()
+                if not exists:
+                    logger.info(f"Seeding canonical collection '{col_name}'...")
+                    conn.execute(
+                        text("INSERT INTO collections (name, slug, description, is_active) VALUES (:name, :slug, :desc, :active)"),
+                        {"name": col_name, "slug": col_slug, "desc": col_desc, "active": True if dialect_name == "postgresql" else 1}
+                    )
 
     logger.info("Database schema migrations completed successfully.")
 

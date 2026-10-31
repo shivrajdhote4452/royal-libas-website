@@ -59,8 +59,9 @@ export async function fetchProductBySlug(slug: string): Promise<Product> {
   return response.json();
 }
 
-export async function fetchCollections(): Promise<Collection[]> {
-  const response = await fetch(`${API_BASE_URL}/collections`);
+export async function fetchCollections(includeArchived = false): Promise<Collection[]> {
+  const url = includeArchived ? `${API_BASE_URL}/collections` : `${API_BASE_URL}/collections?is_active=true`;
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to load collections`);
   }
@@ -615,12 +616,18 @@ export async function adminListShipments(
 
 export async function adminListInventory(
   token: string,
-  filter: string = 'all',
-  search?: string
+  filter: string = 'working',
+  search?: string,
+  category?: string,
+  subcategory?: string,
+  status?: string
 ): Promise<any[]> {
   const params = new URLSearchParams();
   if (filter) params.append('filter', filter);
   if (search) params.append('search', search);
+  if (category && category !== 'ALL') params.append('category', category);
+  if (subcategory && subcategory !== 'ALL') params.append('subcategory', subcategory);
+  if (status && status !== 'ALL') params.append('status', status);
 
   const query = params.toString() ? `?${params.toString()}` : '';
   const response = await fetch(`${API_BASE_URL}/admin/inventory${query}`, {

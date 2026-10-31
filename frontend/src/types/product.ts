@@ -188,6 +188,7 @@ export interface Product {
   size_chart?: string | null;
   size_chart_id?: number | null;
   status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | string;
+  source_folder?: string | null;
   category: string | null;
   subcategory?: string | null;
   is_bestseller: boolean;
@@ -210,4 +211,5 @@ export interface Collection {
   slug: string;
   description: string | null;
   product_count: number;
+  is_active?: boolean;
 }

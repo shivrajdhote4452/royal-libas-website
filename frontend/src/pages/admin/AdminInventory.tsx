@@ -23,6 +23,10 @@ interface InventoryItem {
   product_name: string;
   product_slug: string;
   category?: string;
+  subcategory?: string;
+  status?: string;
+  is_draft?: boolean;
+  is_archived?: boolean;
   primary_image?: string;
   size: string;
   colour?: string;
@@ -50,15 +54,23 @@ interface AdjustmentRecord {
   created_at: string;
 }
 
+const CATEGORY_TAXONOMY: Record<string, string[]> = {
+  'TWO PIECES': ['Co-ord Sets', 'Kurta Pant'],
+  'SUIT SET': ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
+  'HEAVY DRESS': ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
+};
+
 export const AdminInventory: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialFilter = searchParams.get('filter') || 'all';
+  const initialFilter = searchParams.get('filter') || 'working';
   const initialSearch = searchParams.get('search') || '';
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<string>(initialFilter);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearch);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>('ALL');
 
   // Stock Adjustment Modal
   const [selectedVariant, setSelectedVariant] = useState<InventoryItem | null>(null);
@@ -78,7 +90,13 @@ export const AdminInventory: React.FC = () => {
   const loadInventory = async () => {
     setLoading(true);
     try {
-      const data = await adminListInventory(token, filterState, searchQuery);
+      const data = await adminListInventory(
+        token,
+        filterState,
+        searchQuery,
+        selectedCategory !== 'ALL' ? selectedCategory : undefined,
+        selectedSubcategory !== 'ALL' ? selectedSubcategory : undefined
+      );
       setItems(data);
     } catch (e) {
       console.error('Failed to load inventory', e);
@@ -89,7 +107,7 @@ export const AdminInventory: React.FC = () => {
 
   useEffect(() => {
     loadInventory();
-  }, [token, filterState]);
+  }, [token, filterState, selectedCategory, selectedSubcategory]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,7 +116,7 @@ export const AdminInventory: React.FC = () => {
 
   const handleFilterChange = (newFilter: string) => {
     setFilterState(newFilter);
-    setSearchParams(newFilter === 'all' ? {} : { filter: newFilter });
+    setSearchParams(newFilter === 'working' ? {} : { filter: newFilter });
   };
 
   const openAdjustModal = (item: InventoryItem) => {
@@ -159,9 +177,15 @@ export const AdminInventory: React.FC = () => {
     }
   };
 
-  const totalUnits = items.reduce((sum, it) => sum + it.stock, 0);
-  const lowStockCount = items.filter((it) => it.stock > 0 && it.stock <= 5).length;
-  const outOfStockCount = items.filter((it) => it.stock === 0).length;
+  const publishedItems = items.filter(
+    (it) => it.status === 'PUBLISHED' || (!it.status && it.is_product_active && !it.is_archived)
+  );
+  const draftItems = items.filter((it) => it.status === 'DRAFT' || it.is_draft);
+  const publishedUnits = publishedItems.reduce((sum, it) => sum + it.stock, 0);
+  const draftUnits = draftItems.reduce((sum, it) => sum + it.stock, 0);
+
+  const lowStockCount = publishedItems.filter((it) => it.stock > 0 && it.stock <= 5).length;
+  const outOfStockCount = publishedItems.filter((it) => it.stock === 0).length;
 
   return (
     <div className="space-y-6 font-sans">
@@ -199,72 +223,99 @@ export const AdminInventory: React.FC = () => {
       </div>
 
       {/* Summary KPI Pills */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-            Total Tracked Stock
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">
+            Published Live Stock
           </span>
           <span className="text-xl font-serif font-bold text-gray-900 mt-1 block">
-            {totalUnits.toLocaleString('en-IN')} units
+            {publishedUnits.toLocaleString('en-IN')} units
+          </span>
+          <span className="text-[10px] text-gray-400 mt-0.5 block">
+            {publishedItems.length} active variants
           </span>
         </div>
+
+        <div className="bg-amber-50/50 p-3.5 rounded-lg border border-amber-200 shadow-sm">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
+            Draft Setup Stock
+          </span>
+          <span className="text-xl font-serif font-bold text-amber-900 mt-1 block">
+            {draftUnits.toLocaleString('en-IN')} units
+          </span>
+          <span className="text-[10px] text-amber-700/80 mt-0.5 block">
+            {draftItems.length} draft variants (setup)
+          </span>
+        </div>
+
         <div className="bg-amber-50/60 p-3.5 rounded-lg border border-amber-200 shadow-sm">
           <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-            Low Stock Variants
+            Low Stock (&le; 5 units)
           </span>
           <span className="text-xl font-serif font-bold text-amber-700 mt-1 block">
             {lowStockCount} items
           </span>
+          <span className="text-[10px] text-gray-400 mt-0.5 block">
+            Published catalogue alerts
+          </span>
         </div>
+
         <div className="bg-red-50/60 p-3.5 rounded-lg border border-red-200 shadow-sm">
           <span className="text-[10px] font-bold uppercase tracking-wider text-red-800 block">
-            Out of Stock
+            Sold Out (0 units)
           </span>
           <span className="text-xl font-serif font-bold text-red-700 mt-1 block">
             {outOfStockCount} items
+          </span>
+          <span className="text-[10px] text-gray-400 mt-0.5 block">
+            Published catalogue alerts
           </span>
         </div>
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        <form onSubmit={handleSearchSubmit} className="flex-1 w-full sm:w-auto flex gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by product name, SKU, or shade..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-3.5 py-1.5 bg-[#5E1224] text-white hover:bg-[#4A0E1C] rounded text-xs font-semibold"
-          >
-            Search
-          </button>
-        </form>
-
-        <div className="flex items-center gap-1.5 self-start sm:self-auto text-xs">
+      <div className="space-y-3">
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
           <button
             type="button"
-            onClick={() => handleFilterChange('all')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors ${
-              filterState === 'all'
+            onClick={() => handleFilterChange('working')}
+            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+              filterState === 'working'
                 ? 'bg-[#5E1224] text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            All Variants
+            Working Inventory
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFilterChange('published')}
+            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+              filterState === 'published'
+                ? 'bg-emerald-700 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Published
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFilterChange('draft')}
+            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+              filterState === 'draft'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Draft Setup
           </button>
           <button
             type="button"
             onClick={() => handleFilterChange('low_stock')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'low_stock'
-                ? 'bg-amber-600 text-white shadow-sm'
+                ? 'bg-amber-700 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -273,7 +324,7 @@ export const AdminInventory: React.FC = () => {
           <button
             type="button"
             onClick={() => handleFilterChange('out_of_stock')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'out_of_stock'
                 ? 'bg-red-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -281,6 +332,103 @@ export const AdminInventory: React.FC = () => {
           >
             Sold Out (0)
           </button>
+          <button
+            type="button"
+            onClick={() => handleFilterChange('archived')}
+            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+              filterState === 'archived'
+                ? 'bg-gray-700 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Archived
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFilterChange('all')}
+            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+              filterState === 'all'
+                ? 'bg-[#5E1224] text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All Variants
+          </button>
+        </div>
+
+        {/* Search, Category, Subcategory Row */}
+        <div className="bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+          <form onSubmit={handleSearchSubmit} className="flex-1 w-full md:w-auto flex gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search by product name, SKU, or shade..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-3.5 py-1.5 bg-[#5E1224] text-white hover:bg-[#4A0E1C] rounded text-xs font-semibold shrink-0"
+            >
+              Search
+            </button>
+          </form>
+
+          <div className="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap">
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setSelectedSubcategory('ALL');
+              }}
+              className="px-2.5 py-1.5 border border-gray-300 rounded text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
+            >
+              <option value="ALL">All Categories</option>
+              <option value="TWO PIECES">TWO PIECES</option>
+              <option value="SUIT SET">SUIT SET</option>
+              <option value="HEAVY DRESS">HEAVY DRESS</option>
+            </select>
+
+            <select
+              value={selectedSubcategory}
+              onChange={(e) => setSelectedSubcategory(e.target.value)}
+              className="px-2.5 py-1.5 border border-gray-300 rounded text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
+            >
+              <option value="ALL">All Subcategories</option>
+              {selectedCategory !== 'ALL' &&
+                CATEGORY_TAXONOMY[selectedCategory]?.map((sub) => (
+                  <option key={sub} value={sub}>
+                    {sub}
+                  </option>
+                ))}
+              {selectedCategory === 'ALL' &&
+                Object.values(CATEGORY_TAXONOMY)
+                  .flat()
+                  .map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub}
+                    </option>
+                  ))}
+            </select>
+
+            {(searchQuery || selectedCategory !== 'ALL' || selectedSubcategory !== 'ALL' || filterState !== 'working') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('ALL');
+                  setSelectedSubcategory('ALL');
+                  handleFilterChange('working');
+                }}
+                className="text-gray-500 hover:text-gray-800 text-xs underline whitespace-nowrap pl-1"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -329,9 +477,32 @@ export const AdminInventory: React.FC = () => {
                             </div>
                           )}
                           <div>
-                            <div className="font-semibold text-gray-900">{it.product_name}</div>
-                            <div className="text-[11px] font-mono text-gray-500 mt-0.5">
-                              SKU: {it.sku || `RL-V${it.variant_id}`}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-gray-900">{it.product_name}</span>
+                              {it.is_archived || it.status === 'ARCHIVED' ? (
+                                <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                                  ARCHIVED
+                                </span>
+                              ) : it.is_draft || it.status === 'DRAFT' ? (
+                                <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                                  DRAFT
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  PUBLISHED
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                              <span className="font-mono">SKU: {it.sku || `RL-V${it.variant_id}`}</span>
+                              {it.category && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-gray-600">
+                                    {it.category} {it.subcategory ? `› ${it.subcategory}` : ''}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>

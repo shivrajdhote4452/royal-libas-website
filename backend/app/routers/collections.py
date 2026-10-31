@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -11,13 +11,22 @@ router = APIRouter(tags=["collections"])
 
 
 @router.get("/collections", response_model=List[CollectionResponse])
-def list_collections(db: Session = Depends(get_db)):
+def list_collections(
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    include_archived: Optional[bool] = Query(None, description="Whether to include archived collections"),
+    db: Session = Depends(get_db),
+):
     """List collections with product counts of active products."""
-    collections = db.query(Collection).all()
+    query = db.query(Collection)
+    if is_active is not None:
+        query = query.filter(Collection.is_active == is_active)
+    elif include_archived is False:
+        query = query.filter(Collection.is_active == True)
+
+    collections = query.all()
     results: List[CollectionResponse] = []
 
     for col in collections:
-        # Count active products associated with this collection
         count = (
             db.query(func.count(Product.id))
             .join(product_collections, Product.id == product_collections.c.product_id)
@@ -35,6 +44,7 @@ def list_collections(db: Session = Depends(get_db)):
                 name=col.name,
                 slug=col.slug,
                 description=col.description,
+                is_active=getattr(col, "is_active", True),
                 product_count=count,
             )
         )

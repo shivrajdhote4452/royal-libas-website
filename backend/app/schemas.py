@@ -126,6 +126,7 @@ class CollectionBase(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
+    is_active: bool = True
 
 
 class CollectionCreate(CollectionBase):
@@ -154,6 +155,7 @@ class ProductCreate(BaseModel):
     size_chart_id: Optional[int] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    source_folder: Optional[str] = None
     status: Optional[str] = 'DRAFT'
     is_bestseller: bool = False
     is_active: bool = False
@@ -173,6 +175,7 @@ class ProductUpdate(BaseModel):
     size_chart_id: Optional[int] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    source_folder: Optional[str] = None
     status: Optional[str] = None
     is_bestseller: Optional[bool] = None
     is_active: Optional[bool] = None
@@ -188,6 +191,8 @@ class ProductListResponse(BaseModel):
     fabric: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    source_folder: Optional[str] = None
+    status: str = 'PUBLISHED'
     is_bestseller: bool
     is_active: bool
     min_price: Optional[Decimal] = None
@@ -214,6 +219,7 @@ class ProductDetailResponse(BaseModel):
     size_chart_id: Optional[int] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    source_folder: Optional[str] = None
     status: str = 'PUBLISHED'
     is_bestseller: bool
     is_active: bool

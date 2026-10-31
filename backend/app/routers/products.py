@@ -2,6 +2,7 @@ from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import or_
 
 from app.auth import get_current_admin, get_current_admin_optional
 from app.database import get_db
@@ -67,9 +68,32 @@ def list_products(
         query = query.filter(Product.subcategory.ilike(clean_sub))
 
     if collection:
-        query = query.join(Product.collections).filter(
-            (Collection.slug == collection) | (Collection.name == collection)
-        )
+        clean_col = collection.strip().lower()
+        if clean_col in ("festive-edit", "festive"):
+            query = query.filter(
+                or_(
+                    Product.collections.any(or_(Collection.slug == collection, Collection.name.ilike(collection))),
+                    Product.category.in_(["HEAVY DRESS", "SUIT SET"]),
+                )
+            )
+        elif clean_col in ("everyday-cotton", "cotton"):
+            query = query.filter(
+                or_(
+                    Product.collections.any(or_(Collection.slug == collection, Collection.name.ilike(collection))),
+                    Product.category == "TWO PIECES",
+                )
+            )
+        elif clean_col in ("bestsellers", "bestseller"):
+            query = query.filter(
+                or_(
+                    Product.collections.any(or_(Collection.slug == collection, Collection.name.ilike(collection))),
+                    Product.is_bestseller == True,
+                )
+            )
+        else:
+            query = query.filter(
+                Product.collections.any(or_(Collection.slug == collection, Collection.name.ilike(collection)))
+            )
 
     products = query.all()
 

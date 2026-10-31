@@ -14,6 +14,8 @@ import {
   Check,
   Play,
   Camera,
+  Search,
+  X,
 } from 'lucide-react';
 import {
   fetchAdminProducts,
@@ -66,6 +68,52 @@ export const AdminProducts: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedProductId, setExpandedProductId] = useState<number | null>(null);
+
+  // Filter & Search State
+  type ProductStatusTab = 'working' | 'all' | 'published' | 'draft' | 'archived';
+  const [statusFilter, setStatusFilter] = useState<ProductStatusTab>('working');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+
+  const counts = React.useMemo(() => {
+    const working = products.filter((p) => p.status !== 'ARCHIVED').length;
+    const published = products.filter((p) => p.status === 'PUBLISHED' || (!p.status && p.is_active)).length;
+    const draft = products.filter((p) => p.status === 'DRAFT' || (!p.is_active && p.status !== 'ARCHIVED')).length;
+    const archived = products.filter((p) => p.status === 'ARCHIVED').length;
+    return { working, all: products.length, published, draft, archived };
+  }, [products]);
+
+  const filteredProducts = React.useMemo(() => {
+    return products.filter((p) => {
+      // Status filter
+      if (statusFilter === 'working') {
+        if (p.status === 'ARCHIVED') return false;
+      } else if (statusFilter === 'published') {
+        if (p.status !== 'PUBLISHED' && !(p.is_active && !p.status)) return false;
+      } else if (statusFilter === 'draft') {
+        if (p.status !== 'DRAFT' && !(!p.is_active && p.status !== 'ARCHIVED')) return false;
+      } else if (statusFilter === 'archived') {
+        if (p.status !== 'ARCHIVED') return false;
+      }
+
+      // Category filter
+      if (categoryFilter !== 'ALL') {
+        if (p.category?.toUpperCase() !== categoryFilter.toUpperCase()) return false;
+      }
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = p.name.toLowerCase().includes(q);
+        const matchSlug = p.slug.toLowerCase().includes(q);
+        const matchCat = p.category?.toLowerCase().includes(q);
+        const matchSub = p.subcategory?.toLowerCase().includes(q);
+        if (!matchName && !matchSlug && !matchCat && !matchSub) return false;
+      }
+
+      return true;
+    });
+  }, [products, statusFilter, categoryFilter, searchQuery]);
 
   // Add Product Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -576,6 +624,134 @@ export const AdminProducts: React.FC = () => {
         </div>
       )}
 
+      {/* Status Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs border-b border-[#E8DFD0]">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('working')}
+          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
+            statusFilter === 'working'
+              ? 'border-[#5E1224] text-[#5E1224] bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <span>Working Catalogue</span>
+          <span className="px-1.5 py-0.2 bg-[#FCF8F0] text-[#5E1224] rounded-full text-[10px] font-bold">
+            {counts.working}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('published')}
+          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
+            statusFilter === 'published'
+              ? 'border-emerald-600 text-emerald-800 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <span>Published (Live)</span>
+          <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded-full text-[10px] font-bold">
+            {counts.published}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('draft')}
+          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
+            statusFilter === 'draft'
+              ? 'border-amber-600 text-amber-800 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <span>Draft Setup</span>
+          <span className="px-1.5 py-0.2 bg-amber-50 text-amber-800 rounded-full text-[10px] font-bold">
+            {counts.draft}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('archived')}
+          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
+            statusFilter === 'archived'
+              ? 'border-gray-500 text-gray-800 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <span>Archived Legacy</span>
+          <span className="px-1.5 py-0.2 bg-gray-100 text-gray-700 rounded-full text-[10px] font-bold">
+            {counts.archived}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
+            statusFilter === 'all'
+              ? 'border-[#5E1224] text-[#5E1224] bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <span>All Designs</span>
+          <span className="px-1.5 py-0.2 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">
+            {counts.all}
+          </span>
+        </button>
+      </div>
+
+      {/* Search and Category Filter Bar */}
+      <div className="bg-white p-3.5 rounded-xl border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="relative flex-1 w-full">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search by design name, slug, subcategory..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5E1224]"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg bg-white font-medium focus:outline-none focus:border-[#5E1224] w-full sm:w-auto"
+          >
+            <option value="ALL">All Categories</option>
+            <option value="TWO PIECES">TWO PIECES</option>
+            <option value="SUIT SET">SUIT SET</option>
+            <option value="HEAVY DRESS">HEAVY DRESS</option>
+          </select>
+
+          {(searchQuery || categoryFilter !== 'ALL' || statusFilter !== 'working') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setCategoryFilter('ALL');
+                setStatusFilter('working');
+              }}
+              className="px-3 py-2 text-gray-500 hover:text-gray-800 underline text-xs whitespace-nowrap"
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+      </div>
+
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
           <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
@@ -591,9 +767,13 @@ export const AdminProducts: React.FC = () => {
             Retry
           </button>
         </div>
+      ) : filteredProducts.length === 0 ? (
+        <div className="bg-white rounded-xl border border-[#E8DFD0] p-12 text-center text-gray-400 text-xs">
+          No designs found matching the selected filter criteria.
+        </div>
       ) : (
         <div className="space-y-4">
-          {products.map((product) => {
+          {filteredProducts.map((product) => {
             const isExpanded = expandedProductId === product.id;
             const primaryImg = product.primary_image || product.images?.[0]?.url;
 
