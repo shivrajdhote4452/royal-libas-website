@@ -6,7 +6,7 @@ import re
 from typing import List, Tuple, Dict, Any, Optional
 from urllib.parse import urlparse
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 
 from app.models import MediaAsset, Product, ProductImage, StoreSetting
 
@@ -82,12 +82,29 @@ def get_asset_usage_references(asset: MediaAsset, db: Session) -> Tuple[List[Dic
         where product_usages is a list of {"id": int, "name": str, "slug": str}
         and editorial_usages is a list of location descriptions (e.g. 'Homepage Hero Banner')
     """
-    # 1. Check ProductImage references (exact URL or public_id)
-    prod_filters = [ProductImage.url == asset.url]
-    if asset.secure_url:
-        prod_filters.append(ProductImage.url == asset.secure_url)
+    # 1. Check ProductImage references (media_asset_id, or public_id & resource_type, or URL)
+    r_type = asset.resource_type or "image"
+    prod_filters = [ProductImage.media_asset_id == asset.id]
     if asset.public_id:
-        prod_filters.append(ProductImage.public_id == asset.public_id)
+        prod_filters.append(
+            and_(
+                ProductImage.public_id == asset.public_id,
+                ProductImage.resource_type == r_type,
+            )
+        )
+    prod_filters.append(
+        and_(
+            ProductImage.url == asset.url,
+            ProductImage.resource_type == r_type,
+        )
+    )
+    if asset.secure_url:
+        prod_filters.append(
+            and_(
+                ProductImage.url == asset.secure_url,
+                ProductImage.resource_type == r_type,
+            )
+        )
 
     matches = (
         db.query(Product.id, Product.name, Product.slug)

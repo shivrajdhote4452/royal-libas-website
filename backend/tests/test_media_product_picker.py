@@ -534,6 +534,260 @@ class TestMediaProductPicker(unittest.TestCase):
         self.assertEqual(usages[0]["name"], "Solo Palazzo Set")
         self.assertEqual(usages[0]["slug"], "solo-palazzo-set")
 
+    def test_11_image_and_video_sharing_same_public_id_coexist_in_gallery_and_persist_after_reload(self):
+        """11. Image and video sharing same public_id coexist in gallery and persist after reload."""
+        db = self.TestingSessionLocal()
+        try:
+            shared_pub_id = "royal_libas/products/shared_twin_id"
+            twin_image = MediaAsset(
+                filename="twin.jpg",
+                display_name="Twin Photo",
+                public_id=shared_pub_id,
+                url="http://res.cloudinary.com/test/image/upload/v1/royal_libas/products/twin.jpg",
+                secure_url="https://res.cloudinary.com/test/image/upload/v1/royal_libas/products/twin.jpg",
+                resource_type="image",
+                format="jpg",
+                width=1000,
+                height=1200,
+                file_size=250000,
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            twin_video = MediaAsset(
+                filename="twin.mp4",
+                display_name="Twin Video",
+                public_id=shared_pub_id,
+                url="http://res.cloudinary.com/test/video/upload/v1/royal_libas/products/twin.mp4",
+                secure_url="https://res.cloudinary.com/test/video/upload/v1/royal_libas/products/twin.mp4",
+                resource_type="video",
+                format="mp4",
+                width=1080,
+                height=1920,
+                duration=12.0,
+                file_size=3500000,
+                mime_type="video/mp4",
+                folder="royal_libas/products",
+            )
+            db.add_all([twin_image, twin_video])
+            db.commit()
+            db.refresh(twin_image)
+            db.refresh(twin_video)
+            img_id = twin_image.id
+            vid_id = twin_video.id
+        finally:
+            db.close()
+
+        # 1. Create product with BOTH twin image and twin video
+        create_payload = {
+            "name": "Twin Asset Suit",
+            "slug": "twin-asset-suit",
+            "category": "SUIT SET",
+            "status": "DRAFT",
+            "variants": [{"size": "M", "selling_price": 3499.00, "mrp": 4499.00, "stock": 5}],
+            "images": [
+                {"media_asset_id": img_id, "url": twin_image.url, "sort_order": 1, "alt_text": "Twin Image"},
+                {"media_asset_id": vid_id, "url": twin_video.url, "sort_order": 2, "alt_text": "Twin Video"},
+            ],
+        }
+        res_create = self.client.post("/admin/products", json=create_payload, headers=self.owner_headers)
+        self.assertEqual(res_create.status_code, 201)
+        created_data = res_create.json()
+        self.assertEqual(len(created_data["images"]), 2)
+        prod_id = created_data["id"]
+
+        # Check first image is image, second is video
+        self.assertEqual(created_data["images"][0]["resource_type"], "image")
+        self.assertEqual(created_data["images"][0]["public_id"], shared_pub_id)
+        self.assertEqual(created_data["images"][0]["media_asset_id"], img_id)
+
+        self.assertEqual(created_data["images"][1]["resource_type"], "video")
+        self.assertEqual(created_data["images"][1]["public_id"], shared_pub_id)
+        self.assertEqual(created_data["images"][1]["media_asset_id"], vid_id)
+
+        # 2. Reload from GET /products/{prod_id} with admin credentials
+        res_get = self.client.get(f"/products/{prod_id}", headers=self.owner_headers)
+        self.assertEqual(res_get.status_code, 200)
+        get_data = res_get.json()
+        self.assertEqual(len(get_data["images"]), 2)
+        self.assertEqual(get_data["images"][0]["media_asset_id"], img_id)
+        self.assertEqual(get_data["images"][0]["resource_type"], "image")
+        self.assertEqual(get_data["images"][1]["media_asset_id"], vid_id)
+        self.assertEqual(get_data["images"][1]["resource_type"], "video")
+
+        # 3. Save reloaded gallery back (simulating admin saving unchanged product)
+        # Verify deduplication does NOT collapse the image and video
+        res_update = self.client.patch(
+            f"/admin/products/{prod_id}",
+            json={
+                "images": [
+                    {
+                        "media_asset_id": get_data["images"][0]["media_asset_id"],
+                        "url": get_data["images"][0]["url"],
+                        "sort_order": 1,
+                        "alt_text": get_data["images"][0]["alt_text"],
+                    },
+                    {
+                        "media_asset_id": get_data["images"][1]["media_asset_id"],
+                        "url": get_data["images"][1]["url"],
+                        "sort_order": 2,
+                        "alt_text": get_data["images"][1]["alt_text"],
+                    },
+                ]
+            },
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_update.status_code, 200)
+        updated_data = res_update.json()
+        self.assertEqual(len(updated_data["images"]), 2)
+        self.assertEqual(updated_data["images"][0]["resource_type"], "image")
+        self.assertEqual(updated_data["images"][1]["resource_type"], "video")
+
+    def test_12_legacy_fallback_matches_public_id_and_resource_type(self):
+        """12. Legacy payload without media_asset_id matches on (public_id, resource_type)."""
+        db = self.TestingSessionLocal()
+        try:
+            combo_pub_id = "royal_libas/products/combo_legacy"
+            c_img = MediaAsset(
+                filename="c_img.jpg",
+                display_name="Legacy Combo Image",
+                public_id=combo_pub_id,
+                url="http://res.cloudinary.com/test/image/upload/v1/royal_libas/products/c_img.jpg",
+                secure_url="https://res.cloudinary.com/test/image/upload/v1/royal_libas/products/c_img.jpg",
+                resource_type="image",
+                format="jpg",
+                file_size=200000,
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            c_vid = MediaAsset(
+                filename="c_vid.mp4",
+                display_name="Legacy Combo Video",
+                public_id=combo_pub_id,
+                url="http://res.cloudinary.com/test/video/upload/v1/royal_libas/products/c_vid.mp4",
+                secure_url="https://res.cloudinary.com/test/video/upload/v1/royal_libas/products/c_vid.mp4",
+                resource_type="video",
+                format="mp4",
+                duration=10.0,
+                file_size=2000000,
+                mime_type="video/mp4",
+                folder="royal_libas/products",
+            )
+            db.add_all([c_img, c_vid])
+            db.commit()
+            db.refresh(c_img)
+            db.refresh(c_vid)
+            img_id = c_img.id
+            vid_id = c_vid.id
+        finally:
+            db.close()
+
+        # Submit without media_asset_id, relying on public_id + url/extension matching
+        payload = {
+            "name": "Legacy Combo Suit",
+            "slug": "legacy-combo-suit",
+            "category": "TWO PIECES",
+            "status": "DRAFT",
+            "variants": [{"size": "XL", "selling_price": 2899.00, "mrp": 3899.00, "stock": 3}],
+            "images": [
+                {"public_id": combo_pub_id, "url": c_img.url, "resource_type": "image", "sort_order": 1},
+                {"public_id": combo_pub_id, "url": c_vid.url, "resource_type": "video", "sort_order": 2},
+            ],
+        }
+        res = self.client.post("/admin/products", json=payload, headers=self.owner_headers)
+        self.assertEqual(res.status_code, 201)
+        data = res.json()
+        self.assertEqual(len(data["images"]), 2)
+        # Resolved correctly to respective asset IDs
+        self.assertEqual(data["images"][0]["media_asset_id"], img_id)
+        self.assertEqual(data["images"][0]["resource_type"], "image")
+        self.assertEqual(data["images"][1]["media_asset_id"], vid_id)
+        self.assertEqual(data["images"][1]["resource_type"], "video")
+
+    def test_13_migration_backfill_behavior(self):
+        """13. Migration backfill links unambiguous matches and leaves ambiguous/unmatched null."""
+        from app.migrations import run_migrations
+        import sqlite3
+
+        temp_mig_fd, temp_mig_path = tempfile.mkstemp(prefix="royal_libas_mig_test_", suffix=".db")
+        os.close(temp_mig_fd)
+
+        try:
+            conn = sqlite3.connect(temp_mig_path)
+            cur = conn.cursor()
+            # Create schema without media_asset_id column in product_images
+            cur.execute("""
+                CREATE TABLE media_assets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    public_id VARCHAR(255),
+                    resource_type VARCHAR(20),
+                    url VARCHAR(500),
+                    secure_url VARCHAR(500),
+                    filename VARCHAR(255),
+                    is_active BOOLEAN DEFAULT 1
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE product_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER,
+                    url VARCHAR(500),
+                    sort_order INTEGER,
+                    public_id VARCHAR(255),
+                    resource_type VARCHAR(20)
+                )
+            """)
+
+            # 1. Unambiguous match: single image asset
+            cur.execute("INSERT INTO media_assets (id, public_id, resource_type, url) VALUES (1, 'royal/unique_img', 'image', 'http://example.com/1.jpg')")
+            cur.execute("INSERT INTO product_images (id, product_id, public_id, resource_type, url) VALUES (1, 10, 'royal/unique_img', 'image', 'http://example.com/1.jpg')")
+
+            # 2. Shared public_id across different resource types (1 image, 1 video)
+            cur.execute("INSERT INTO media_assets (id, public_id, resource_type, url) VALUES (2, 'royal/twin_item', 'image', 'http://example.com/twin.jpg')")
+            cur.execute("INSERT INTO media_assets (id, public_id, resource_type, url) VALUES (3, 'royal/twin_item', 'video', 'http://example.com/twin.mp4')")
+            cur.execute("INSERT INTO product_images (id, product_id, public_id, resource_type, url) VALUES (2, 10, 'royal/twin_item', 'image', 'http://example.com/twin.jpg')")
+            cur.execute("INSERT INTO product_images (id, product_id, public_id, resource_type, url) VALUES (3, 10, 'royal/twin_item', 'video', 'http://example.com/twin.mp4')")
+
+            # 3. Ambiguous match: duplicate assets with same public_id and same resource_type
+            cur.execute("INSERT INTO media_assets (id, public_id, resource_type, url) VALUES (4, 'royal/dup_img', 'image', 'http://example.com/dup1.jpg')")
+            cur.execute("INSERT INTO media_assets (id, public_id, resource_type, url) VALUES (5, 'royal/dup_img', 'image', 'http://example.com/dup2.jpg')")
+            cur.execute("INSERT INTO product_images (id, product_id, public_id, resource_type, url) VALUES (4, 10, 'royal/dup_img', 'image', 'http://example.com/dup1.jpg')")
+
+            # 4. Unmatched entry: no media asset in registry
+            cur.execute("INSERT INTO product_images (id, product_id, public_id, resource_type, url) VALUES (5, 10, 'royal/ghost_img', 'image', 'http://example.com/ghost.jpg')")
+
+            conn.commit()
+            conn.close()
+
+            # Now run migrations via SQLAlchemy engine
+            mig_engine = create_engine(f"sqlite:///{temp_mig_path}")
+            run_migrations(mig_engine)
+
+            # Check results
+            conn = sqlite3.connect(temp_mig_path)
+            cur = conn.cursor()
+            cur.execute("SELECT id, media_asset_id FROM product_images ORDER BY id")
+            rows = dict(cur.fetchall())
+            conn.close()
+            mig_engine.dispose()
+
+            # Row 1: unambiguous -> linked to asset 1
+            self.assertEqual(rows[1], 1)
+            # Row 2: image twin -> linked to asset 2
+            self.assertEqual(rows[2], 2)
+            # Row 3: video twin -> linked to asset 3
+            self.assertEqual(rows[3], 3)
+            # Row 4: ambiguous (count = 2) -> left NULL
+            self.assertIsNone(rows[4])
+            # Row 5: unmatched -> left NULL
+            self.assertIsNone(rows[5])
+
+        finally:
+            if os.path.exists(temp_mig_path):
+                try:
+                    os.remove(temp_mig_path)
+                except Exception:
+                    pass
+
 
 if __name__ == "__main__":
     unittest.main()

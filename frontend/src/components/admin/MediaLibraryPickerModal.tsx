@@ -35,10 +35,29 @@ export function formatDuration(seconds?: number | null): string {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
+export function getAssetKey(asset: {
+  resource_type?: string | null;
+  filename?: string;
+  url: string;
+  secure_url?: string | null;
+  public_id?: string | null;
+}): string {
+  const isVid =
+    asset.resource_type === 'video' ||
+    /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
+  const rType = isVid ? 'video' : 'image';
+  if (asset.public_id) {
+    return `${rType}:${asset.public_id}`;
+  }
+  const rawUrl = asset.secure_url || asset.url;
+  return `${rType}:${rawUrl.split('?')[0]}`;
+}
+
 interface MediaLibraryPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (selectedAssets: MediaAsset[]) => void;
+  targetId?: string | number | null;
   alreadySelectedKeys?: Set<string>;
   title?: string;
 }
@@ -47,6 +66,7 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
   isOpen,
   onClose,
   onSelect,
+  targetId,
   alreadySelectedKeys = new Set(),
   title = 'Select from Media Library',
 }) => {
@@ -67,17 +87,42 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
   // Selected assets state map (assetId -> MediaAsset)
   const [selectedMap, setSelectedMap] = useState<Map<number, MediaAsset>>(new Map());
 
+  // Session tracking: reset temporary selection when modal opens or target product switches.
+  // Preserves selection across folder navigation, search, filters, and pagination within the same session.
+  const prevTargetRef = React.useRef<string | number | null | undefined>(undefined);
+  const prevOpenRef = React.useRef<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen && (!prevOpenRef.current || prevTargetRef.current !== targetId)) {
+      setSelectedMap(new Map());
+    }
+    prevOpenRef.current = isOpen;
+    prevTargetRef.current = targetId;
+  }, [isOpen, targetId]);
+
+  const handleCancel = () => {
+    setSelectedMap(new Map());
+    onClose();
+  };
+
+  const handleConfirm = () => {
+    const chosen = Array.from(selectedMap.values());
+    setSelectedMap(new Map());
+    onSelect(chosen);
+    onClose();
+  };
+
   // ESC key to close modal
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        handleCancel();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   // Load media and folders on open
   useEffect(() => {
@@ -179,6 +224,10 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
 
   // Selection toggles
   const toggleSelectAsset = (asset: MediaAsset) => {
+    const key = getAssetKey(asset);
+    if (alreadySelectedKeys.has(key)) {
+      return;
+    }
     setSelectedMap((prev) => {
       const next = new Map(prev);
       if (next.has(asset.id)) {
@@ -193,18 +242,18 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
   const handleSelectPage = () => {
     setSelectedMap((prev) => {
       const next = new Map(prev);
-      paginatedAssets.forEach((a) => next.set(a.id, a));
+      paginatedAssets.forEach((a) => {
+        const key = getAssetKey(a);
+        if (!alreadySelectedKeys.has(key)) {
+          next.set(a.id, a);
+        }
+      });
       return next;
     });
   };
 
   const handleClearSelection = () => {
     setSelectedMap(new Map());
-  };
-
-  const handleConfirm = () => {
-    onSelect(Array.from(selectedMap.values()));
-    onClose();
   };
 
   if (!isOpen) return null;
@@ -234,7 +283,7 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCancel}
             className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-black/5 rounded-lg transition-colors"
             title="Close (Esc)"
           >
@@ -426,35 +475,43 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {paginatedAssets.map((asset) => {
+                const assetKey = getAssetKey(asset);
+                const isAlreadyInGallery = alreadySelectedKeys.has(assetKey);
                 const isSelected = selectedMap.has(asset.id);
                 const isVideo =
                   asset.resource_type === 'video' ||
                   /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
                 const posterUrl = isVideo ? getVideoPoster(asset.url) : asset.secure_url || asset.url;
-                const assetKey = asset.public_id
-                  ? `${asset.resource_type || 'image'}:${asset.public_id}`
-                  : asset.url;
-                const isAlreadyInGallery = alreadySelectedKeys.has(assetKey);
 
                 return (
                   <div
                     key={asset.id}
-                    onClick={() => toggleSelectAsset(asset)}
+                    onClick={() => {
+                      if (!isAlreadyInGallery) {
+                        toggleSelectAsset(asset);
+                      }
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === ' ' || e.key === 'Enter') {
+                      if ((e.key === ' ' || e.key === 'Enter') && !isAlreadyInGallery) {
                         e.preventDefault();
                         toggleSelectAsset(asset);
                       }
                     }}
-                    tabIndex={0}
+                    tabIndex={isAlreadyInGallery ? -1 : 0}
                     role="checkbox"
-                    aria-checked={isSelected}
-                    className={`group relative bg-white rounded-lg border overflow-hidden flex flex-col cursor-pointer transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[#5E1224] ${
-                      isSelected
-                        ? 'border-[#5E1224] ring-2 ring-[#5E1224]/30 shadow-md scale-[1.01]'
-                        : isAlreadyInGallery
-                        ? 'border-[#B58A3C]/50 opacity-90 hover:border-gray-400 shadow-2xs'
-                        : 'border-gray-200 hover:border-gray-400 hover:shadow-xs'
+                    aria-checked={isSelected || isAlreadyInGallery}
+                    aria-disabled={isAlreadyInGallery}
+                    title={
+                      isAlreadyInGallery
+                        ? 'Already attached to this product gallery'
+                        : asset.display_name || asset.filename
+                    }
+                    className={`group relative bg-white rounded-lg border overflow-hidden flex flex-col transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[#5E1224] ${
+                      isAlreadyInGallery
+                        ? 'border-[#B58A3C]/40 bg-[#FAF5EC]/40 opacity-75 cursor-default'
+                        : isSelected
+                        ? 'border-[#5E1224] ring-2 ring-[#5E1224]/30 shadow-md scale-[1.01] cursor-pointer'
+                        : 'border-gray-200 hover:border-gray-400 hover:shadow-xs cursor-pointer'
                     }`}
                   >
                     {/* Thumbnail */}
@@ -479,12 +536,14 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
                       <div className="absolute top-1.5 right-1.5">
                         <div
                           className={`w-5 h-5 rounded flex items-center justify-center transition-colors shadow-xs ${
-                            isSelected
+                            isAlreadyInGallery
+                              ? 'bg-[#B58A3C] text-white'
+                              : isSelected
                               ? 'bg-[#5E1224] text-white'
                               : 'bg-white/90 text-gray-400 border border-gray-300 group-hover:border-gray-500'
                           }`}
                         >
-                          {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          {(isSelected || isAlreadyInGallery) && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                         </div>
                       </div>
 
@@ -604,7 +663,7 @@ export const MediaLibraryPickerModal: React.FC<MediaLibraryPickerModalProps> = (
           <div className="flex items-center justify-end gap-2.5 shrink-0">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleCancel}
               className="px-4 py-2 border border-gray-300 hover:bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
             >
               Cancel

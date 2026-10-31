@@ -84,6 +84,7 @@ def run_migrations(engine: Engine) -> None:
                 ("width", "INTEGER"),
                 ("height", "INTEGER"),
                 ("duration", "NUMERIC(10, 2)"),
+                ("media_asset_id", "INTEGER REFERENCES media_assets(id) ON DELETE SET NULL"),
             ]
 
             for col_name, col_type in product_img_cols:
@@ -93,6 +94,51 @@ def run_migrations(engine: Engine) -> None:
                         conn.execute(text(f"ALTER TABLE product_images ADD COLUMN IF NOT EXISTS {col_name} {col_type};"))
                     else:
                         conn.execute(text(f"ALTER TABLE product_images ADD COLUMN {col_name} {col_type};"))
+
+            # Ensure index on media_asset_id
+            try:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_product_images_media_asset_id ON product_images (media_asset_id);"))
+            except Exception as e:
+                logger.warning(f"Index creation on product_images.media_asset_id: {e}")
+
+            # Unambiguous backfill: only when public_id AND resource_type uniquely match exactly ONE media asset
+            try:
+                if dialect_name == "postgresql":
+                    conn.execute(text("""
+                        UPDATE product_images pi
+                        SET media_asset_id = ma.id
+                        FROM media_assets ma
+                        WHERE pi.media_asset_id IS NULL
+                          AND pi.public_id IS NOT NULL
+                          AND pi.public_id = ma.public_id
+                          AND COALESCE(pi.resource_type, 'image') = COALESCE(ma.resource_type, 'image')
+                          AND (
+                              SELECT COUNT(*)
+                              FROM media_assets sub
+                              WHERE sub.public_id = pi.public_id
+                                AND COALESCE(sub.resource_type, 'image') = COALESCE(pi.resource_type, 'image')
+                          ) = 1;
+                    """))
+                else:
+                    conn.execute(text("""
+                        UPDATE product_images
+                        SET media_asset_id = (
+                            SELECT ma.id
+                            FROM media_assets ma
+                            WHERE ma.public_id = product_images.public_id
+                              AND COALESCE(ma.resource_type, 'image') = COALESCE(product_images.resource_type, 'image')
+                        )
+                        WHERE media_asset_id IS NULL
+                          AND public_id IS NOT NULL
+                          AND (
+                              SELECT COUNT(*)
+                              FROM media_assets ma_cnt
+                              WHERE ma_cnt.public_id = product_images.public_id
+                                AND COALESCE(ma_cnt.resource_type, 'image') = COALESCE(product_images.resource_type, 'image')
+                          ) = 1;
+                    """))
+            except Exception as e:
+                logger.warning(f"Unambiguous backfill for product_images.media_asset_id skipped: {e}")
 
         # 3. StoreSetting table migrations for payment controls
         if "store_settings" in existing_tables:

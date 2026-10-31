@@ -3767,13 +3767,19 @@ def _process_product_images(
     for idx, img in enumerate(images_payload):
         trusted_url = img.url
         trusted_public_id = getattr(img, "public_id", None)
-        trusted_resource_type = getattr(img, "resource_type", "image") or "image"
         trusted_width = getattr(img, "width", None)
         trusted_height = getattr(img, "height", None)
         trusted_duration = getattr(img, "duration", None)
         trusted_alt = img.alt_text or product_name
         asset_id = getattr(img, "media_asset_id", None)
 
+        # 1. Determine resource_type from payload or infer from url
+        r_type = getattr(img, "resource_type", None) or "image"
+        if r_type == "image" and trusted_url and any(trusted_url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg", ".mkv")):
+            r_type = "video"
+        trusted_resource_type = r_type
+
+        # 2. If media_asset_id is supplied, resolve its URL and metadata from backend MediaAsset registry
         if asset_id is not None:
             asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
             if not asset:
@@ -3784,26 +3790,36 @@ def _process_product_images(
             # Authority: MediaAsset registry is source of truth
             trusted_url = asset.secure_url or asset.url
             trusted_public_id = asset.public_id
-            trusted_resource_type = getattr(asset, "resource_type", "image") or "image"
+            trusted_resource_type = getattr(asset, "resource_type", r_type) or r_type
             trusted_width = asset.width
             trusted_height = asset.height
             trusted_duration = asset.duration
             trusted_alt = img.alt_text or asset.alt_text or getattr(asset, "display_name", None) or product_name
         elif trusted_public_id:
-            # Fallback check against MediaAsset registry by public_id
-            asset = db.query(MediaAsset).filter(MediaAsset.public_id == trusted_public_id).first()
+            # 3. For legacy entries without an ID, match using public_id AND resource_type. NEVER use public_id alone.
+            asset = (
+                db.query(MediaAsset)
+                .filter(
+                    MediaAsset.public_id == trusted_public_id,
+                    MediaAsset.resource_type == trusted_resource_type,
+                )
+                .first()
+            )
             if asset:
                 trusted_url = asset.secure_url or asset.url
-                trusted_resource_type = getattr(asset, "resource_type", "image") or "image"
+                trusted_resource_type = getattr(asset, "resource_type", trusted_resource_type) or trusted_resource_type
                 trusted_width = asset.width if trusted_width is None else trusted_width
                 trusted_height = asset.height if trusted_height is None else trusted_height
                 trusted_duration = asset.duration if trusted_duration is None else trusted_duration
                 asset_id = asset.id
+            else:
+                trusted_resource_type = r_type
 
         # Normalize resource type if file extension suggests video
         if trusted_resource_type == "image" and trusted_url and any(trusted_url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg", ".mkv")):
             trusted_resource_type = "video"
 
+        # 4. Deduplicate repeated references to the same asset without collapsing different resource types
         norm_url = trusted_url.split("?")[0] if trusted_url else ""
         dedup_key = (trusted_resource_type, trusted_public_id if trusted_public_id else norm_url)
         if dedup_key in seen_keys:
@@ -3819,9 +3835,8 @@ def _process_product_images(
             width=trusted_width,
             height=trusted_height,
             duration=trusted_duration,
+            media_asset_id=asset_id,
         )
-        if asset_id is not None:
-            p_img.media_asset_id = asset_id
         processed_images.append(p_img)
 
     return processed_images

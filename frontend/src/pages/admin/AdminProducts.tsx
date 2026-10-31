@@ -26,7 +26,22 @@ import {
   formatPrice,
 } from '../../lib/api';
 import { Product, ProductVariant, MediaAsset } from '../../types/product';
-import { MediaLibraryPickerModal } from '../../components/admin/MediaLibraryPickerModal';
+import { MediaLibraryPickerModal, getAssetKey } from '../../components/admin/MediaLibraryPickerModal';
+
+export function getProductMediaItemKey(item: {
+  resource_type?: string | null;
+  url: string;
+  public_id?: string | null;
+}): string {
+  const isVid =
+    item.resource_type === 'video' ||
+    /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(item.url);
+  const rType = isVid ? 'video' : 'image';
+  if (item.public_id) {
+    return `${rType}:${item.public_id}`;
+  }
+  return `${rType}:${item.url.split('?')[0]}`;
+}
 
 interface ProductMediaItem {
   id?: number;
@@ -244,28 +259,26 @@ export const AdminProducts: React.FC = () => {
   };
 
   const handleAddFromLibrary = (target: 'new' | number | null, selectedAssets: MediaAsset[]) => {
-    if (!target || selectedAssets.length === 0) return;
+    if (!target || selectedAssets.length === 0) {
+      setMediaPickerTarget(null);
+      return;
+    }
     if (target === 'new') {
       setNewImages((prev) => {
-        const existingKeys = new Set(
-          prev.map((img) =>
-            img.public_id ? `${img.resource_type || 'image'}:${img.public_id}` : img.url.split('?')[0]
-          )
-        );
+        const existingKeys = new Set(prev.map(getProductMediaItemKey));
         const newItems: ProductMediaItem[] = [];
         for (const asset of selectedAssets) {
-          const isVid =
-            asset.resource_type === 'video' ||
-            /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
-          const rType = isVid ? 'video' : 'image';
-          const key = asset.public_id ? `${rType}:${asset.public_id}` : (asset.secure_url || asset.url).split('?')[0];
+          const key = getAssetKey(asset);
           if (!existingKeys.has(key)) {
             existingKeys.add(key);
+            const isVid =
+              asset.resource_type === 'video' ||
+              /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
             newItems.push({
               media_asset_id: asset.id,
               url: asset.secure_url || asset.url,
               public_id: asset.public_id || null,
-              resource_type: rType,
+              resource_type: isVid ? 'video' : 'image',
               width: asset.width || null,
               height: asset.height || null,
               duration: asset.duration || null,
@@ -278,25 +291,20 @@ export const AdminProducts: React.FC = () => {
     } else {
       setPhotosMap((prev) => {
         const currentList = prev[target] || [];
-        const existingKeys = new Set(
-          currentList.map((img) =>
-            img.public_id ? `${img.resource_type || 'image'}:${img.public_id}` : img.url.split('?')[0]
-          )
-        );
+        const existingKeys = new Set(currentList.map(getProductMediaItemKey));
         const newItems: ProductMediaItem[] = [];
         for (const asset of selectedAssets) {
-          const isVid =
-            asset.resource_type === 'video' ||
-            /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
-          const rType = isVid ? 'video' : 'image';
-          const key = asset.public_id ? `${rType}:${asset.public_id}` : (asset.secure_url || asset.url).split('?')[0];
+          const key = getAssetKey(asset);
           if (!existingKeys.has(key)) {
             existingKeys.add(key);
+            const isVid =
+              asset.resource_type === 'video' ||
+              /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
             newItems.push({
               media_asset_id: asset.id,
               url: asset.secure_url || asset.url,
               public_id: asset.public_id || null,
-              resource_type: rType,
+              resource_type: isVid ? 'video' : 'image',
               width: asset.width || null,
               height: asset.height || null,
               duration: asset.duration || null,
@@ -310,6 +318,7 @@ export const AdminProducts: React.FC = () => {
         };
       });
     }
+    setMediaPickerTarget(null);
   };
 
   const handleSaveGallery = async (productId: number) => {
@@ -1583,20 +1592,13 @@ export const AdminProducts: React.FC = () => {
         isOpen={mediaPickerTarget !== null}
         onClose={() => setMediaPickerTarget(null)}
         onSelect={(selectedAssets) => handleAddFromLibrary(mediaPickerTarget, selectedAssets)}
+        targetId={mediaPickerTarget}
         alreadySelectedKeys={
           new Set(
             mediaPickerTarget === 'new'
-              ? newImages.map((img) =>
-                  img.public_id
-                    ? `${img.resource_type || 'image'}:${img.public_id}`
-                    : img.url.split('?')[0]
-                )
+              ? newImages.map(getProductMediaItemKey)
               : typeof mediaPickerTarget === 'number'
-              ? (photosMap[mediaPickerTarget] || []).map((img) =>
-                  img.public_id
-                    ? `${img.resource_type || 'image'}:${img.public_id}`
-                    : img.url.split('?')[0]
-                )
+              ? (photosMap[mediaPickerTarget] || []).map(getProductMediaItemKey)
               : []
           )
         }

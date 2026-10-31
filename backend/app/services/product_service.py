@@ -88,6 +88,7 @@ def build_product_list_response(product: Product) -> ProductListResponse:
             width=getattr(img, "width", None),
             height=getattr(img, "height", None),
             duration=float(img.duration) if getattr(img, "duration", None) is not None else None,
+            media_asset_id=getattr(img, "media_asset_id", None),
         )
         for img in (sorted(product.images, key=lambda i: i.sort_order) if product.images else [])
     ]
@@ -130,6 +131,7 @@ def build_product_detail_response(product: Product) -> ProductDetailResponse:
             width=getattr(img, "width", None),
             height=getattr(img, "height", None),
             duration=float(img.duration) if getattr(img, "duration", None) is not None else None,
+            media_asset_id=getattr(img, "media_asset_id", None),
         )
         for img in sorted_images
     ]
