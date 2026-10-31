@@ -12,7 +12,7 @@ Safety Guarantees:
 - Resolves slug conflicts safely without adopting or overwriting existing products.
 - Leaves unverified specifications (fabric, fit, care, description) blank (None).
 - Selectively removes previously generated specifications from imported records while preserving owner edits.
-- Reverts unreviewed placeholder 'Aafreen Beige Botanical Three-Piece Suit' to DRAFT.
+- Preserves owner-controlled publication status for all products.
 - Preserves all order items, payments, customer records, and poster CMS settings.
 
 Usage:
@@ -127,6 +127,7 @@ LEGACY_SAMPLE_SLUGS: Set[str] = {
     "ishqiyya-chiffon-printed-kurti-set",
     "riwayat-brocade-festive-kurti-palazzo",
     "test-silk-co-ord-set",
+    "test-coord-nav-item",
     "gulabi-zari-chanderi-set",
 }
 LEGACY_SAMPLE_IDS: Set[int] = set(range(1, 19))
@@ -263,10 +264,7 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
     print("\n--- 2. Archiving Explicit Legacy Demo Products ---")
     legacy_sample_products = (
         db.query(Product)
-        .filter(
-            (Product.id.in_(LEGACY_SAMPLE_IDS))
-            | (Product.slug.in_(LEGACY_SAMPLE_SLUGS))
-        )
+        .filter(Product.slug.in_(LEGACY_SAMPLE_SLUGS))
         .all()
     )
 
@@ -480,16 +478,19 @@ def reconcile_catalogue(db: Session, dry_run: bool = True) -> Dict[str, any]:
 
     summary["unverified_specs_cleaned"] = cleaned_count
 
-    # 6. Correct Unreviewed Placeholder Publication
-    print("\n--- 6. Correcting Unreviewed Placeholder Publication ---")
-    aafreen_folder = "Photos for royal libas/Suit Set/Three Pieces/03 - Aafreen Beige Botanical Three-Piece Suit"
-    aafreen = db.query(Product).filter(Product.source_folder == aafreen_folder).first()
-    if aafreen and (aafreen.status == "PUBLISHED" or aafreen.is_active):
-        if not dry_run:
-            aafreen.status = "DRAFT"
-            aafreen.is_active = False
-        summary["aafreen_reverted_to_draft"] = True
-        print(f"  [Reverted] Unreviewed placeholder #{aafreen.id} '{aafreen.name}' -> DRAFT (is_active=False)")
+    # 6. Preserve Owner Publication Status & Maintain Status/is_active Consistency
+    print("\n--- 6. Preserving Owner Publication Status & Enforcing Consistency ---")
+    summary["aafreen_reverted_to_draft"] = False
+    for p in db.query(Product).all():
+        # Strictly preserve owner-controlled publication state; guarantee status <-> is_active consistency
+        if p.status == "PUBLISHED" and not p.is_active:
+            if not dry_run:
+                p.is_active = True
+            print(f"  [Consistency] Synchronized active flag for published product #{p.id} '{p.name}'")
+        elif p.status in ("DRAFT", "ARCHIVED") and p.is_active:
+            if not dry_run:
+                p.is_active = False
+            print(f"  [Consistency] Synchronized inactive flag for {p.status.lower()} product #{p.id} '{p.name}'")
 
     if not dry_run:
         db.commit()

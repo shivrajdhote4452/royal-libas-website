@@ -10,7 +10,6 @@ import {
   FileText,
   X,
   ShoppingBag,
-  RotateCcw,
   Send,
 } from 'lucide-react';
 import {
@@ -544,7 +543,7 @@ export const AdminCustomers: React.FC = () => {
                   {customerDossier.returns.length > 0 && (
                     <div>
                       <h4 className="font-serif font-bold text-gray-900 text-sm mb-2 flex items-center gap-1.5">
-                        <RotateCcw className="w-4 h-4 text-purple-700" />
+                        <RefreshCw className="w-4 h-4 text-purple-700" />
                         Exchange Requests ({customerDossier.returns.length})
                       </h4>
                       <div className="space-y-1.5">

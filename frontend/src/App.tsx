@@ -83,6 +83,7 @@ export const App: React.FC = () => {
             <Route path="payments" element={<AdminPayments />} />
             <Route path="shipping" element={<AdminShipping />} />
             <Route path="returns" element={<AdminReturns />} />
+            <Route path="exchanges" element={<AdminReturns />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="collections" element={<AdminCollections />} />
@@ -111,6 +112,7 @@ export const App: React.FC = () => {
             <Route path="/about" element={<About />} />
             <Route path="/shipping-policy" element={<ShippingPolicy />} />
             <Route path="/return-policy" element={<ReturnsPolicy />} />
+            <Route path="/exchange-policy" element={<ReturnsPolicy />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />

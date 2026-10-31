@@ -10,13 +10,26 @@ Safety & Business Requirements:
 - Preserves the 18 legacy sample products (status=ARCHIVED), orders, and order items intact.
 - Video product 'Naqsh Ivory Mocha Three-Piece Suit' has 1 video and 1 cover image:
   together they form ONE product, with cover image at sort_order=1 and video at sort_order=2.
-- Creates 10 new products with status='DRAFT' and is_active=False.
+- Creates new products with status='DRAFT' and is_active=False.
 - Canonical collections are synchronized (TWO PIECES -> two-pieces, SUIT SET -> suit-set, HEAVY DRESS -> heavy-dress).
 - Specifications (fabric, care, fit, description) remain blank (None) for owner completion.
 - Creates 5 variants (S, M, L, XL, XXL) with stock 5 (total 25 units/product), selling_price ₹1,999, MRP ₹2,499.
 - Generates unique SKUs following RL-{CAT}-{SUBCAT}-{NUM}-{SIZE}.
 - Records initial stock in StockAdjustment with reason 'INITIAL_SETUP'.
 - Full manifest tracking for idempotent, safe re-runs.
+
+Changed-Photo Detection & Asset Replacement Guarantees:
+- Reuses registered MediaAsset or manifest upload ONLY when content_hash, resource_type,
+  cloud_name, and folder mapping match.
+- Path match alone does NOT prove content is unchanged.
+- When a file has changed:
+  * Uploads replacement as a new uniquely identified Cloudinary asset/version.
+  * Leaves previous MediaAsset intact for other products and history.
+  * Registers new MediaAsset with trusted metadata and new content hash.
+  * Replaces ONLY the corresponding importer-managed ProductImage association.
+  * Preserves sort_order, cover position, unrelated gallery items, and other products.
+  * Failure keeps the existing working gallery association intact.
+  * Unchanged reruns produce zero duplicate uploads and zero duplicate gallery items.
 """
 
 import argparse
@@ -29,13 +42,13 @@ import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
-from sqlalchemy.orm import Session
 
 # Ensure backend directory is in sys.path
 backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+from sqlalchemy.orm import Session
 from app.config import (
     CLOUDINARY_CLOUD_NAME,
     is_cloudinary_configured,
@@ -197,7 +210,6 @@ def get_next_subcat_num(db: Session, cat: str, subcat: str) -> int:
     variants = db.query(ProductVariant.sku).filter(ProductVariant.sku.like(f"{prefix}%")).all()
     nums: Set[int] = set()
     for (sku,) in variants:
-        # e.g. RL-HD-DW-04-M -> extract '04'
         parts = sku.split("-")
         if len(parts) >= 5 and parts[3].isdigit():
             nums.add(int(parts[3]))
@@ -220,7 +232,6 @@ def scan_new_arrivals(source_dir: str) -> List[Dict[str, Any]]:
         parts = [p.strip() for p in rel_path.split("/") if p.strip()]
 
         if len(parts) != 3:
-            # We expect exactly Category/Subcategory/DesignName
             continue
 
         raw_cat, raw_subcat, design_name = parts[0], parts[1], parts[2]
@@ -234,7 +245,7 @@ def scan_new_arrivals(source_dir: str) -> List[Dict[str, Any]]:
         folder_cat = CATEGORY_FOLDER_MAP.get(cat, cat)
         target_folder = f"{ROOT_MEDIA_FOLDER}/{folder_cat}/{subcat}/{design_name}"
         
-        # Sort files: images first (cover PNG first), video last
+        # Sort files: cover PNG first, other images second, video last
         design_files = []
         for f in files:
             full_path = os.path.join(root, f)
@@ -251,7 +262,6 @@ def scan_new_arrivals(source_dir: str) -> List[Dict[str, Any]]:
                 "size": os.path.getsize(full_path),
             })
 
-        # Sort so cover PNG is first, other images second, video last
         def file_sort_key(item):
             if item["is_cover"]:
                 return 0
@@ -270,7 +280,6 @@ def scan_new_arrivals(source_dir: str) -> List[Dict[str, Any]]:
             "files": design_files,
         })
 
-    # Sort designs by Category and Name
     designs.sort(key=lambda d: (d["category"], d["subcategory"], d["design_name"]))
     return designs
 
@@ -283,7 +292,7 @@ def import_new_arrivals(
     manifest_path: str = DEFAULT_MANIFEST_PATH,
     db_session: Optional[Session] = None,
 ) -> Dict[str, Any]:
-    """Execute import workflow with full safety checks and idempotency."""
+    """Execute import workflow with full safety checks, changed-photo detection, and idempotency."""
     print("=" * 70)
     print(">>> ROYAL LIBAS NEW ARRIVALS IMPORT & CATALOGUE RECONCILIATION <<<")
     print(f"Source Directory: {source_dir}")
@@ -319,12 +328,14 @@ def import_new_arrivals(
         "media_folders_created": 0,
         "media_assets_uploaded": 0,
         "media_assets_reused": 0,
+        "media_assets_replaced": 0,
         "products_created": 0,
         "products_reused": 0,
         "variants_created": 0,
         "variants_reused": 0,
         "stock_adjustments_recorded": 0,
         "images_attached": 0,
+        "images_replaced": 0,
         "errors": [],
         "created_products": [],
     }
@@ -344,14 +355,12 @@ def import_new_arrivals(
         print("\n[Step 2] Synchronizing Media Folders...")
         for d in designs:
             folder_path = d["target_folder"]
-            # Ensure DB folder
             db_folder = db.query(MediaFolder).filter(MediaFolder.path == folder_path).first()
             if not db_folder:
                 parts = folder_path.rsplit("/", 1)
                 parent_p = parts[0] if len(parts) > 1 else None
                 dir_n = parts[1] if len(parts) > 1 else folder_path
                 
-                # Also ensure parent folder exists in DB
                 if parent_p:
                     parent_db = db.query(MediaFolder).filter(MediaFolder.path == parent_p).first()
                     if not parent_db and not dry_run:
@@ -370,7 +379,6 @@ def import_new_arrivals(
                 summary["media_folders_created"] += 1
                 print(f"  + Created DB folder: {folder_path}")
 
-            # Ensure Cloudinary folder
             if not dry_run and not mock_upload:
                 try:
                     c_res = create_cloudinary_folder(folder_path)
@@ -379,7 +387,7 @@ def import_new_arrivals(
                 except Exception as e:
                     print(f"  [WARN] Cloudinary folder creation failed for {folder_path}: {e}")
 
-        # Step 3: Upload & Register Media Assets
+        # Step 3: Upload & Register Media Assets with Strict Changed-Photo Detection
         print("\n[Step 3] Uploading & Registering Media Assets...")
         asset_map: Dict[str, MediaAsset] = {}  # full_path -> MediaAsset
 
@@ -395,32 +403,84 @@ def import_new_arrivals(
                 file_size = f_info["size"]
                 content_hash = compute_sha256(full_path)
 
-                # Check if asset already exists in DB
+                # Strict Content-Hash & Environment Check:
+                # Reuse a registered asset ONLY when its content hash, resource type,
+                # Cloudinary environment, and intended folder mapping are compatible.
+                # Matching relative_source_path alone DOES NOT prove the content is unchanged!
                 db_asset = db.query(MediaAsset).filter(
-                    (MediaAsset.content_hash == content_hash)
-                    | (MediaAsset.relative_source_path == rel_path)
+                    MediaAsset.content_hash == content_hash,
+                    MediaAsset.resource_type == res_type,
+                    MediaAsset.cloud_name == CLOUDINARY_CLOUD_NAME,
+                    MediaAsset.folder == target_folder,
                 ).first()
 
                 if db_asset:
-                    print(f"  [Reused Asset] #{db_asset.id} {filename} (hash match)")
+                    print(f"  [Reused Asset] #{db_asset.id} {filename} (hash match: {content_hash[:12]})")
                     asset_map[full_path] = db_asset
                     summary["media_assets_reused"] += 1
+                    # Ensure manifest is consistent with current registered asset
+                    manifest.setdefault("files", {})[rel_path] = {
+                        "status": "registered",
+                        "db_id": db_asset.id,
+                        "asset_id": db_asset.cloudinary_asset_id,
+                        "public_id": db_asset.public_id,
+                        "cloud_name": db_asset.cloud_name or CLOUDINARY_CLOUD_NAME,
+                        "secure_url": db_asset.secure_url or db_asset.url,
+                        "url": db_asset.url,
+                        "resource_type": db_asset.resource_type,
+                        "format": db_asset.format or fmt,
+                        "width": db_asset.width,
+                        "height": db_asset.height,
+                        "duration": float(db_asset.duration) if db_asset.duration is not None else None,
+                        "file_size": db_asset.file_size or file_size,
+                        "delivery_type": db_asset.delivery_type or "upload",
+                        "content_hash": content_hash,
+                        "folder": target_folder,
+                        "filename": filename,
+                        "relative_source_path": rel_path,
+                    }
+                    save_manifest(manifest, manifest_path)
                     continue
 
-                # Check manifest for previous upload metadata
-                manifest_entry = manifest.get("files", {}).get(rel_path, {})
-                upload_meta = None
+                # Check if this source file path had a previous asset with a DIFFERENT hash
+                old_db_asset = db.query(MediaAsset).filter(
+                    MediaAsset.relative_source_path == rel_path,
+                    MediaAsset.folder == target_folder,
+                ).order_by(MediaAsset.id.desc()).first()
 
-                if manifest_entry.get("status") in ("uploaded", "registered") and manifest_entry.get("secure_url"):
+                is_changed_file = bool(old_db_asset and old_db_asset.content_hash != content_hash)
+                if is_changed_file:
+                    print(f"  [Changed Photo Detected] {filename} changed content hash (old: {old_db_asset.content_hash[:8]}... -> new: {content_hash[:8]}...)")
+                    summary["media_assets_replaced"] += 1
+
+                # Check manifest for previous upload metadata:
+                # VALIDATE manifest entries against CURRENT source hash before recovering an upload!
+                manifest_entry = manifest.get("files", {}).get(rel_path, {})
+                manifest_hash = manifest_entry.get("content_hash")
+                manifest_cloud = manifest_entry.get("cloud_name")
+                manifest_res_type = manifest_entry.get("resource_type")
+                manifest_url = manifest_entry.get("secure_url") or manifest_entry.get("url")
+
+                is_manifest_valid_for_current_file = (
+                    manifest_hash == content_hash
+                    and manifest_cloud == CLOUDINARY_CLOUD_NAME
+                    and manifest_res_type == res_type
+                    and bool(manifest_url)
+                    and manifest_entry.get("status") in ("uploaded", "registered")
+                )
+
+                upload_meta = None
+                if is_manifest_valid_for_current_file:
                     upload_meta = manifest_entry
-                    print(f"  [Recovered Upload] {filename} from manifest")
+                    print(f"  [Recovered Upload] {filename} from manifest (hash: {content_hash[:12]})")
                 elif dry_run:
-                    print(f"  [Dry-Run Would Upload] {filename} -> {target_folder} ({res_type})")
+                    tag = "[Replacement Upload]" if is_changed_file else "[New Upload]"
+                    print(f"  [Dry-Run Would Upload] {filename} -> {target_folder} ({res_type}) {tag}")
                     summary["media_assets_uploaded"] += 1
                     continue
                 elif mock_upload:
                     mock_pid = f"mock_{content_hash[:16]}"
-                    mock_url = f"https://res.cloudinary.com/galbyoxi/{res_type}/upload/{mock_pid}.{fmt}"
+                    mock_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/{res_type}/upload/{mock_pid}.{fmt}"
                     upload_meta = {
                         "public_id": mock_pid,
                         "asset_id": f"asset_{content_hash[:12]}",
@@ -433,6 +493,7 @@ def import_new_arrivals(
                         "duration": 15.0 if res_type == "video" else None,
                         "file_size": file_size,
                         "delivery_type": "upload",
+                        "cloud_name": CLOUDINARY_CLOUD_NAME,
                     }
                     manifest["files"][rel_path] = {
                         "status": "uploaded",
@@ -444,7 +505,7 @@ def import_new_arrivals(
                     }
                     save_manifest(manifest, manifest_path)
                 else:
-                    # Live Cloudinary upload with retry
+                    # Live Cloudinary upload: upload as a new uniquely identified version
                     max_retries = 3
                     uploaded_res = None
                     for attempt in range(max_retries):
@@ -491,9 +552,10 @@ def import_new_arrivals(
                         "duration": uploaded_res.get("duration"),
                         "file_size": uploaded_res.get("bytes", file_size),
                         "delivery_type": uploaded_res.get("type", "upload"),
+                        "cloud_name": CLOUDINARY_CLOUD_NAME,
                     }
 
-                    # Persist upload result to manifest immediately
+                    # Persist upload result to manifest immediately for recovery
                     manifest["files"][rel_path] = {
                         "status": "uploaded",
                         **upload_meta,
@@ -504,15 +566,15 @@ def import_new_arrivals(
                     }
                     save_manifest(manifest, manifest_path)
 
-                # Register MediaAsset in DB
-                if not dry_run:
+                # Register MediaAsset in DB transactionally
+                if not dry_run and upload_meta:
                     display_name = os.path.splitext(filename)[0]
                     new_asset = MediaAsset(
                         filename=filename,
                         display_name=display_name,
                         public_id=upload_meta["public_id"],
                         cloudinary_asset_id=upload_meta.get("asset_id"),
-                        cloud_name=CLOUDINARY_CLOUD_NAME,
+                        cloud_name=upload_meta.get("cloud_name", CLOUDINARY_CLOUD_NAME),
                         delivery_type=upload_meta.get("delivery_type", "upload"),
                         content_hash=content_hash,
                         relative_source_path=rel_path,
@@ -536,9 +598,10 @@ def import_new_arrivals(
                     manifest["files"][rel_path]["status"] = "registered"
                     manifest["files"][rel_path]["db_id"] = new_asset.id
                     save_manifest(manifest, manifest_path)
-                    print(f"  + Registered MediaAsset #{new_asset.id}: {filename} -> {target_folder}")
+                    action_tag = "Replacement" if is_changed_file else "New"
+                    print(f"  + Registered {action_tag} MediaAsset #{new_asset.id}: {filename} (hash: {content_hash[:12]})")
 
-        # Step 4: Integrate the 10 Dresses into Products, Inventory, and Collections
+        # Step 4: Integrate Dresses into Products, Inventory, and Collections
         print("\n[Step 4] Integrating Dresses into Products, Variants, and Collections...")
         subcat_counters: Dict[Tuple[str, str], int] = {}
 
@@ -549,13 +612,14 @@ def import_new_arrivals(
             target_folder = d["target_folder"]
             base_slug = slugify(design_name)
 
-            # Check if product already exists by source_folder (Stable Identity)
+            # Stable Source Identity: match by target_folder
             existing_prod = db.query(Product).filter(Product.source_folder == target_folder).first()
 
             if existing_prod:
                 print(f"  [Existing Product] #{existing_prod.id} '{existing_prod.name}' (status={existing_prod.status})")
                 summary["products_reused"] += 1
                 if not dry_run:
+                    # Preserve owner-controlled publication state, names, specs, prices, stock
                     sync_product_category_and_collections(
                         product=existing_prod,
                         category=cat,
@@ -563,6 +627,94 @@ def import_new_arrivals(
                         explicit_collection_ids=None,
                         db=db,
                     )
+
+                    # Update gallery associations for replaced or new media assets:
+                    # Replace only corresponding importer-managed associations;
+                    # Preserve sort_order, cover position, unrelated gallery items, and other products.
+                    existing_images = (
+                        db.query(ProductImage)
+                        .filter(ProductImage.product_id == existing_prod.id)
+                        .order_by(ProductImage.sort_order.asc())
+                        .all()
+                    )
+
+                    for f_info in d["files"]:
+                        full_path = f_info["full_path"]
+                        rel_path = f_info["relative_path"]
+                        filename = f_info["filename"]
+                        res_type = f_info["resource_type"]
+                        is_cover = f_info["is_cover"]
+                        file_hash = compute_sha256(full_path)
+
+                        current_asset = asset_map.get(full_path)
+                        if not current_asset:
+                            current_asset = db.query(MediaAsset).filter(
+                                MediaAsset.content_hash == file_hash,
+                                MediaAsset.resource_type == res_type,
+                                MediaAsset.cloud_name == CLOUDINARY_CLOUD_NAME,
+                                MediaAsset.folder == target_folder,
+                            ).first()
+
+                        if not current_asset:
+                            # Keep working gallery intact if new asset is not registered
+                            continue
+
+                        # Check if this exact asset is already linked to the product
+                        already_linked = any(img.media_asset_id == current_asset.id for img in existing_images)
+                        if already_linked:
+                            continue
+
+                        # Determine target slot: cover is sort_order=1, video is sort_order=2 (or next available)
+                        target_sort = 1 if is_cover or (res_type == "image" and len(d["files"]) == 1) else (2 if res_type == "video" else len(existing_images) + 1)
+
+                        # Find the corresponding existing ProductImage to replace:
+                        # 1. By media asset's relative_source_path == rel_path or filename
+                        # 2. Or by slot (sort_order == target_sort and resource_type == res_type)
+                        matched_img = None
+                        for img in existing_images:
+                            linked_asset = db.query(MediaAsset).filter(MediaAsset.id == img.media_asset_id).first() if img.media_asset_id else None
+                            if linked_asset and (linked_asset.relative_source_path == rel_path or linked_asset.filename == filename):
+                                matched_img = img
+                                break
+
+                        if not matched_img:
+                            for img in existing_images:
+                                if img.sort_order == target_sort and img.resource_type == res_type:
+                                    matched_img = img
+                                    break
+
+                        if matched_img:
+                            # Replace old asset association transactionally while preserving sort_order
+                            old_asset_id = matched_img.media_asset_id
+                            matched_img.media_asset_id = current_asset.id
+                            matched_img.url = current_asset.secure_url or current_asset.url
+                            matched_img.public_id = current_asset.public_id
+                            matched_img.resource_type = current_asset.resource_type
+                            matched_img.width = current_asset.width
+                            matched_img.height = current_asset.height
+                            matched_img.duration = current_asset.duration
+                            matched_img.alt_text = f"{design_name} - {current_asset.display_name or current_asset.filename}"
+                            summary["images_replaced"] += 1
+                            print(f"  [Gallery Replaced] Product #{existing_prod.id} '{design_name}' slot {matched_img.sort_order}: asset #{old_asset_id} -> #{current_asset.id}")
+                        else:
+                            # Append new ProductImage
+                            new_img = ProductImage(
+                                product_id=existing_prod.id,
+                                media_asset_id=current_asset.id,
+                                url=current_asset.secure_url or current_asset.url,
+                                public_id=current_asset.public_id,
+                                resource_type=current_asset.resource_type,
+                                width=current_asset.width,
+                                height=current_asset.height,
+                                duration=current_asset.duration,
+                                sort_order=target_sort,
+                                alt_text=f"{design_name} - {current_asset.display_name or current_asset.filename}",
+                            )
+                            db.add(new_img)
+                            existing_images.append(new_img)
+                            summary["images_attached"] += 1
+                            print(f"  [Gallery Attached] Product #{existing_prod.id} '{design_name}': attached new asset #{current_asset.id} at sort_order={target_sort}")
+
                 continue
 
             # Allocate sequential subcategory index for SKU
@@ -598,7 +750,7 @@ def import_new_arrivals(
                 print(f"  [Dry-Run Create Product] '{design_name}' ({cat} › {subcat}) | 5 variants | {len(d['files'])} assets")
                 continue
 
-            # Live Product Creation
+            # Live Product Creation: Default to DRAFT and is_active=False
             new_prod = Product(
                 name=design_name,
                 slug=candidate_slug,
@@ -609,7 +761,7 @@ def import_new_arrivals(
                 category=cat,
                 subcategory=subcat,
                 source_folder=target_folder,
-                status="DRAFT",    # Keep new products DRAFT
+                status="DRAFT",    # New products default to DRAFT
                 is_active=False,
                 is_bestseller=False,
             )
@@ -626,16 +778,19 @@ def import_new_arrivals(
             summary["products_created"] += 1
 
             # Attach Images & Videos
-            # For Naqsh Ivory Mocha Three-Piece Suit or any multi-file:
-            # cover image MUST be sort_order=1, video MUST be sort_order=2
+            # Cover image MUST be sort_order=1, video MUST be sort_order=2
             sort_order = 1
             for f_info in d["files"]:
                 full_path = f_info["full_path"]
                 asset = asset_map.get(full_path)
                 if not asset:
-                    # In case asset was already in DB
                     content_hash = compute_sha256(full_path)
-                    asset = db.query(MediaAsset).filter(MediaAsset.content_hash == content_hash).first()
+                    asset = db.query(MediaAsset).filter(
+                        MediaAsset.content_hash == content_hash,
+                        MediaAsset.resource_type == f_info["resource_type"],
+                        MediaAsset.cloud_name == CLOUDINARY_CLOUD_NAME,
+                        MediaAsset.folder == target_folder,
+                    ).first()
 
                 if asset:
                     p_img = ProductImage(
@@ -720,11 +875,13 @@ def import_new_arrivals(
     print(f"Cloudinary Folders Made:   {summary['cloudinary_folders_created']}")
     print(f"Media Assets Uploaded:     {summary['media_assets_uploaded']}")
     print(f"Media Assets Reused:       {summary['media_assets_reused']}")
+    print(f"Media Assets Replaced:     {summary['media_assets_replaced']}")
     print(f"Products Created:          {summary['products_created']}")
     print(f"Products Reused:           {summary['products_reused']}")
     print(f"Variants Created:          {summary['variants_created']}")
     print(f"Stock Adjustments Logged:  {summary['stock_adjustments_recorded']}")
     print(f"Images/Videos Attached:    {summary['images_attached']}")
+    print(f"Images Replaced:           {summary['images_replaced']}")
     print("=" * 70)
     return summary
 

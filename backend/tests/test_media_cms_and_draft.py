@@ -63,13 +63,19 @@ class TestMediaCmsAndDraft(unittest.TestCase):
 
     def test_01_slug_resilience(self):
         """Verify that visiting product by slug with spaces, dashes, or name resolves without 404."""
-        resp1 = client.get("/products/subah-pintuck-everyday-co-ord")
+        db = SessionLocal()
+        pub = db.query(Product).filter(Product.status == "PUBLISHED").first()
+        db.close()
+        self.assertIsNotNone(pub, "Expected at least one published product")
+        
+        resp1 = client.get(f"/products/{pub.slug}")
         self.assertEqual(resp1.status_code, 200, f"Expected 200 for canonical slug, got {resp1.status_code}")
         data1 = resp1.json()
-        self.assertEqual(data1["name"], "Subah Pintuck Everyday Co-ord")
+        self.assertEqual(data1["name"], pub.name)
 
         # Slug with spaces
-        resp2 = client.get("/products/subah pintuck everyday co ord")
+        spaced_slug = pub.slug.replace("-", " ")
+        resp2 = client.get(f"/products/{spaced_slug}")
         self.assertEqual(resp2.status_code, 200, f"Expected 200 for slug with spaces, got {resp2.status_code}")
         data2 = resp2.json()
         self.assertEqual(data2["id"], data1["id"])
@@ -118,8 +124,8 @@ class TestMediaCmsAndDraft(unittest.TestCase):
         headers = {"Authorization": f"Bearer {self.token}"}
 
         create_payload = {
-            "name": "Gulabi Zari Chanderi Set",
-            "slug": "gulabi-zari-chanderi-set",
+            "name": "Test Draft Zero Stock Set",
+            "slug": "test-draft-zero-stock-set",
             "category": "TWO PIECES",
             "subcategory": "Co-ord Sets",
             "status": "DRAFT",

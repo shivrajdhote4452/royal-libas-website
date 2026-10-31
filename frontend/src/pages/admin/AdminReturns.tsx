@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  RotateCcw,
   Search,
   Plus,
   RefreshCw,
@@ -179,7 +178,7 @@ export const AdminReturns: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-serif font-bold text-gray-900 tracking-wide flex items-center gap-2">
-            <RotateCcw className="w-6 h-6 text-[#5E1224]" />
+            <RefreshCw className="w-6 h-6 text-[#5E1224]" />
             Customer Exchanges
           </h1>
           <p className="text-xs text-gray-600 mt-1">
@@ -309,7 +308,7 @@ export const AdminReturns: React.FC = () => {
           </div>
         ) : returns.length === 0 ? (
           <div className="p-12 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
-            <RotateCcw className="w-8 h-8 text-gray-300" />
+            <RefreshCw className="w-8 h-8 text-gray-300" />
             No customer exchange requests found.
           </div>
         ) : (
@@ -579,7 +578,7 @@ export const AdminReturns: React.FC = () => {
           <div className="bg-white rounded-xl max-w-lg w-full p-5 border border-[#E5D9C5] shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                <RotateCcw className="w-4 h-4 text-[#5E1224]" />
+                <RefreshCw className="w-4 h-4 text-[#5E1224]" />
                 Manage #{selectedReturn.return_code}
               </h3>
               <button onClick={() => setSelectedReturn(null)} className="text-gray-400 hover:text-gray-600">
