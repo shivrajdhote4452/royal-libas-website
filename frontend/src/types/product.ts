@@ -35,6 +35,10 @@ export interface MediaAsset {
   client_id?: string | null;
   public_id?: string | null;
   cloudinary_asset_id?: string | null;
+  cloud_name?: string | null;
+  delivery_type?: string | null;
+  content_hash?: string | null;
+  relative_source_path?: string | null;
   url: string;
   secure_url?: string | null;
   resource_type: 'image' | 'video';
@@ -60,6 +64,7 @@ export interface MediaFolder {
   parent_path?: string | null;
   asset_count: number;
   subfolder_count: number;
+  remote_created?: boolean;
   created_at: string;
   updated_at: string;
 }

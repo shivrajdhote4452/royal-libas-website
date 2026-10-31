@@ -269,9 +269,21 @@ def upload_to_cloudinary(
     public_id = upload_result.get("public_id")
     secure_url = upload_result.get("secure_url") or upload_result.get("url")
     detected_res_type = upload_result.get("resource_type", res_type)
+    asset_id = upload_result.get("asset_id")
+    delivery_type = upload_result.get("type", "upload")
+
+    if not public_id or not secure_url:
+        logger.error(f"Unconfirmed Cloudinary upload for {original_filename}: missing public_id or delivery URL in response: {upload_result}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Unconfirmed Cloudinary upload for '{original_filename}': missing public_id or delivery URL in response.",
+        )
 
     return {
         "public_id": public_id,
+        "asset_id": asset_id,
+        "cloud_name": CLOUDINARY_CLOUD_NAME,
+        "delivery_type": delivery_type,
         "url": secure_url,
         "secure_url": secure_url,
         "resource_type": detected_res_type,
@@ -280,7 +292,7 @@ def upload_to_cloudinary(
         "height": upload_result.get("height"),
         "duration": upload_result.get("duration"),
         "file_size": upload_result.get("bytes", len(file_bytes)),
-        "folder": folder,
+        "folder": upload_result.get("asset_folder", folder),
     }
 
 
@@ -363,9 +375,9 @@ def detect_cloudinary_folder_mode(force_refresh: bool = False) -> str:
     if not force_refresh and _detected_folder_mode:
         return _detected_folder_mode
 
-    # Explicit environment override (e.g. for testing fixed mode)
+    # Explicit environment override (e.g. for testing fixed/unknown mode)
     env_mode = os.environ.get("CLOUDINARY_FOLDER_MODE", "").strip().lower()
-    if env_mode in ("dynamic", "fixed"):
+    if env_mode in ("dynamic", "fixed", "unknown"):
         _detected_folder_mode = env_mode
         return env_mode
 
@@ -382,18 +394,29 @@ def detect_cloudinary_folder_mode(force_refresh: bool = False) -> str:
             if "asset_folder" in first_res:
                 _detected_folder_mode = "dynamic"
                 return "dynamic"
+            else:
+                _detected_folder_mode = "fixed"
+                return "fixed"
         
-        # In modern accounts created since 2020, root_folders and subfolders use asset folders
-        _detected_folder_mode = "dynamic"
-        return "dynamic"
+        # Probe root folders if no resources exist
+        try:
+            root_probe = cloudinary.api.root_folders()
+            if "folders" in root_probe:
+                _detected_folder_mode = "dynamic"
+                return "dynamic"
+        except Exception:
+            pass
+
+        _detected_folder_mode = "unknown"
+        return "unknown"
     except Exception as e:
         err_msg = str(e).lower()
         if "asset folders are not supported" in err_msg or "fixed" in err_msg:
             _detected_folder_mode = "fixed"
             return "fixed"
-        logger.warning(f"Error probing Cloudinary folder mode ({e}), defaulting to dynamic")
-        _detected_folder_mode = "dynamic"
-        return "dynamic"
+        logger.warning(f"Error probing Cloudinary folder mode ({e}): reporting unknown")
+        _detected_folder_mode = "unknown"
+        return "unknown"
 
 
 def list_cloudinary_folders(parent_folder: Optional[str] = None) -> list:
@@ -468,10 +491,11 @@ def rename_cloudinary_folder(from_path: str, to_path: str) -> Dict[str, Any]:
         return {"success": False, "error": "Cloudinary not configured"}
 
     mode = detect_cloudinary_folder_mode()
-    if mode == "fixed":
+    if mode != "dynamic":
         return {
             "success": False,
-            "error": "Cloudinary is in fixed folder mode. Renaming folders is restricted to prevent breaking delivery URLs.",
+            "error": f"Cloudinary is in {mode} folder mode. Renaming folders is restricted to prevent breaking delivery URLs.",
+            "mode": mode,
         }
 
     try:
@@ -509,11 +533,11 @@ def move_cloudinary_asset_folder(public_id: str, new_folder: str, resource_type:
         return {"success": False, "error": "Cloudinary not configured"}
 
     mode = detect_cloudinary_folder_mode()
-    if mode == "fixed":
+    if mode != "dynamic":
         return {
             "success": False,
-            "error": "Cloudinary is in fixed folder mode. Moving assets dynamically without changing public IDs is not supported.",
-            "mode": "fixed",
+            "error": f"Cloudinary is in {mode} folder mode. Moving assets dynamically without changing public IDs is not supported.",
+            "mode": mode,
         }
 
     clean_res_type = "video" if resource_type == "video" else "image"

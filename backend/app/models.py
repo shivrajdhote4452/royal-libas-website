@@ -454,9 +454,9 @@ class MediaFolder(Base):
     __tablename__ = "media_folders"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    path = Column(String(255), unique=True, index=True, nullable=False)
-    parent_path = Column(String(255), index=True, nullable=True)
+    name = Column(String(255), nullable=False)
+    path = Column(String(500), unique=True, index=True, nullable=False)
+    parent_path = Column(String(500), index=True, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -470,6 +470,10 @@ class MediaAsset(Base):
     display_name = Column(String(255), nullable=True)
     public_id = Column(String(255), nullable=True, index=True)
     cloudinary_asset_id = Column(String(100), nullable=True, index=True)
+    cloud_name = Column(String(100), nullable=True, index=True)
+    delivery_type = Column(String(50), default="upload", nullable=True)
+    content_hash = Column(String(64), nullable=True, index=True)
+    relative_source_path = Column(String(500), nullable=True)
     url = Column(String(500), nullable=False)
     secure_url = Column(String(500), nullable=True)
     resource_type = Column(String(20), default="image", nullable=False)  # 'image' or 'video'
@@ -480,5 +484,5 @@ class MediaAsset(Base):
     file_size = Column(Integer, nullable=False, default=0)  # bytes
     mime_type = Column(String(100), nullable=False)
     alt_text = Column(String(255), nullable=True)
-    folder = Column(String(255), nullable=True)
+    folder = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

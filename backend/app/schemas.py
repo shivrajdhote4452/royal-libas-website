@@ -964,6 +964,10 @@ class MediaAssetResponse(BaseModel):
     client_id: Optional[str] = None
     public_id: Optional[str] = None
     cloudinary_asset_id: Optional[str] = None
+    cloud_name: Optional[str] = None
+    delivery_type: Optional[str] = "upload"
+    content_hash: Optional[str] = None
+    relative_source_path: Optional[str] = None
     url: str
     secure_url: Optional[str] = None
     resource_type: str = "image"
@@ -1006,6 +1010,7 @@ class MediaFolderResponse(BaseModel):
     parent_path: Optional[str] = None
     asset_count: int = 0
     subfolder_count: int = 0
+    remote_created: bool = True
     created_at: datetime
     updated_at: datetime
 

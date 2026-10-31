@@ -5,6 +5,7 @@ import os
 import io
 import re
 import csv
+import hashlib
 import json
 import random
 import string
@@ -121,6 +122,7 @@ from app.services.cloudinary_service import (
     fetch_cloudinary_resources,
     get_cloudinary_status,
     detect_cloudinary_folder_mode,
+    CLOUDINARY_CLOUD_NAME,
     MAX_BATCH_FILES,
     MAX_VIDEO_SIZE_BYTES,
 )
@@ -2003,9 +2005,16 @@ def admin_create_media_folder(
         ensure_ancestor_folders(db, parent, known_paths)
 
     # Create remotely in Cloudinary if configured
-    c_res = create_cloudinary_folder(new_path)
-    if not c_res.get("success") and is_cloudinary_configured():
-        admin_media_logger.warning(f"Cloudinary folder creation returned: {c_res.get('error')}")
+    remote_ok = True
+    if is_cloudinary_configured():
+        c_res = create_cloudinary_folder(new_path)
+        if not c_res.get("success"):
+            admin_media_logger.error(f"Cloudinary provider rejected folder creation for '{new_path}': {c_res.get('error')}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Cloudinary provider rejected folder creation: {c_res.get('error') or 'Provider rejected folder creation'}",
+            )
+        remote_ok = True
 
     folder = MediaFolder(
         name=clean_name,
@@ -2024,6 +2033,7 @@ def admin_create_media_folder(
         parent_path=folder.parent_path,
         asset_count=0,
         subfolder_count=0,
+        remote_created=remote_ok,
         created_at=folder.created_at,
         updated_at=folder.updated_at,
     )
@@ -2074,10 +2084,10 @@ def admin_rename_media_folder(
     # Check Cloudinary folder mode and remote rename capability
     if is_cloudinary_configured():
         mode = detect_cloudinary_folder_mode()
-        if mode == "fixed":
+        if mode != "dynamic":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cloudinary is in fixed folder mode. Renaming folders is restricted to prevent breaking delivery URLs.",
+                detail=f"Cloudinary is in {mode} folder mode. Renaming folders is restricted to prevent breaking delivery URLs.",
             )
         c_res = rename_cloudinary_folder(old_path, new_path)
         if not c_res.get("success"):
@@ -2321,9 +2331,18 @@ async def admin_upload_media_batch(
 
         # 3. Database transaction boundary
         try:
+            content_hash = hashlib.sha256(contents).hexdigest()
+            cloud_name = c_res.get("cloud_name") or CLOUDINARY_CLOUD_NAME
+            cloudinary_asset_id = c_res.get("asset_id")
+            delivery_type = c_res.get("delivery_type", "upload")
+
             asset = MediaAsset(
                 filename=filename,
                 public_id=c_res["public_id"],
+                cloudinary_asset_id=cloudinary_asset_id,
+                cloud_name=cloud_name,
+                delivery_type=delivery_type,
+                content_hash=content_hash,
                 url=c_res["secure_url"],
                 secure_url=c_res["secure_url"],
                 resource_type=c_res["resource_type"],
@@ -2379,8 +2398,14 @@ async def admin_upload_media_batch(
             MediaAssetResponse(
                 id=asset.id,
                 filename=asset.filename,
+                display_name=asset.display_name or asset.filename,
                 client_id=cid,
                 public_id=asset.public_id,
+                cloudinary_asset_id=asset.cloudinary_asset_id,
+                cloud_name=asset.cloud_name,
+                delivery_type=asset.delivery_type or "upload",
+                content_hash=asset.content_hash,
+                relative_source_path=asset.relative_source_path,
                 url=asset.url,
                 secure_url=asset.secure_url,
                 resource_type=asset.resource_type,
@@ -2429,9 +2454,18 @@ async def admin_upload_media_asset(
     )
 
     try:
+        content_hash = hashlib.sha256(contents).hexdigest()
+        cloud_name = c_res.get("cloud_name") or CLOUDINARY_CLOUD_NAME
+        cloudinary_asset_id = c_res.get("asset_id")
+        delivery_type = c_res.get("delivery_type", "upload")
+
         asset = MediaAsset(
             filename=filename,
             public_id=c_res["public_id"],
+            cloudinary_asset_id=cloudinary_asset_id,
+            cloud_name=cloud_name,
+            delivery_type=delivery_type,
+            content_hash=content_hash,
             url=c_res["secure_url"],
             secure_url=c_res["secure_url"],
             resource_type=c_res["resource_type"],
@@ -2482,7 +2516,13 @@ async def admin_upload_media_asset(
     return MediaAssetResponse(
         id=asset.id,
         filename=asset.filename,
+        display_name=asset.display_name or asset.filename,
         public_id=asset.public_id,
+        cloudinary_asset_id=asset.cloudinary_asset_id,
+        cloud_name=asset.cloud_name,
+        delivery_type=asset.delivery_type or "upload",
+        content_hash=asset.content_hash,
+        relative_source_path=asset.relative_source_path,
         url=asset.url,
         secure_url=asset.secure_url,
         resource_type=asset.resource_type,
@@ -2638,10 +2678,10 @@ def admin_bulk_move_media(
     # Check Cloudinary folder mode
     if is_cloudinary_configured():
         mode = detect_cloudinary_folder_mode()
-        if mode == "fixed":
+        if mode != "dynamic":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cloudinary is in fixed folder mode. Moving assets without changing public IDs is not supported by Cloudinary in this mode.",
+                detail=f"Cloudinary is in {mode} folder mode. Moving assets without changing public IDs is not supported by Cloudinary in this mode.",
             )
 
     target_folder = payload.target_folder.strip().strip("/") if payload.target_folder else None
@@ -3034,21 +3074,16 @@ def admin_sync_cloudinary_media(
                     folders_discovered += created_ancestors
             db.commit()
 
-        # 2. Fetch paginated resources for requested types
-        types_to_fetch = ["image", "video"] if resource_type == "all" else [resource_type]
+        # 2. Fetch paginated resources with strictly separate cursor tracking for image and video
         scanned_resources = []
         next_cursor = None
         rate_limited = False
         error_message = None
 
-        for r_type in types_to_fetch:
-            res_dict = fetch_cloudinary_resources(
-                resource_type=r_type,
-                max_results=max_results,
-                next_cursor=cursor,
-            )
-            batch = res_dict.get("resources", [])
-            scanned_resources.extend(batch)
+        if resource_type == "image":
+            img_c = cursor[4:] if cursor and cursor.startswith("img:") else cursor
+            res_dict = fetch_cloudinary_resources(resource_type="image", max_results=max_results, next_cursor=img_c)
+            scanned_resources = res_dict.get("resources", [])
             if res_dict.get("next_cursor"):
                 next_cursor = res_dict.get("next_cursor")
             if res_dict.get("rate_limited"):
@@ -3056,11 +3091,66 @@ def admin_sync_cloudinary_media(
             if res_dict.get("error"):
                 error_message = res_dict.get("error")
 
+        elif resource_type == "video":
+            vid_c = cursor[4:] if cursor and cursor.startswith("vid:") else cursor
+            res_dict = fetch_cloudinary_resources(resource_type="video", max_results=max_results, next_cursor=vid_c)
+            scanned_resources = res_dict.get("resources", [])
+            if res_dict.get("next_cursor"):
+                next_cursor = res_dict.get("next_cursor")
+            if res_dict.get("rate_limited"):
+                rate_limited = True
+            if res_dict.get("error"):
+                error_message = res_dict.get("error")
+
+        else:  # resource_type == "all"
+            if not cursor or cursor.startswith("img:"):
+                img_c = cursor[4:] if cursor and cursor.startswith("img:") else cursor
+                res_dict = fetch_cloudinary_resources(resource_type="image", max_results=max_results, next_cursor=img_c)
+                scanned_resources = res_dict.get("resources", [])
+                if res_dict.get("rate_limited"):
+                    rate_limited = True
+                if res_dict.get("error"):
+                    error_message = res_dict.get("error")
+
+                if res_dict.get("next_cursor"):
+                    next_cursor = f"img:{res_dict['next_cursor']}"
+                else:
+                    # Images are exhausted on this page, fetch initial video page
+                    vid_res = fetch_cloudinary_resources(resource_type="video", max_results=max_results, next_cursor=None)
+                    scanned_resources.extend(vid_res.get("resources", []))
+                    if vid_res.get("rate_limited"):
+                        rate_limited = True
+                    if vid_res.get("error"):
+                        error_message = vid_res.get("error")
+                    if vid_res.get("next_cursor"):
+                        next_cursor = f"vid:{vid_res['next_cursor']}"
+                    else:
+                        next_cursor = None
+            elif cursor.startswith("vid:"):
+                vid_c = cursor[4:]
+                vid_res = fetch_cloudinary_resources(resource_type="video", max_results=max_results, next_cursor=vid_c)
+                scanned_resources = vid_res.get("resources", [])
+                if vid_res.get("rate_limited"):
+                    rate_limited = True
+                if vid_res.get("error"):
+                    error_message = vid_res.get("error")
+                if vid_res.get("next_cursor"):
+                    next_cursor = f"vid:{vid_res['next_cursor']}"
+                else:
+                    next_cursor = None
+            else:
+                # Fallback for plain legacy cursor
+                res_dict = fetch_cloudinary_resources(resource_type="image", max_results=max_results, next_cursor=cursor)
+                scanned_resources = res_dict.get("resources", [])
+                if res_dict.get("next_cursor"):
+                    next_cursor = f"img:{res_dict['next_cursor']}"
+
         total_scanned = len(scanned_resources)
         imported = 0
         updated = 0
         skipped = 0
         failed = 0
+        cloud_name = CLOUDINARY_CLOUD_NAME
 
         for res in scanned_resources:
             try:
@@ -3073,21 +3163,31 @@ def admin_sync_cloudinary_media(
                 width = res.get("width")
                 height = res.get("height")
                 duration = res.get("duration")
-                asset_folder = res.get("asset_folder") or (os.path.dirname(public_id) if "/" in public_id else None)
-                if asset_folder == "":
-                    asset_folder = None
+                raw_asset_folder = res.get("asset_folder")
+                if raw_asset_folder is not None:
+                    asset_folder = raw_asset_folder.strip().strip("/") if raw_asset_folder.strip() else None
+                else:
+                    asset_folder = os.path.dirname(public_id) if "/" in public_id else None
                 display_name = res.get("display_name") or (os.path.basename(public_id) if public_id else None)
 
-                # Reconcile primarily by immutable asset_id, then fallback to (public_id, resource_type)
+                # Reconcile primarily by immutable asset_id + cloud_name, then fallback to (public_id, resource_type)
                 existing_asset = None
                 if asset_id:
-                    existing_asset = db.query(MediaAsset).filter(MediaAsset.cloudinary_asset_id == asset_id).first()
+                    existing_asset = (
+                        db.query(MediaAsset)
+                        .filter(
+                            MediaAsset.cloudinary_asset_id == asset_id,
+                            or_(MediaAsset.cloud_name == cloud_name, MediaAsset.cloud_name == None),
+                        )
+                        .first()
+                    )
                 if not existing_asset and public_id:
                     existing_asset = (
                         db.query(MediaAsset)
                         .filter(
                             MediaAsset.public_id == public_id,
                             MediaAsset.resource_type == res_type,
+                            or_(MediaAsset.cloud_name == cloud_name, MediaAsset.cloud_name == None),
                         )
                         .first()
                     )
@@ -3097,6 +3197,7 @@ def admin_sync_cloudinary_media(
                         .filter(
                             MediaAsset.url == secure_url,
                             MediaAsset.resource_type == res_type,
+                            or_(MediaAsset.cloud_name == cloud_name, MediaAsset.cloud_name == None),
                         )
                         .first()
                     )
@@ -3105,6 +3206,12 @@ def admin_sync_cloudinary_media(
                     changed = False
                     if not existing_asset.cloudinary_asset_id and asset_id:
                         existing_asset.cloudinary_asset_id = asset_id
+                        changed = True
+                    if not getattr(existing_asset, "cloud_name", None) and cloud_name:
+                        existing_asset.cloud_name = cloud_name
+                        changed = True
+                    if not getattr(existing_asset, "delivery_type", None):
+                        existing_asset.delivery_type = res.get("type", "upload")
                         changed = True
                     if not getattr(existing_asset, "display_name", None) and display_name:
                         existing_asset.display_name = display_name
@@ -3140,6 +3247,8 @@ def admin_sync_cloudinary_media(
                         display_name=display_name or clean_filename,
                         public_id=public_id,
                         cloudinary_asset_id=asset_id,
+                        cloud_name=cloud_name,
+                        delivery_type=res.get("type", "upload"),
                         url=secure_url,
                         secure_url=secure_url,
                         resource_type=res_type,
@@ -3275,9 +3384,30 @@ def admin_update_media_asset(
 
     if payload.folder is not None:
         target_folder = payload.folder.strip().strip("/") if payload.folder else None
-        asset.folder = target_folder
-        if asset.public_id:
-            move_cloudinary_asset_folder(asset.public_id, target_folder or "", getattr(asset, "resource_type", "image") or "image")
+        current_folder = (asset.folder or "").strip().strip("/")
+        if target_folder != (current_folder or None):
+            if is_cloudinary_configured():
+                mode = detect_cloudinary_folder_mode()
+                if mode != "dynamic":
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Cloudinary is in {mode} folder mode. Moving assets without changing public IDs is not supported.",
+                    )
+                if asset.public_id:
+                    move_res = move_cloudinary_asset_folder(
+                        asset.public_id,
+                        target_folder or "",
+                        getattr(asset, "resource_type", "image") or "image",
+                    )
+                    if not move_res.get("success"):
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=f"Failed to move asset folder in Cloudinary: {move_res.get('error')}",
+                        )
+            if target_folder:
+                known_paths = {row[0] for row in db.query(MediaFolder.path).all()}
+                ensure_ancestor_folders(db, target_folder, known_paths)
+            asset.folder = target_folder
 
     db.commit()
     db.refresh(asset)
@@ -3291,6 +3421,10 @@ def admin_update_media_asset(
         display_name=getattr(asset, "display_name", None) or asset.filename,
         public_id=asset.public_id,
         cloudinary_asset_id=getattr(asset, "cloudinary_asset_id", None),
+        cloud_name=getattr(asset, "cloud_name", None),
+        delivery_type=getattr(asset, "delivery_type", "upload") or "upload",
+        content_hash=getattr(asset, "content_hash", None),
+        relative_source_path=getattr(asset, "relative_source_path", None),
         url=asset.url,
         secure_url=asset.secure_url or asset.url,
         resource_type=getattr(asset, "resource_type", "image") or "image",
