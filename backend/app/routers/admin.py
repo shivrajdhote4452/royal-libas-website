@@ -3831,16 +3831,28 @@ def _process_product_images(
             elif len(matching_assets) > 1:
                 # Multiple records match: do NOT arbitrarily choose the first!
                 # A unique exact URL match may resolve the ambiguity.
-                url_norm = trusted_url.split("?")[0] if trusted_url else ""
-                url_matches = [
-                    a for a in matching_assets
-                    if trusted_url and (
-                        a.url == trusted_url
-                        or a.secure_url == trusted_url
-                        or (url_norm and a.url and a.url.split("?")[0] == url_norm)
-                        or (url_norm and a.secure_url and a.secure_url.split("?")[0] == url_norm)
-                    )
-                ]
+                url_clean = trusted_url.strip() if trusted_url else ""
+                url_norm = url_clean.split("?")[0] if url_clean else ""
+                url_matches = []
+                seen_duo_ids = set()
+                for a in matching_assets:
+                    if a.id in seen_duo_ids:
+                        continue
+                    a_url = a.url.strip() if a.url else ""
+                    a_sec = a.secure_url.strip() if a.secure_url else ""
+                    a_url_norm = a_url.split("?")[0] if a_url else ""
+                    a_sec_norm = a_sec.split("?")[0] if a_sec else ""
+
+                    is_match = False
+                    if url_clean and (a_url == url_clean or a_sec == url_clean):
+                        is_match = True
+                    elif url_norm and (a_url_norm == url_norm or a_sec_norm == url_norm):
+                        is_match = True
+
+                    if is_match:
+                        seen_duo_ids.add(a.id)
+                        url_matches.append(a)
+
                 if len(url_matches) == 1:
                     asset = url_matches[0]
                     trusted_url = asset.secure_url or asset.url
@@ -3857,21 +3869,54 @@ def _process_product_images(
                 # No matches in registry: preserve legacy values with null reference
                 asset_id = None
         elif trusted_url:
-            # Legacy entry without public_id: attempt unambiguous URL match
-            url_norm = trusted_url.split("?")[0]
-            url_matches = (
+            # Legacy entry without public_id or media_asset_id: attempt unambiguous full URL match
+            url_clean = trusted_url.strip() if trusted_url else ""
+            url_norm = url_clean.split("?")[0] if url_clean else ""
+
+            candidate_filters = [
+                MediaAsset.url == url_clean,
+                MediaAsset.secure_url == url_clean,
+            ]
+            if url_norm:
+                candidate_filters.extend([
+                    MediaAsset.url == url_norm,
+                    MediaAsset.secure_url == url_norm,
+                    MediaAsset.url.like(f"{url_norm}?%"),
+                    MediaAsset.secure_url.like(f"{url_norm}?%"),
+                ])
+
+            candidates = (
                 db.query(MediaAsset)
                 .filter(
-                    (MediaAsset.url == trusted_url)
-                    | (MediaAsset.secure_url == trusted_url)
-                    | (MediaAsset.url.startswith(url_norm))
-                    | (MediaAsset.secure_url.startswith(url_norm)),
                     MediaAsset.resource_type == trusted_resource_type,
+                    or_(*candidate_filters),
                 )
                 .all()
             )
-            if len(url_matches) == 1:
-                asset = url_matches[0]
+
+            matched_assets = []
+            seen_match_ids = set()
+            for a in candidates:
+                if a.id in seen_match_ids:
+                    continue
+                a_url = a.url.strip() if a.url else ""
+                a_sec = a.secure_url.strip() if a.secure_url else ""
+                a_url_norm = a_url.split("?")[0] if a_url else ""
+                a_sec_norm = a_sec.split("?")[0] if a_sec else ""
+
+                # Full exact URL equality or full normalized URL equality (entire string, NO prefix startswith)
+                is_match = False
+                if url_clean and (a_url == url_clean or a_sec == url_clean):
+                    is_match = True
+                elif url_norm and (a_url_norm == url_norm or a_sec_norm == url_norm):
+                    is_match = True
+
+                if is_match:
+                    seen_match_ids.add(a.id)
+                    matched_assets.append(a)
+
+            if len(matched_assets) == 1:
+                asset = matched_assets[0]
                 trusted_url = asset.secure_url or asset.url
                 trusted_public_id = asset.public_id
                 trusted_resource_type = getattr(asset, "resource_type", trusted_resource_type) or trusted_resource_type
@@ -3881,6 +3926,7 @@ def _process_product_images(
                 trusted_alt = img.alt_text or asset.alt_text or getattr(asset, "display_name", None) or product_name
                 asset_id = asset.id
             else:
+                # Zero or multiple matches: preserve the original legacy URL, metadata, ordering, and null media_asset_id
                 asset_id = None
 
         # Normalize resource type if file extension suggests video

@@ -954,6 +954,256 @@ class TestMediaProductPicker(unittest.TestCase):
                 except Exception:
                     pass
 
+    def test_16_legacy_url_resolution_full_equality_and_no_prefix_matching(self):
+        """16. Legacy URL matching enforces full URL equality, forbids prefix matching, and separates types."""
+        db = self.TestingSessionLocal()
+        try:
+            # 1. Seed candidate assets
+            asset_sample_webp = MediaAsset(
+                filename="sample_dress.jpg.webp",
+                display_name="Sample Dress WebP",
+                public_id="royal_libas/products/sample_dress_webp",
+                url="https://example.com/sample_dress.jpg.webp",
+                secure_url="https://example.com/sample_dress.jpg.webp",
+                resource_type="image",
+                format="webp",
+                mime_type="image/webp",
+                folder="royal_libas/products",
+            )
+            asset_webp = MediaAsset(
+                filename="dress.jpg.webp",
+                display_name="Dress WebP",
+                public_id="royal_libas/products/dress_webp",
+                url="https://example.com/dress.jpg.webp",
+                secure_url="https://example.com/dress.jpg.webp",
+                resource_type="image",
+                format="webp",
+                mime_type="image/webp",
+                folder="royal_libas/products",
+            )
+            asset_dress10 = MediaAsset(
+                filename="dress10.jpg",
+                display_name="Dress 10",
+                public_id="royal_libas/products/dress10",
+                url="https://example.com/dress10.jpg",
+                secure_url="https://example.com/dress10.jpg",
+                resource_type="image",
+                format="jpg",
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            asset_exact = MediaAsset(
+                filename="exact_target.jpg",
+                display_name="Exact Target",
+                public_id="royal_libas/products/exact_target",
+                url="http://example.com/exact_target.jpg",
+                secure_url="https://example.com/exact_target.jpg",
+                resource_type="image",
+                format="jpg",
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            asset_query = MediaAsset(
+                filename="query_target.jpg",
+                display_name="Query Target",
+                public_id="royal_libas/products/query_target",
+                url="http://example.com/query_target.jpg",
+                secure_url="https://example.com/query_target.jpg",
+                resource_type="image",
+                format="jpg",
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            asset_dup1 = MediaAsset(
+                filename="dup_target1.jpg",
+                display_name="Dup Target 1",
+                public_id="royal_libas/products/dup_target1",
+                url="http://example.com/dup_target.jpg",
+                secure_url="https://example.com/dup_target.jpg",
+                resource_type="image",
+                format="jpg",
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            asset_dup2 = MediaAsset(
+                filename="dup_target2.jpg",
+                display_name="Dup Target 2",
+                public_id="royal_libas/products/dup_target2",
+                url="http://example.com/dup_target.jpg",
+                secure_url="https://example.com/dup_target.jpg",
+                resource_type="image",
+                format="jpg",
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            asset_video = MediaAsset(
+                filename="motion_clip.mp4",
+                display_name="Motion Clip",
+                public_id="royal_libas/products/motion_clip",
+                url="http://example.com/motion_clip.mp4",
+                secure_url="https://example.com/motion_clip.mp4",
+                resource_type="video",
+                format="mp4",
+                duration=8.5,
+                mime_type="video/mp4",
+                folder="royal_libas/products",
+            )
+            db.add_all([asset_sample_webp, asset_webp, asset_dress10, asset_exact, asset_query, asset_dup1, asset_dup2, asset_video])
+            db.commit()
+            for a in [asset_sample_webp, asset_webp, asset_dress10, asset_exact, asset_query, asset_dup1, asset_dup2, asset_video]:
+                db.refresh(a)
+            exact_id = asset_exact.id
+            query_id = asset_query.id
+            video_id = asset_video.id
+        finally:
+            db.close()
+
+        with patch("cloudinary.uploader.upload") as mock_upload, \
+             patch("cloudinary.uploader.destroy") as mock_destroy, \
+             patch("cloudinary.api.delete_resources") as mock_del:
+
+            # Create product with legacy URL entries
+            payload = {
+                "name": "URL Matching Regression Product",
+                "slug": "url-matching-regression-product",
+                "category": "TWO PIECES",
+                "status": "DRAFT",
+                "variants": [{"size": "M", "selling_price": 2999.00, "mrp": 3999.00, "stock": 5}],
+                "images": [
+                    # 1. dress.jpg must NOT match dress.jpg.webp
+                    {
+                        "url": "https://example.com/dress.jpg",
+                        "sort_order": 1,
+                        "resource_type": "image",
+                    },
+                    # 2. dress1 must NOT match dress10
+                    {
+                        "url": "https://example.com/dress1.jpg",
+                        "sort_order": 2,
+                        "resource_type": "image",
+                    },
+                    # 3. Exact secure_url match resolves correctly
+                    {
+                        "url": "https://example.com/exact_target.jpg",
+                        "sort_order": 3,
+                        "resource_type": "image",
+                    },
+                    # 4. Query normalization matches base URL without prefix match
+                    {
+                        "url": "https://example.com/query_target.jpg?v=version2",
+                        "sort_order": 4,
+                        "resource_type": "image",
+                    },
+                    # 5. Query normalization cannot match a prefix (sample_dress.jpg?v=1 does NOT match sample_dress.jpg.webp)
+                    {
+                        "url": "https://example.com/sample_dress.jpg?v=1",
+                        "sort_order": 5,
+                        "resource_type": "image",
+                    },
+                    # 6. Multiple matching records leave original URL unchanged and media_asset_id None
+                    {
+                        "url": "http://example.com/dup_target.jpg",
+                        "sort_order": 6,
+                        "resource_type": "image",
+                    },
+                    # 7. Video candidate matches video type
+                    {
+                        "url": "https://example.com/motion_clip.mp4",
+                        "sort_order": 7,
+                        "resource_type": "video",
+                    },
+                ],
+            }
+
+            resp = self.client.post("/admin/products", json=payload, headers=self.owner_headers)
+            self.assertEqual(resp.status_code, 201)
+            created_data = resp.json()
+            images = created_data["images"]
+            self.assertEqual(len(images), 7)
+            prod_id = created_data["id"]
+
+            # 1. dress.jpg -> NOT linked to dress.jpg.webp, original URL preserved
+            self.assertIsNone(images[0]["media_asset_id"])
+            self.assertEqual(images[0]["url"], "https://example.com/dress.jpg")
+
+            # 2. dress1.jpg -> NOT linked to dress10.jpg, original URL preserved
+            self.assertIsNone(images[1]["media_asset_id"])
+            self.assertEqual(images[1]["url"], "https://example.com/dress1.jpg")
+
+            # 3. Exact match -> linked to asset_exact
+            self.assertEqual(images[2]["media_asset_id"], exact_id)
+            self.assertEqual(images[2]["url"], asset_exact.secure_url)
+
+            # 4. Query target with params -> linked to asset_query
+            self.assertEqual(images[3]["media_asset_id"], query_id)
+            self.assertEqual(images[3]["url"], asset_query.secure_url)
+
+            # 5. Query prefix -> NOT linked to sample_dress.jpg.webp, original URL preserved
+            self.assertIsNone(images[4]["media_asset_id"])
+            self.assertEqual(images[4]["url"], "https://example.com/sample_dress.jpg?v=1")
+
+            # 6. Multiple matches -> NOT linked, original URL preserved
+            self.assertIsNone(images[5]["media_asset_id"])
+            self.assertEqual(images[5]["url"], "http://example.com/dup_target.jpg")
+
+            # 7. Video match -> linked to video_target
+            self.assertEqual(images[6]["media_asset_id"], video_id)
+            self.assertEqual(images[6]["resource_type"], "video")
+
+            # Verify reload through fresh session via GET
+            reload_res = self.client.get(f"/products/{prod_id}", headers=self.owner_headers)
+            self.assertEqual(reload_res.status_code, 200)
+            reloaded_images = reload_res.json()["images"]
+            self.assertEqual(len(reloaded_images), 7)
+            self.assertIsNone(reloaded_images[0]["media_asset_id"])
+            self.assertEqual(reloaded_images[0]["url"], "https://example.com/dress.jpg")
+            self.assertIsNone(reloaded_images[1]["media_asset_id"])
+            self.assertEqual(reloaded_images[1]["url"], "https://example.com/dress1.jpg")
+            self.assertEqual(reloaded_images[2]["media_asset_id"], exact_id)
+            self.assertEqual(reloaded_images[3]["media_asset_id"], query_id)
+            self.assertIsNone(reloaded_images[4]["media_asset_id"])
+            self.assertEqual(reloaded_images[4]["url"], "https://example.com/sample_dress.jpg?v=1")
+            self.assertIsNone(reloaded_images[5]["media_asset_id"])
+            self.assertEqual(reloaded_images[5]["url"], "http://example.com/dup_target.jpg")
+            self.assertEqual(reloaded_images[6]["media_asset_id"], video_id)
+
+            # Re-saving unchanged reloaded gallery retains every image and link without duplicate collapse
+            res_patch = self.client.patch(
+                f"/admin/products/{prod_id}",
+                json={
+                    "images": [
+                        {
+                            "media_asset_id": img["media_asset_id"],
+                            "url": img["url"],
+                            "public_id": img.get("public_id"),
+                            "resource_type": img.get("resource_type", "image"),
+                            "sort_order": img["sort_order"],
+                        }
+                        for img in reloaded_images
+                    ]
+                },
+                headers=self.owner_headers,
+            )
+            self.assertEqual(res_patch.status_code, 200)
+            patched_images = res_patch.json()["images"]
+            self.assertEqual(len(patched_images), 7)
+            self.assertIsNone(patched_images[0]["media_asset_id"])
+            self.assertEqual(patched_images[0]["url"], "https://example.com/dress.jpg")
+            self.assertIsNone(patched_images[1]["media_asset_id"])
+            self.assertEqual(patched_images[1]["url"], "https://example.com/dress1.jpg")
+            self.assertEqual(patched_images[2]["media_asset_id"], exact_id)
+            self.assertEqual(patched_images[3]["media_asset_id"], query_id)
+            self.assertIsNone(patched_images[4]["media_asset_id"])
+            self.assertEqual(patched_images[4]["url"], "https://example.com/sample_dress.jpg?v=1")
+            self.assertIsNone(patched_images[5]["media_asset_id"])
+            self.assertEqual(patched_images[5]["url"], "http://example.com/dup_target.jpg")
+            self.assertEqual(patched_images[6]["media_asset_id"], video_id)
+
+            # Ensure zero Cloudinary uploads, moves, or destroys were triggered
+            mock_upload.assert_not_called()
+            mock_destroy.assert_not_called()
+            mock_del.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
