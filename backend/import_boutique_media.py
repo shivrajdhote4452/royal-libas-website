@@ -2,14 +2,15 @@ r"""Boutique Media Import & Cloudinary Synchronization Script
 Source: F:\Project File\royal-libas-website\royal-libas-website\Photos for royal libas
 Target: Cloudinary (galbyoxi) & royal_libas.db (media_assets, media_folders)
 
-Guarantees:
+Safety Guarantees:
+- Non-destructive: NEVER automatically deletes media assets or folders
 - Resumable and idempotent via media_import_manifest.json
-- Preserves exact source folder hierarchy without duplicated outer root
+- Full metadata retention: Preserves complete technical and boutique metadata on reuse
 - Preserves intentional empty folders (e.g. Designer Wear/2, Lehenga, etc.)
 - Strict resource_type separation (images as image, mp4 as video)
 - Reconciles existing assets by SHA-256 content hash and public_id
 - Updates Cloudinary asset_folder dynamically without re-uploading
-- Safely removes superseded non-boutique assets from previous test runs
+- Preserves recoverable upload results after DB errors to prevent duplicate uploads
 - Never modifies local source files
 """
 import os
@@ -93,14 +94,16 @@ def save_manifest(manifest: Dict[str, Any]):
         json.dump(manifest, f, indent=2)
 
 
-def run_import(dry_run: bool = False):
+def run_import(dry_run: bool = False, custom_source_dir: Optional[str] = None, db_session: Optional[SessionLocal] = None):
+    source_path = custom_source_dir or SOURCE_DIR
     print("=" * 65)
     print(">>> ROYAL LIBAS BOUTIQUE MEDIA IMPORT <<<")
-    print(f"Source Directory: {SOURCE_DIR}")
+    print(f"Source Directory: {source_path}")
+    print("Mode: NON-DESTRUCTIVE (No assets or folders will be deleted)")
     print("=" * 65)
 
-    if not os.path.exists(SOURCE_DIR):
-        print(f"[ERROR] Source directory does not exist: {SOURCE_DIR}")
+    if not os.path.exists(source_path):
+        print(f"[ERROR] Source directory does not exist: {source_path}")
         sys.exit(1)
 
     init_cloudinary()
@@ -120,24 +123,19 @@ def run_import(dry_run: bool = False):
         print(f"[ERROR] Failed to reach Cloudinary API: {e}")
         sys.exit(1)
 
-    db = SessionLocal()
-    manifest = {
-        "source_dir": SOURCE_DIR,
-        "cloud_name": CLOUDINARY_CLOUD_NAME,
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat(),
-        "total_files": 0,
-        "folders": [],
-        "files": {},
-    }
+    db = db_session or SessionLocal()
+    close_db = db_session is None
+    manifest = load_or_create_manifest()
+    manifest["source_dir"] = source_path
+    manifest["cloud_name"] = CLOUDINARY_CLOUD_NAME
 
     # 1. Inventory directories & files from the curated folder
     print("\n[Step 1] Inventorying curated source directories & files...")
     all_dirs = []
     all_files = []
 
-    for root, dirs, files in os.walk(SOURCE_DIR):
-        rel_dir = os.path.relpath(root, SOURCE_DIR).replace("\\", "/")
+    for root, dirs, files in os.walk(source_path):
+        rel_dir = os.path.relpath(root, source_path).replace("\\", "/")
         if rel_dir == ".":
             target_folder = ROOT_FOLDER_NAME
             parent_folder = None
@@ -156,7 +154,7 @@ def run_import(dry_run: bool = False):
 
         for f in files:
             full_path = os.path.join(root, f)
-            rel_file = os.path.relpath(full_path, SOURCE_DIR).replace("\\", "/")
+            rel_file = os.path.relpath(full_path, source_path).replace("\\", "/")
             all_files.append({
                 "filename": f,
                 "full_path": full_path,
@@ -168,7 +166,7 @@ def run_import(dry_run: bool = False):
     print(f"Discovered {len(all_dirs)} directories and {len(all_files)} media files.")
     manifest["total_files"] = len(all_files)
     manifest["folders"] = [d["path"] for d in all_dirs]
-    valid_folder_paths = set(d["path"] for d in all_dirs)
+    save_manifest(manifest)
 
     # 2. Register all folders in DB & Cloudinary
     print("\n[Step 2] Synchronizing boutique folder hierarchy...")
@@ -178,7 +176,7 @@ def run_import(dry_run: bool = False):
             if not dry_run:
                 try:
                     create_cloudinary_folder(d_info["path"])
-                except Exception as e:
+                except Exception:
                     pass
                 
                 db_folder = MediaFolder(
@@ -194,12 +192,11 @@ def run_import(dry_run: bool = False):
             if d_info["is_empty"]:
                 print(f"  [OK] Preserved empty folder: {d_info['path']}")
 
-    # 3. Process each file: reconcile by SHA-256 hash
+    # 3. Process each file: reconcile by SHA-256 hash or public_id
     print(f"\n[Step 3] Reconciling and organizing {len(all_files)} boutique media files...")
     reorganized_count = 0
     imported_count = 0
     failed_count = 0
-    curated_db_ids = set()
 
     for idx, f_info in enumerate(all_files, 1):
         rel_key = f_info["relative_path"]
@@ -210,18 +207,22 @@ def run_import(dry_run: bool = False):
         res_type, fmt, mime_type = detect_file_type(filename)
         content_hash = compute_sha256(full_path)
 
-        # Look up existing asset by hash
+        # Look up existing asset by content_hash or public_id/folder
         existing_db_asset = db.query(MediaAsset).filter(
             MediaAsset.content_hash == content_hash,
             MediaAsset.cloud_name == CLOUDINARY_CLOUD_NAME,
         ).first()
 
+        if not existing_db_asset:
+            existing_db_asset = db.query(MediaAsset).filter(
+                MediaAsset.relative_source_path == rel_key,
+                MediaAsset.cloud_name == CLOUDINARY_CLOUD_NAME,
+            ).first()
+
         if existing_db_asset:
-            curated_db_ids.add(existing_db_asset.id)
             need_folder_move = existing_db_asset.folder != target_folder
             
             if need_folder_move and not dry_run:
-                # Move in Cloudinary
                 move_res = move_cloudinary_asset_folder(
                     existing_db_asset.public_id,
                     target_folder,
@@ -236,34 +237,52 @@ def run_import(dry_run: bool = False):
                 existing_db_asset.filename = filename
                 existing_db_asset.display_name = os.path.splitext(filename)[0]
                 existing_db_asset.alt_text = os.path.splitext(filename)[0]
-                existing_db_asset.delivery_type = "upload"
+                existing_db_asset.delivery_type = existing_db_asset.delivery_type or "upload"
                 db.commit()
 
             reorganized_count += 1
-            print(f"[{idx}/{len(all_files)}] [OK] Reconciled: {filename} -> {target_folder}")
 
+            # Preserve FULL metadata in manifest
             manifest["files"][rel_key] = {
                 "status": "registered",
                 "db_id": existing_db_asset.id,
-                "public_id": existing_db_asset.public_id,
+                "asset_id": existing_db_asset.cloudinary_asset_id,
                 "cloudinary_asset_id": existing_db_asset.cloudinary_asset_id,
+                "public_id": existing_db_asset.public_id,
+                "cloud_name": existing_db_asset.cloud_name or CLOUDINARY_CLOUD_NAME,
+                "delivery_type": existing_db_asset.delivery_type or "upload",
                 "secure_url": existing_db_asset.secure_url or existing_db_asset.url,
+                "url": existing_db_asset.url,
+                "filename": filename,
+                "display_name": existing_db_asset.display_name or os.path.splitext(filename)[0],
+                "relative_source_path": rel_key,
                 "content_hash": content_hash,
                 "folder": target_folder,
-                "filename": filename,
                 "resource_type": existing_db_asset.resource_type,
-                "file_size": file_size,
-                "relative_source_path": rel_key,
+                "format": existing_db_asset.format or fmt,
+                "width": existing_db_asset.width,
+                "height": existing_db_asset.height,
+                "duration": float(existing_db_asset.duration) if existing_db_asset.duration is not None else None,
+                "file_size": existing_db_asset.file_size or file_size,
+                "mime_type": existing_db_asset.mime_type or mime_type,
                 "reused": True,
             }
+            save_manifest(manifest)
+            continue
+
+        # Check if manifest has an uncommitted upload result from an interrupted previous run
+        file_entry = manifest.get("files", {}).get(rel_key, {})
+        upload_meta = None
+        if file_entry.get("status") in ("uploaded", "registered") and file_entry.get("secure_url"):
+            upload_meta = file_entry
+            print(f"[{idx}/{len(all_files)}] Recovered upload metadata from manifest: {filename}")
         else:
-            # Need fresh upload
             if dry_run:
                 print(f"[{idx}/{len(all_files)}] [DRY-RUN] Would upload: {filename} -> {target_folder}")
                 imported_count += 1
                 continue
 
-            print(f"[{idx}/{len(all_files)}] Uploading new file: {filename} -> {target_folder}")
+            # Upload to Cloudinary with bounded retry
             max_retries = 3
             uploaded_res = None
             for attempt in range(max_retries):
@@ -290,6 +309,15 @@ def run_import(dry_run: bool = False):
                     else:
                         print(f"[{idx}/{len(all_files)}] [FAIL] Upload failed for {filename}: {up_err}")
                         failed_count += 1
+                        manifest["files"][rel_key] = {
+                            "status": "failed",
+                            "error": str(up_err),
+                            "content_hash": content_hash,
+                            "folder": target_folder,
+                            "filename": filename,
+                            "relative_source_path": rel_key,
+                        }
+                        save_manifest(manifest)
                         uploaded_res = None
 
             if not uploaded_res:
@@ -299,24 +327,63 @@ def run_import(dry_run: bool = False):
             secure_url = uploaded_res.get("secure_url") or uploaded_res.get("url")
             asset_id = uploaded_res.get("asset_id")
 
+            if not public_id or not secure_url:
+                print(f"[{idx}/{len(all_files)}] [FAIL] Unconfirmed result for {filename}")
+                failed_count += 1
+                manifest["files"][rel_key] = {
+                    "status": "failed",
+                    "error": "Unconfirmed result: missing public_id or secure_url",
+                    "content_hash": content_hash,
+                }
+                save_manifest(manifest)
+                continue
+
+            upload_meta = {
+                "public_id": public_id,
+                "asset_id": asset_id,
+                "cloudinary_asset_id": asset_id,
+                "secure_url": secure_url,
+                "url": uploaded_res.get("url", secure_url),
+                "resource_type": uploaded_res.get("resource_type", res_type),
+                "format": uploaded_res.get("format", fmt),
+                "width": uploaded_res.get("width"),
+                "height": uploaded_res.get("height"),
+                "duration": uploaded_res.get("duration"),
+                "file_size": uploaded_res.get("bytes", file_size),
+                "delivery_type": uploaded_res.get("type", "upload"),
+                "cloud_name": CLOUDINARY_CLOUD_NAME,
+            }
+            # Record upload success in manifest before DB commit
+            manifest["files"][rel_key] = {
+                "status": "uploaded",
+                **upload_meta,
+                "content_hash": content_hash,
+                "folder": target_folder,
+                "filename": filename,
+                "relative_source_path": rel_key,
+            }
+            save_manifest(manifest)
+
+        # Register in DB
+        try:
             display_name = os.path.splitext(filename)[0]
             new_asset = MediaAsset(
                 filename=filename,
                 display_name=display_name,
-                public_id=public_id,
-                cloudinary_asset_id=asset_id,
+                public_id=upload_meta["public_id"],
+                cloudinary_asset_id=upload_meta.get("asset_id"),
                 cloud_name=CLOUDINARY_CLOUD_NAME,
-                delivery_type="upload",
+                delivery_type=upload_meta.get("delivery_type", "upload"),
                 content_hash=content_hash,
                 relative_source_path=rel_key,
-                url=secure_url,
-                secure_url=secure_url,
-                resource_type=res_type,
-                format=uploaded_res.get("format", fmt),
-                width=uploaded_res.get("width"),
-                height=uploaded_res.get("height"),
-                duration=uploaded_res.get("duration"),
-                file_size=uploaded_res.get("bytes", file_size),
+                url=upload_meta["secure_url"],
+                secure_url=upload_meta["secure_url"],
+                resource_type=upload_meta.get("resource_type", res_type),
+                format=upload_meta.get("format", fmt),
+                width=upload_meta.get("width"),
+                height=upload_meta.get("height"),
+                duration=upload_meta.get("duration"),
+                file_size=upload_meta.get("file_size", file_size),
                 mime_type=mime_type,
                 alt_text=display_name,
                 folder=target_folder,
@@ -324,71 +391,38 @@ def run_import(dry_run: bool = False):
             db.add(new_asset)
             db.commit()
             db.refresh(new_asset)
-            curated_db_ids.add(new_asset.id)
+
             imported_count += 1
+            manifest["files"][rel_key]["status"] = "registered"
+            manifest["files"][rel_key]["db_id"] = new_asset.id
+            save_manifest(manifest)
+            print(f"[{idx}/{len(all_files)}] Imported: {filename} -> DB ID {new_asset.id}")
 
-            manifest["files"][rel_key] = {
-                "status": "registered",
-                "db_id": new_asset.id,
-                "public_id": public_id,
-                "cloudinary_asset_id": asset_id,
-                "secure_url": secure_url,
-                "content_hash": content_hash,
-                "folder": target_folder,
-                "filename": filename,
-                "resource_type": res_type,
-                "file_size": file_size,
-                "relative_source_path": rel_key,
-            }
+        except Exception as db_err:
+            db.rollback()
+            print(f"[{idx}/{len(all_files)}] [DB-ERROR] Failed to save {filename} to DB: {db_err}")
+            failed_count += 1
+            # Status remains 'uploaded' with recoverable metadata so retry does not re-upload
+            manifest["files"][rel_key]["status"] = "uploaded"
+            manifest["files"][rel_key]["db_error"] = str(db_err)
+            save_manifest(manifest)
 
-    # 4. Clean up superseded non-curated assets from the previous unedited import
-    print("\n[Step 4] Cleaning up superseded non-boutique assets from previous runs...")
-    other_assets = db.query(MediaAsset).filter(
-        MediaAsset.cloud_name == CLOUDINARY_CLOUD_NAME,
-        MediaAsset.folder.like(f"{ROOT_FOLDER_NAME}%"),
-        ~MediaAsset.id.in_(curated_db_ids),
-    ).all()
+    # NOTE: Routine import NEVER deletes assets or folders!
+    # Cleanup is strictly a separate maintenance action with dry-run and explicit confirmation.
 
-    print(f"Found {len(other_assets)} superseded assets to clean up.")
-    for a in other_assets:
-        if not dry_run:
-            try:
-                cloudinary.uploader.destroy(a.public_id, resource_type=a.resource_type)
-            except Exception as e:
-                print(f"  [WARN] Could not destroy remote asset {a.public_id}: {e}")
-            db.delete(a)
-            print(f"  - Removed superseded asset: ID {a.id} ({a.public_id})")
-    
-    if not dry_run:
-        db.commit()
-
-    # 5. Clean up old obsolete folders from DB (e.g. numbered folders like Designer Wear/1, etc.)
-    print("\n[Step 5] Cleaning up obsolete folder records...")
-    db_folders = db.query(MediaFolder).filter(MediaFolder.path.like(f"{ROOT_FOLDER_NAME}%")).all()
-    obsolete_folders = [f for f in db_folders if f.path not in valid_folder_paths]
-    print(f"Found {len(obsolete_folders)} obsolete folder records to remove.")
-    for of in obsolete_folders:
-        if not dry_run:
-            db.delete(of)
-            print(f"  - Removed obsolete folder record: {of.path}")
-    
-    if not dry_run:
-        db.commit()
-
-    db.close()
+    if close_db:
+        db.close()
     save_manifest(manifest)
 
     print("\n" + "=" * 65)
     print(">>> MEDIA IMPORT & REORGANIZATION COMPLETE <<<")
     print("=" * 65)
-    print(f"Source Folder:        {SOURCE_DIR}")
+    print(f"Source Folder:        {source_path}")
     print(f"Total Source Files:   {len(all_files)}")
     print(f"Reorganized/Reconciled: {reorganized_count}")
     print(f"New Uploads:          {imported_count}")
     print(f"Failures:             {failed_count}")
     print(f"Boutique Folders:     {len(all_dirs)}")
-    print(f"Purged Superseded:    {len(other_assets)}")
-    print(f"Purged Obsolete Dirs: {len(obsolete_folders)}")
     print(f"Manifest Saved At:    {MANIFEST_PATH}")
     print("=" * 65)
 

@@ -786,7 +786,7 @@ export async function adminExportOrdersCsv(token: string): Promise<Blob> {
 
 export async function adminListMedia(
   token: string,
-  params?: { resource_type?: string; search?: string; product_id?: number; folder?: string; sort_by?: string }
+  params?: { resource_type?: string; search?: string; product_id?: number; folder?: string; sort_by?: string; hide_samples?: boolean }
 ): Promise<MediaAsset[]> {
   const searchParams = new URLSearchParams();
   if (params?.resource_type) searchParams.set('resource_type', params.resource_type);
@@ -794,6 +794,7 @@ export async function adminListMedia(
   if (params?.product_id) searchParams.set('product_id', String(params.product_id));
   if (params?.folder !== undefined) searchParams.set('folder', params.folder);
   if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
+  if (params?.hide_samples !== undefined) searchParams.set('hide_samples', String(params.hide_samples));
   const queryString = searchParams.toString();
   const url = `${API_BASE_URL}/admin/media${queryString ? `?${queryString}` : ''}`;
   const response = await fetch(url, {
@@ -801,6 +802,34 @@ export async function adminListMedia(
   });
   if (!response.ok) {
     throw new Error('Failed to load media library');
+  }
+  return response.json();
+}
+
+export async function adminPreviewMediaCleanup(token: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/cleanup-preview`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error('Failed to load cleanup preview');
+  return response.json();
+}
+
+export async function adminExecuteMediaCleanup(
+  token: string,
+  confirm: boolean = false,
+  cleanRemoteFolders: boolean = false
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/cleanup-execute`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ confirm, clean_remote_folders: cleanRemoteFolders }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Failed to execute cleanup' }));
+    throw new Error(err.detail || 'Failed to execute cleanup');
   }
   return response.json();
 }

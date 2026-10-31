@@ -251,6 +251,7 @@ export const AdminMedia: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>('all');
   const [usageFilter, setUsageFilter] = useState<'all' | 'used' | 'unused'>('all');
   const [showTestRecordsOnly, setShowTestRecordsOnly] = useState(false);
+  const [showSamples, setShowSamples] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'largest' | 'name'>('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -324,7 +325,7 @@ export const AdminMedia: React.FC = () => {
     setLoading(true);
     try {
       const [mediaData, folderData, statusData, productList] = await Promise.all([
-        adminListMedia(token, { sort_by: sortBy }),
+        adminListMedia(token, { sort_by: sortBy, hide_samples: false }),
         adminListMediaFolders(token).catch(() => []),
         adminGetMediaStatus(token).catch(() => null),
         fetchAdminProducts(token).catch(() => []),
@@ -458,6 +459,13 @@ export const AdminMedia: React.FC = () => {
         if (!asset.is_test_record) return false;
       }
 
+      // Cloudinary Sample Assets Filter (Hide account demo samples from normal boutique view unless viewing samples folder or showSamples is enabled)
+      const isSample = Boolean(asset.is_sample || (asset.folder && asset.folder.toLowerCase().startsWith('samples')) || (asset.public_id && asset.public_id.toLowerCase().startsWith('samples/')));
+      const isViewingSamplesFolder = currentFolder !== null && (currentFolder === 'samples' || currentFolder.startsWith('samples/'));
+      if (!showSamples && !isViewingSamplesFolder && isSample) {
+        return false;
+      }
+
       // Type Filter
       const assetType = asset.resource_type || (asset.url.match(/\.(mp4|webm|mov|ogg)$/i) ? 'video' : 'image');
       if (typeFilter !== 'all' && assetType !== typeFilter) return false;
@@ -483,7 +491,7 @@ export const AdminMedia: React.FC = () => {
 
       return true;
     });
-  }, [assets, currentFolder, showTestRecordsOnly, typeFilter, usageFilter, searchTerm]);
+  }, [assets, currentFolder, showTestRecordsOnly, showSamples, typeFilter, usageFilter, searchTerm]);
 
   // Paginated Assets & Clamped Page
   const totalPages = Math.max(1, Math.ceil(filteredAssets.length / pageSize));
@@ -502,8 +510,18 @@ export const AdminMedia: React.FC = () => {
 
   const hiddenSelectedCount = selectedAssetIds.size - visibleSelectedCount;
 
-  // Test records count
+  // Test records & sample assets counts
   const testRecordCount = useMemo(() => assets.filter((a) => a.is_test_record).length, [assets]);
+  const sampleAssetCount = useMemo(
+    () =>
+      assets.filter(
+        (a) =>
+          a.is_sample ||
+          (a.folder && a.folder.toLowerCase().startsWith('samples')) ||
+          (a.public_id && a.public_id.toLowerCase().startsWith('samples/'))
+      ).length,
+    [assets]
+  );
 
   // 4. Multi-Selection Controls
   const toggleSelectAsset = (id: number) => {
@@ -1518,6 +1536,22 @@ export const AdminMedia: React.FC = () => {
                 >
                   <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
                   Review Test Records ({testRecordCount})
+                </button>
+              )}
+
+              {sampleAssetCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSamples(!showSamples)}
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    showSamples
+                      ? 'bg-blue-100 text-blue-900 border-blue-300'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  title="Toggle display of Cloudinary account demo sample assets"
+                >
+                  <Eye className="w-3.5 h-3.5 text-blue-600" />
+                  {showSamples ? 'Hide Samples' : `Show Samples (${sampleAssetCount})`}
                 </button>
               )}
 

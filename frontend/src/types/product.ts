@@ -55,6 +55,7 @@ export interface MediaAsset {
   used_editorial?: string[];
   is_test_record?: boolean;
   test_reason?: string | null;
+  is_sample?: boolean;
 }
 
 export interface MediaFolder {

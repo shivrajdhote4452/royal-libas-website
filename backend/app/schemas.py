@@ -984,6 +984,7 @@ class MediaAssetResponse(BaseModel):
     used_editorial: Optional[List[str]] = []
     is_test_record: bool = False
     test_reason: Optional[str] = None
+    is_sample: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1101,6 +1102,31 @@ class BulkDeleteMediaResponse(BaseModel):
     deleted_ids: List[int] = []
     skipped_in_use: List[Dict[str, Any]] = []
     failed: List[Dict[str, Any]] = []
+    message: str
+
+
+class MediaCleanupPreviewResponse(BaseModel):
+    dry_run: bool = True
+    protected_folders_count: int
+    total_obsolete_candidates: int
+    safe_to_reconcile_count: int
+    unsafe_count: int
+    sample_assets_count: int
+    protected_empty_folders: List[Dict[str, Any]] = []
+    obsolete_folders: List[Dict[str, Any]] = []
+    sample_assets: List[Dict[str, Any]] = []
+
+
+class MediaCleanupExecuteRequest(BaseModel):
+    confirm: bool = False
+    clean_remote_folders: bool = False
+
+
+class MediaCleanupExecuteResponse(BaseModel):
+    status: str
+    reconciled_local_folders: int
+    reconciled_remote_folders: int
+    remote_folder_errors: List[Dict[str, Any]] = []
     message: str
 
 

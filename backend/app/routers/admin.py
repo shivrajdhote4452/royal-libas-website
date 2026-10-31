@@ -97,6 +97,9 @@ from app.schemas import (
     CloudinarySyncResponse,
     CloudinaryStatusResponse,
     MediaAssetUpdate,
+    MediaCleanupPreviewResponse,
+    MediaCleanupExecuteRequest,
+    MediaCleanupExecuteResponse,
     ContactInquiryDetail,
     ContactInquiryReply,
     PaymentRecordResponse,
@@ -1770,16 +1773,31 @@ def _check_asset_references(asset: MediaAsset, db: Session) -> Tuple[List[MediaA
     return product_usages, editorial_usages
 
 
+def _is_sample_asset(asset: MediaAsset) -> bool:
+    """Determine whether an asset is a Cloudinary demo/sample asset."""
+    pub_lower = (asset.public_id or "").lower()
+    folder_lower = (asset.folder or "").lower()
+    url_lower = (asset.url or "").lower()
+    return (
+        folder_lower.startswith("samples")
+        or pub_lower.startswith("samples/")
+        or "cloudinary.com/demo/" in url_lower
+    )
+
+
 def _is_test_record(asset: MediaAsset) -> Tuple[bool, Optional[str]]:
     """Identify demo/mock/test artifacts (photo.jpg, test_artisan.jpg, zkgaklhl demo accounts)."""
     url_lower = (asset.url or "").lower()
     pub_lower = (asset.public_id or "").lower()
     fn_lower = (asset.filename or "").lower()
+    folder_lower = (asset.folder or "").lower()
 
     if "cloudinary.com/demo/" in url_lower:
         return True, "Cloudinary demo sample URL"
     if "cloudinary.com/zkgaklhl/" in url_lower:
         return True, "Legacy mock cloud (zkgaklhl) record"
+    if folder_lower.startswith("samples") or pub_lower.startswith("samples/"):
+        return True, "Cloudinary account sample asset"
     if "test_mock_asset" in pub_lower or "test_artisan" in pub_lower:
         return True, "Automated mock test asset ID"
     if fn_lower in ("test_artisan.jpg", "photo.jpg") and (asset.file_size or 0) <= 1024:
@@ -1978,6 +1996,68 @@ def admin_prepare_collection_folders(
         created_count=len(created_list),
         created_folders=created_list,
         message=f"Successfully prepared {len(created_list)} missing boutique folder(s).",
+    )
+
+
+@router.get("/media/cleanup-preview", response_model=MediaCleanupPreviewResponse)
+def admin_media_cleanup_preview(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Preview safe reconciliation of obsolete old numbered folders and sample assets without modifying any data."""
+    from scripts.media_cleanup_maintenance import audit_cleanup_candidates
+    audit = audit_cleanup_candidates(db)
+    safe_count = len([f for f in audit["obsolete_folders"] if f["is_safe_to_reconcile"]])
+    unsafe_count = len([f for f in audit["obsolete_folders"] if not f["is_safe_to_reconcile"]])
+
+    return MediaCleanupPreviewResponse(
+        dry_run=True,
+        protected_folders_count=len(audit["protected_empty_folders"]),
+        total_obsolete_candidates=len(audit["obsolete_folders"]),
+        safe_to_reconcile_count=safe_count,
+        unsafe_count=unsafe_count,
+        sample_assets_count=len(audit["sample_assets"]),
+        protected_empty_folders=audit["protected_empty_folders"],
+        obsolete_folders=audit["obsolete_folders"],
+        sample_assets=audit["sample_assets"],
+    )
+
+
+@router.post("/media/cleanup-execute", response_model=MediaCleanupExecuteResponse)
+def admin_media_cleanup_execute(
+    payload: MediaCleanupExecuteRequest,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER")),
+):
+    """Safely reconcile obsolete empty folders with explicit owner confirmation.
+    
+    Protected empty folders (e.g. Designer Wear/2, Lehenga) are never touched.
+    Cloudinary media assets are never deleted.
+    """
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Explicit owner confirmation is required to execute folder reconciliation. Pass confirm=true.",
+        )
+
+    from scripts.media_cleanup_maintenance import run_cleanup_maintenance
+    result = run_cleanup_maintenance(dry_run=False, remove_remote_folders=payload.clean_remote_folders)
+
+    log_activity(
+        db,
+        current_admin,
+        "MEDIA_FOLDERS_RECONCILED",
+        "media_folder",
+        None,
+        f"Reconciled {result['reconciled_local_folders']} obsolete empty folder records.",
+    )
+
+    return MediaCleanupExecuteResponse(
+        status="success",
+        reconciled_local_folders=result["reconciled_local_folders"],
+        reconciled_remote_folders=result["reconciled_remote_folders"],
+        remote_folder_errors=result["remote_folder_errors"],
+        message=f"Reconciled {result['reconciled_local_folders']} obsolete empty folder records.",
     )
 
 
@@ -2186,6 +2266,7 @@ def admin_list_media(
     search: Optional[str] = Query(None, description="Search by filename, display name, public ID, or alt text"),
     product_id: Optional[int] = Query(None, description="Filter by product ID"),
     folder: Optional[str] = Query(None, description="Filter by folder path (exact or prefix)"),
+    hide_samples: bool = Query(True, description="Hide Cloudinary demo samples from normal boutique view"),
     sort_by: Optional[str] = Query("newest", description="Sort order: newest, oldest, largest, name"),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
@@ -2211,6 +2292,15 @@ def admin_list_media(
         subq = db.query(ProductImage.url).filter(ProductImage.product_id == product_id)
         query = query.filter(MediaAsset.url.in_(subq))
 
+    # Hide external Cloudinary demo sample images unless user explicitly opens the samples folder
+    if hide_samples and (folder is None or (folder != "samples" and not folder.strip().strip("/").startswith("samples"))):
+        query = query.filter(
+            and_(
+                or_(MediaAsset.folder.is_(None), ~MediaAsset.folder.like("samples%")),
+                or_(MediaAsset.public_id.is_(None), ~MediaAsset.public_id.like("samples/%")),
+            )
+        )
+
     if folder is not None:
         clean_folder = folder.strip().strip("/")
         if clean_folder == "" or clean_folder.lower() == "root":
@@ -2234,6 +2324,7 @@ def admin_list_media(
     for a in assets:
         used_products, used_editorial = _check_asset_references(a, db)
         is_test, reason = _is_test_record(a)
+        is_sample = _is_sample_asset(a)
         asset_dict = {
             "id": a.id,
             "filename": a.filename,
@@ -2256,6 +2347,7 @@ def admin_list_media(
             "used_editorial": used_editorial,
             "is_test_record": is_test,
             "test_reason": reason,
+            "is_sample": is_sample,
         }
         results.append(MediaAssetResponse(**asset_dict))
 
@@ -3066,9 +3158,14 @@ def admin_sync_cloudinary_media(
 
         # 1. Discover remote folders recursively (performed on initial batch or when no cursor)
         if not cursor:
+            from scripts.media_cleanup_maintenance import OBSOLETE_FOLDER_MAPPINGS
+            obsolete_paths = set(OBSOLETE_FOLDER_MAPPINGS.keys())
+
             remote_folders = list_cloudinary_folders_recursive(None)
             for rf in remote_folders:
                 r_path = rf.get("path")
+                if r_path and r_path in obsolete_paths:
+                    continue
                 if r_path:
                     created_ancestors = ensure_ancestor_folders(db, r_path, known_folder_paths)
                     folders_discovered += created_ancestors
