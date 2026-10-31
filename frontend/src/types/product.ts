@@ -31,8 +31,10 @@ export interface MediaAssetProductUsage {
 export interface MediaAsset {
   id: number;
   filename: string;
+  display_name?: string | null;
   client_id?: string | null;
   public_id?: string | null;
+  cloudinary_asset_id?: string | null;
   url: string;
   secure_url?: string | null;
   resource_type: 'image' | 'video';
@@ -47,6 +49,48 @@ export interface MediaAsset {
   created_at: string;
   used_in_products?: MediaAssetProductUsage[];
   used_editorial?: string[];
+  is_test_record?: boolean;
+  test_reason?: string | null;
+}
+
+export interface MediaFolder {
+  id: number;
+  name: string;
+  path: string;
+  parent_path?: string | null;
+  asset_count: number;
+  subfolder_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MediaStatusResponse {
+  configured: boolean;
+  cloud_name?: string | null;
+  total_assets: number;
+  total_folders: number;
+  folder_mode: string;
+  last_sync?: string | null;
+}
+
+export interface MediaSyncResponse {
+  status: string;
+  cloud_name: string;
+  total_scanned: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  folders_discovered: number;
+  last_synced_at: string;
+}
+
+export interface BulkDeleteResponse {
+  status: string;
+  deleted_ids: number[];
+  skipped_in_use: Array<{ id: number; filename: string; locations: string[] }>;
+  failed: Array<{ id: number; filename: string; error: string }>;
+  message: string;
 }
 
 export interface MediaUploadFailure {

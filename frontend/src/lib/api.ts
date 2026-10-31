@@ -1,4 +1,13 @@
-import { Product, Collection, MediaAsset, MediaUploadBatchResponse } from '../types/product';
+import {
+  Product,
+  Collection,
+  MediaAsset,
+  MediaUploadBatchResponse,
+  MediaFolder,
+  MediaStatusResponse,
+  MediaSyncResponse,
+  BulkDeleteResponse,
+} from '../types/product';
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
 
@@ -772,12 +781,14 @@ export async function adminExportOrdersCsv(token: string): Promise<Blob> {
 
 export async function adminListMedia(
   token: string,
-  params?: { resource_type?: string; search?: string; product_id?: number }
+  params?: { resource_type?: string; search?: string; product_id?: number; folder?: string; sort_by?: string }
 ): Promise<MediaAsset[]> {
   const searchParams = new URLSearchParams();
   if (params?.resource_type) searchParams.set('resource_type', params.resource_type);
   if (params?.search) searchParams.set('search', params.search);
   if (params?.product_id) searchParams.set('product_id', String(params.product_id));
+  if (params?.folder !== undefined) searchParams.set('folder', params.folder);
+  if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
   const queryString = searchParams.toString();
   const url = `${API_BASE_URL}/admin/media${queryString ? `?${queryString}` : ''}`;
   const response = await fetch(url, {
@@ -785,6 +796,184 @@ export async function adminListMedia(
   });
   if (!response.ok) {
     throw new Error('Failed to load media library');
+  }
+  return response.json();
+}
+
+export async function adminListMediaFolders(token: string): Promise<MediaFolder[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/folders`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load media folders');
+  }
+  return response.json();
+}
+
+export async function adminCreateMediaFolder(
+  token: string,
+  name: string,
+  parentPath?: string
+): Promise<MediaFolder> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/folders`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name, parent_path: parentPath || null }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to create folder');
+  }
+  return response.json();
+}
+
+export async function adminRenameMediaFolder(
+  token: string,
+  id: number,
+  name: string
+): Promise<MediaFolder> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/folders/${id}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to rename folder');
+  }
+  return response.json();
+}
+
+export async function adminDeleteMediaFolder(
+  token: string,
+  id: number
+): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/folders/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to delete folder');
+  }
+  return response.json();
+}
+
+export async function adminBulkMoveMedia(
+  token: string,
+  assetIds: number[],
+  targetFolder: string
+): Promise<{ status: string; moved_count: number; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/bulk-move`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ asset_ids: assetIds, target_folder: targetFolder }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to move assets');
+  }
+  return response.json();
+}
+
+export async function adminBulkAttachMedia(
+  token: string,
+  productId: number,
+  assetIds: number[],
+  coverAssetId?: number,
+  replaceGallery: boolean = false
+): Promise<{ status: string; product_id: number; attached_count: number; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/bulk-attach`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      product_id: productId,
+      asset_ids: assetIds,
+      cover_asset_id: coverAssetId,
+      replace_gallery: replaceGallery,
+    }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to attach media to product');
+  }
+  return response.json();
+}
+
+export async function adminBulkDeleteMedia(
+  token: string,
+  assetIds: number[],
+  force: boolean = false
+): Promise<BulkDeleteResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/bulk-delete`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ asset_ids: assetIds, force }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to delete media assets');
+  }
+  return response.json();
+}
+
+export async function adminSyncCloudinaryMedia(token: string): Promise<MediaSyncResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/sync`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to sync with Cloudinary');
+  }
+  return response.json();
+}
+
+export async function adminGetMediaStatus(token: string): Promise<MediaStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load media status');
+  }
+  return response.json();
+}
+
+export async function adminUpdateMediaAsset(
+  token: string,
+  id: number,
+  data: { display_name?: string; alt_text?: string; folder?: string }
+): Promise<MediaAsset> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/${id}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update asset');
   }
   return response.json();
 }

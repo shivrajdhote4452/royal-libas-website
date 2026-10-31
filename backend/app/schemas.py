@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -960,8 +960,10 @@ class MediaAssetProductUsage(BaseModel):
 class MediaAssetResponse(BaseModel):
     id: int
     filename: str
+    display_name: Optional[str] = None
     client_id: Optional[str] = None
     public_id: Optional[str] = None
+    cloudinary_asset_id: Optional[str] = None
     url: str
     secure_url: Optional[str] = None
     resource_type: str = "image"
@@ -976,8 +978,84 @@ class MediaAssetResponse(BaseModel):
     created_at: datetime
     used_in_products: Optional[List[MediaAssetProductUsage]] = []
     used_editorial: Optional[List[str]] = []
+    is_test_record: bool = False
+    test_reason: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MediaAssetUpdate(BaseModel):
+    display_name: Optional[str] = None
+    alt_text: Optional[str] = None
+    folder: Optional[str] = None
+
+
+class MediaFolderCreate(BaseModel):
+    name: str
+    parent_path: Optional[str] = None
+
+
+class MediaFolderUpdate(BaseModel):
+    name: str
+
+
+class MediaFolderResponse(BaseModel):
+    id: int
+    name: str
+    path: str
+    parent_path: Optional[str] = None
+    asset_count: int = 0
+    subfolder_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkMoveMediaRequest(BaseModel):
+    asset_ids: List[int]
+    target_folder: Optional[str] = None
+
+
+class BulkAttachToProductRequest(BaseModel):
+    product_id: int
+    asset_ids: List[int]
+    cover_asset_id: Optional[int] = None
+    replace_gallery: bool = False
+
+
+class BulkDeleteMediaRequest(BaseModel):
+    asset_ids: List[int]
+    force: bool = False
+
+
+class BulkDeleteMediaResponse(BaseModel):
+    status: str
+    deleted_ids: List[int] = []
+    skipped_in_use: List[Dict[str, Any]] = []
+    failed: List[Dict[str, Any]] = []
+    message: str
+
+
+class CloudinarySyncResponse(BaseModel):
+    status: str
+    cloud_name: str
+    total_scanned: int
+    imported: int
+    updated: int
+    skipped: int
+    failed: int
+    folders_discovered: int
+    last_synced_at: datetime
+
+
+class CloudinaryStatusResponse(BaseModel):
+    configured: bool
+    cloud_name: Optional[str] = None
+    total_assets: int
+    total_folders: int
+    folder_mode: str = "dynamic"
+    last_sync: Optional[datetime] = None
 
 
 class MediaUploadFailure(BaseModel):

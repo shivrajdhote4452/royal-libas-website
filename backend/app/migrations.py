@@ -32,6 +32,8 @@ def run_migrations(engine: Engine) -> None:
                 ("height", "INTEGER"),
                 ("duration", "NUMERIC(10, 2)"),
                 ("folder", "VARCHAR(100)"),
+                ("display_name", "VARCHAR(255)"),
+                ("cloudinary_asset_id", "VARCHAR(100)"),
             ]
 
             for col_name, col_type in media_asset_cols:
@@ -41,6 +43,36 @@ def run_migrations(engine: Engine) -> None:
                         conn.execute(text(f"ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS {col_name} {col_type};"))
                     else:
                         conn.execute(text(f"ALTER TABLE media_assets ADD COLUMN {col_name} {col_type};"))
+
+        # 1b. MediaFolders table creation
+        if "media_folders" not in existing_tables:
+            logger.info("Creating media_folders table...")
+            if dialect_name == "postgresql":
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS media_folders (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        path VARCHAR(255) UNIQUE NOT NULL,
+                        parent_path VARCHAR(255),
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    )
+                """))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_media_folders_path ON media_folders (path)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_media_folders_parent_path ON media_folders (parent_path)"))
+            else:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS media_folders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name VARCHAR(100) NOT NULL,
+                        path VARCHAR(255) UNIQUE NOT NULL,
+                        parent_path VARCHAR(255),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                    )
+                """))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_media_folders_path ON media_folders (path)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_media_folders_parent_path ON media_folders (parent_path)"))
 
         # 2. ProductImage table migrations
         if "product_images" in existing_tables:

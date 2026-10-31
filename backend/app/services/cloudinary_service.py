@@ -347,3 +347,123 @@ def get_video_poster_url(video_url: str) -> str:
             poster_url = poster_url.replace("/video/upload/", "/video/upload/so_0,f_jpg,q_auto/")
         return poster_url
     return video_url
+
+
+def list_cloudinary_folders(parent_folder: Optional[str] = None) -> list:
+    """List root folders or subfolders from Cloudinary Admin API."""
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return []
+    try:
+        if parent_folder:
+            res = cloudinary.api.subfolders(parent_folder)
+        else:
+            res = cloudinary.api.root_folders()
+        return res.get("folders", [])
+    except Exception as e:
+        logger.warning(f"Failed to list Cloudinary folders (parent={parent_folder}): {e}")
+        return []
+
+
+def create_cloudinary_folder(folder_path: str) -> Dict[str, Any]:
+    """Create a folder or subfolder in Cloudinary."""
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return {"success": False, "error": "Cloudinary not configured"}
+    try:
+        res = cloudinary.api.create_folder(folder_path)
+        return {"success": True, "path": res.get("path", folder_path), "name": res.get("name", "")}
+    except Exception as e:
+        logger.error(f"Failed to create Cloudinary folder '{folder_path}': {e}")
+        return {"success": False, "error": str(e)}
+
+
+def delete_cloudinary_folder(folder_path: str) -> Dict[str, Any]:
+    """Safely delete an empty folder in Cloudinary."""
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return {"success": False, "error": "Cloudinary not configured"}
+    try:
+        res = cloudinary.api.delete_folder(folder_path)
+        return {"success": True, "result": res}
+    except Exception as e:
+        logger.error(f"Failed to delete Cloudinary folder '{folder_path}': {e}")
+        return {"success": False, "error": str(e)}
+
+
+def move_cloudinary_asset_folder(public_id: str, new_folder: str, resource_type: str = "image") -> Dict[str, Any]:
+    """Safely move an asset to a target folder using Dynamic Asset Folder API.
+    
+    In dynamic mode, this preserves delivery URLs and public_id while updating asset organization.
+    """
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return {"success": False, "error": "Cloudinary not configured"}
+    clean_res_type = "video" if resource_type == "video" else "image"
+    try:
+        # Dynamic asset folder mode update
+        res = cloudinary.api.update(public_id, asset_folder=new_folder, resource_type=clean_res_type)
+        return {
+            "success": True,
+            "public_id": public_id,
+            "asset_folder": res.get("asset_folder", new_folder),
+            "mode": "dynamic",
+        }
+    except Exception as e:
+        logger.warning(f"Dynamic asset_folder move failed for {public_id}: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def update_cloudinary_asset_metadata(
+    public_id: str,
+    display_name: Optional[str] = None,
+    resource_type: str = "image",
+) -> Dict[str, Any]:
+    """Update asset display name in Cloudinary."""
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return {"success": False, "error": "Cloudinary not configured"}
+    clean_res_type = "video" if resource_type == "video" else "image"
+    params = {}
+    if display_name is not None:
+        params["display_name"] = display_name
+    if not params:
+        return {"success": True}
+    try:
+        res = cloudinary.api.update(public_id, resource_type=clean_res_type, **params)
+        return {"success": True, "display_name": res.get("display_name")}
+    except Exception as e:
+        logger.warning(f"Failed to update metadata on Cloudinary for {public_id}: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def fetch_cloudinary_resources(
+    resource_type: str = "image",
+    max_results: int = 100,
+    next_cursor: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fetch paginated resources from Cloudinary Admin API."""
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return {"resources": [], "next_cursor": None}
+    clean_res_type = "video" if resource_type == "video" else "image"
+    try:
+        kwargs = {"resource_type": clean_res_type, "max_results": max_results}
+        if next_cursor:
+            kwargs["next_cursor"] = next_cursor
+        return cloudinary.api.resources(**kwargs)
+    except Exception as e:
+        logger.error(f"Failed to fetch Cloudinary resources ({resource_type}): {e}")
+        return {"resources": [], "next_cursor": None, "error": str(e)}
+
+
+def get_cloudinary_status() -> Dict[str, Any]:
+    """Return non-sensitive Cloudinary configuration and connection status."""
+    configured = is_cloudinary_configured()
+    cloud_name = CLOUDINARY_CLOUD_NAME if configured else None
+    return {
+        "configured": configured,
+        "cloud_name": cloud_name,
+        "folder_mode": "dynamic",
+    }
+
