@@ -7,6 +7,11 @@ import {
   MediaStatusResponse,
   MediaSyncResponse,
   BulkDeleteResponse,
+  BulkMoveResponse,
+  BulkAttachResponse,
+  PrepareFoldersPreviewResponse,
+  PrepareFoldersResponse,
+  MediaCheckUsageResponse,
 } from '../types/product';
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
@@ -865,11 +870,61 @@ export async function adminDeleteMediaFolder(
   return response.json();
 }
 
+export async function adminPreviewPrepareCollectionFolders(
+  token: string
+): Promise<PrepareFoldersPreviewResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/folders/prepare-preview`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to preview collection folders');
+  }
+  return response.json();
+}
+
+export async function adminPrepareCollectionFolders(
+  token: string
+): Promise<PrepareFoldersResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/folders/prepare`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to prepare collection folders');
+  }
+  return response.json();
+}
+
+export async function adminCheckMediaUsage(
+  token: string,
+  assetIds: number[]
+): Promise<MediaCheckUsageResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/media/check-usage`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ asset_ids: assetIds }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to check media asset usage');
+  }
+  return response.json();
+}
+
 export async function adminBulkMoveMedia(
   token: string,
   assetIds: number[],
   targetFolder: string
-): Promise<{ status: string; moved_count: number; message: string }> {
+): Promise<BulkMoveResponse> {
   const response = await fetch(`${API_BASE_URL}/admin/media/bulk-move`, {
     method: 'POST',
     headers: {
@@ -891,7 +946,7 @@ export async function adminBulkAttachMedia(
   assetIds: number[],
   coverAssetId?: number,
   replaceGallery: boolean = false
-): Promise<{ status: string; product_id: number; attached_count: number; message: string }> {
+): Promise<BulkAttachResponse> {
   const response = await fetch(`${API_BASE_URL}/admin/media/bulk-attach`, {
     method: 'POST',
     headers: {
@@ -932,8 +987,18 @@ export async function adminBulkDeleteMedia(
   return response.json();
 }
 
-export async function adminSyncCloudinaryMedia(token: string): Promise<MediaSyncResponse> {
-  const response = await fetch(`${API_BASE_URL}/admin/media/sync`, {
+export async function adminSyncCloudinaryMedia(
+  token: string,
+  cursor?: string,
+  batchSize: number = 100,
+  resourceType: string = 'all'
+): Promise<MediaSyncResponse> {
+  const params = new URLSearchParams();
+  if (cursor) params.append('cursor', cursor);
+  params.append('max_results', String(batchSize));
+  params.append('resource_type', resourceType);
+
+  const response = await fetch(`${API_BASE_URL}/admin/media/sync?${params.toString()}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

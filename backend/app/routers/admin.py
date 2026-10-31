@@ -8,7 +8,8 @@ import csv
 import json
 import random
 import string
-from typing import List, Optional, Tuple
+import threading
+from typing import List, Optional, Tuple, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Query, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, and_
@@ -81,7 +82,15 @@ from app.schemas import (
     MediaFolderUpdate,
     MediaFolderResponse,
     BulkMoveMediaRequest,
+    BulkMoveMediaFailure,
+    BulkMoveMediaResponse,
     BulkAttachToProductRequest,
+    BulkAttachToProductResponse,
+    FolderConflictMapping,
+    PrepareCollectionFoldersPreviewResponse,
+    PrepareCollectionFoldersResponse,
+    MediaUsageLocation,
+    MediaCheckUsageResponse,
     BulkDeleteMediaRequest,
     BulkDeleteMediaResponse,
     CloudinarySyncResponse,
@@ -103,12 +112,15 @@ from app.services.cloudinary_service import (
     read_bounded_file,
     validate_media_file,
     list_cloudinary_folders,
+    list_cloudinary_folders_recursive,
     create_cloudinary_folder,
+    rename_cloudinary_folder,
     delete_cloudinary_folder,
     move_cloudinary_asset_folder,
     update_cloudinary_asset_metadata,
     fetch_cloudinary_resources,
     get_cloudinary_status,
+    detect_cloudinary_folder_mode,
     MAX_BATCH_FILES,
     MAX_VIDEO_SIZE_BYTES,
 )
@@ -1775,6 +1787,82 @@ def _is_test_record(asset: MediaAsset) -> Tuple[bool, Optional[str]]:
     return False, None
 
 
+_sync_lock = threading.Lock()
+
+
+def escape_like(s: str) -> str:
+    """Escape special characters in SQL LIKE pattern (_ and %)."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+BOUTIQUE_TARGET_FOLDER_PATHS: List[str] = [
+    # Top-level collection root
+    "Photos for royal libas",
+    
+    # Heavy Dress branch
+    "Photos for royal libas/Heavy Dress",
+    "Photos for royal libas/Heavy Dress/Designer Wear",
+    "Photos for royal libas/Heavy Dress/Designer Wear/01 - Gulnaar Ruby Red Designer Set",
+    "Photos for royal libas/Heavy Dress/Designer Wear/2",
+    "Photos for royal libas/Heavy Dress/Designer Wear/03 - Meher Purple Designer Suit",
+    "Photos for royal libas/Heavy Dress/Designer Wear/04 - Meher Teal Designer Suit",
+    "Photos for royal libas/Heavy Dress/Designer Wear/05 - Meher Rani Pink Designer Suit",
+    "Photos for royal libas/Heavy Dress/Designer Wear/Combination Photos",
+    "Photos for royal libas/Heavy Dress/Lehenga",
+    "Photos for royal libas/Heavy Dress/Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Palazzo Set/01 - Sunehri Mustard Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Palazzo Set/02 - Riwayat Wine Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Palazzo Set/03 - Zumurrud Emerald Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Palazzo Set/04 - Gulabo Fuchsia Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Palazzo Set/05 - Mehrun Blush Pink Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Palazzo Set/06 - Mehtab Sage Green Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Palazzo Set/07 - Aabha Champagne Palazzo Set",
+    "Photos for royal libas/Heavy Dress/Sharara Gharara",
+    "Photos for royal libas/Heavy Dress/Short Kurta",
+
+    # Suit Set branch
+    "Photos for royal libas/Suit Set",
+    "Photos for royal libas/Suit Set/Party Wear",
+    "Photos for royal libas/Suit Set/Party Wear/01 - Gulbahar Champagne Floral Party Set",
+    "Photos for royal libas/Suit Set/Party Wear/02 - Noor Ivory Floral Party Set",
+    "Photos for royal libas/Suit Set/Semi-party Wear",
+    "Photos for royal libas/Suit Set/Semi-party Wear/01 - Nazakat Wine Festive Suit",
+    "Photos for royal libas/Suit Set/Semi-party Wear/02 - Shabnam Navy Embellished Suit",
+    "Photos for royal libas/Suit Set/Semi-party Wear/03 - Rangrez Coral Floral Cape Set",
+    "Photos for royal libas/Suit Set/Semi-party Wear/04 - Rangrez Golden Beige Floral Cape Set",
+    "Photos for royal libas/Suit Set/Semi-party Wear/05 - Rangrez Pink Floral Cape Set",
+    "Photos for royal libas/Suit Set/Semi-party Wear/06 - Rangrez Navy Floral Cape Set",
+    "Photos for royal libas/Suit Set/Semi-party Wear/Combination Photos",
+    "Photos for royal libas/Suit Set/Three Pieces",
+    "Photos for royal libas/Suit Set/Three Pieces/01 - Bahaar Lime Green Three-Piece Suit",
+    "Photos for royal libas/Suit Set/Three Pieces/02 - Adaa Black Stripe Three-Piece Suit",
+    "Photos for royal libas/Suit Set/Three Pieces/03 - Aafreen Beige Botanical Three-Piece Suit",
+    "Photos for royal libas/Suit Set/Three Pieces/Combination Photos",
+
+    # Two Pieces branch
+    "Photos for royal libas/Two Pieces",
+    "Photos for royal libas/Two Pieces/Co-ord Sets",
+    "Photos for royal libas/Two Pieces/Kurta Pant",
+]
+
+
+def ensure_ancestor_folders(db: Session, folder_path: str, known_paths: set) -> int:
+    """Ensure all ancestor folders exist in MediaFolder for a given folder path."""
+    if not folder_path:
+        return 0
+    parts = [p.strip() for p in folder_path.strip("/").split("/") if p.strip()]
+    created = 0
+    current_path = ""
+    for idx, part in enumerate(parts):
+        current_path = f"{current_path}/{part}" if current_path else part
+        if current_path not in known_paths:
+            parent = "/".join(parts[:idx]) if idx > 0 else None
+            db.add(MediaFolder(name=part, path=current_path, parent_path=parent))
+            known_paths.add(current_path)
+            created += 1
+    return created
+
+
 @router.get("/media/folders", response_model=List[MediaFolderResponse])
 def admin_list_media_folders(
     db: Session = Depends(get_db),
@@ -1784,9 +1872,10 @@ def admin_list_media_folders(
     folders = db.query(MediaFolder).order_by(MediaFolder.path.asc()).all()
     results = []
     for f in folders:
+        escaped_p = escape_like(f.path)
         asset_count = (
             db.query(MediaAsset)
-            .filter(or_(MediaAsset.folder == f.path, MediaAsset.folder.like(f"{f.path}/%")))
+            .filter(or_(MediaAsset.folder == f.path, MediaAsset.folder.like(f"{escaped_p}/%", escape="\\")))
             .count()
         )
         subfolder_count = (
@@ -1809,6 +1898,87 @@ def admin_list_media_folders(
     return results
 
 
+@router.get("/media/folders/prepare-preview", response_model=PrepareCollectionFoldersPreviewResponse)
+def admin_preview_prepare_collection_folders(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Preview the boutique collection and product folder hierarchy before creating missing folders.
+    
+    Shows existing folders, missing folders to be created, and conflicts/mappings so the
+    owner can review safely without unexpected moves or renames.
+    """
+    existing_paths = {row[0] for row in db.query(MediaFolder.path).all()}
+    missing_folders = [p for p in BOUTIQUE_TARGET_FOLDER_PATHS if p not in existing_paths]
+    existing_matching = [p for p in BOUTIQUE_TARGET_FOLDER_PATHS if p in existing_paths]
+
+    conflicts: List[FolderConflictMapping] = []
+    # Check for root folders that exist and should not be moved automatically
+    for root_name in ["Heavy Dress", "royal_libas", "samples"]:
+        if root_name in existing_paths:
+            conflicts.append(
+                FolderConflictMapping(
+                    folder=root_name,
+                    status="preserved_root",
+                    message=(
+                        f"Root folder '{root_name}' already exists. It will remain preserved with all its assets; "
+                        f"no automatic rename or move will be applied."
+                    ),
+                )
+            )
+
+    return PrepareCollectionFoldersPreviewResponse(
+        total_target=len(BOUTIQUE_TARGET_FOLDER_PATHS),
+        existing_count=len(existing_matching),
+        to_create_count=len(missing_folders),
+        missing_folders=missing_folders,
+        existing_matching_folders=existing_matching,
+        conflicts_and_mappings=conflicts,
+    )
+
+
+@router.post("/media/folders/prepare", response_model=PrepareCollectionFoldersResponse)
+def admin_prepare_collection_folders(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Create only missing collection and product folders after owner confirmation.
+    
+    Creates empty folders in DB and Cloudinary without modifying or deleting existing folders/assets.
+    Preserves intentional empty folders (such as '2').
+    """
+    known_paths = {row[0] for row in db.query(MediaFolder.path).all()}
+    created_list = []
+
+    for folder_path in BOUTIQUE_TARGET_FOLDER_PATHS:
+        if folder_path not in known_paths:
+            # Ensure ancestors are registered
+            ensure_ancestor_folders(db, folder_path, known_paths)
+            
+            # Create remotely in Cloudinary if configured
+            if is_cloudinary_configured():
+                create_cloudinary_folder(folder_path)
+            
+            created_list.append(folder_path)
+
+    db.commit()
+    log_activity(
+        db,
+        current_admin,
+        "COLLECTION_FOLDERS_PREPARED",
+        "media_folder",
+        None,
+        f"Prepared boutique folder tree: created {len(created_list)} missing folders.",
+    )
+
+    return PrepareCollectionFoldersResponse(
+        status="success",
+        created_count=len(created_list),
+        created_folders=created_list,
+        message=f"Successfully prepared {len(created_list)} missing boutique folder(s).",
+    )
+
+
 @router.post("/media/folders", response_model=MediaFolderResponse)
 def admin_create_media_folder(
     payload: MediaFolderCreate,
@@ -1827,6 +1997,10 @@ def admin_create_media_folder(
     existing = db.query(MediaFolder).filter(MediaFolder.path == new_path).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Folder '{new_path}' already exists.")
+
+    known_paths = {row[0] for row in db.query(MediaFolder.path).all()}
+    if parent:
+        ensure_ancestor_folders(db, parent, known_paths)
 
     # Create remotely in Cloudinary if configured
     c_res = create_cloudinary_folder(new_path)
@@ -1862,7 +2036,11 @@ def admin_rename_media_folder(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
-    """Rename a media folder and safely update nested subfolders and asset folder paths."""
+    """Rename a media folder and safely update nested subfolders and asset folder paths.
+    
+    Verifies Cloudinary provider response before modifying local records, and respects
+    fixed vs dynamic folder mode limitations.
+    """
     folder = db.query(MediaFolder).filter(MediaFolder.id == id).first()
     if not folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found.")
@@ -1875,13 +2053,15 @@ def admin_rename_media_folder(
     old_path = folder.path
     new_path = f"{folder.parent_path}/{clean_name}" if folder.parent_path else clean_name
 
+    escaped_old = escape_like(old_path)
+
     if old_path == new_path:
         return MediaFolderResponse(
             id=folder.id,
             name=folder.name,
             path=folder.path,
             parent_path=folder.parent_path,
-            asset_count=db.query(MediaAsset).filter(or_(MediaAsset.folder == folder.path, MediaAsset.folder.like(f"{folder.path}/%"))).count(),
+            asset_count=db.query(MediaAsset).filter(or_(MediaAsset.folder == folder.path, MediaAsset.folder.like(f"{escape_like(folder.path)}/%", escape="\\"))).count(),
             subfolder_count=db.query(MediaFolder).filter(MediaFolder.parent_path == folder.path).count(),
             created_at=folder.created_at,
             updated_at=folder.updated_at,
@@ -1891,30 +2071,44 @@ def admin_rename_media_folder(
     if conflict:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A folder with path '{new_path}' already exists.")
 
+    # Check Cloudinary folder mode and remote rename capability
+    if is_cloudinary_configured():
+        mode = detect_cloudinary_folder_mode()
+        if mode == "fixed":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cloudinary is in fixed folder mode. Renaming folders is restricted to prevent breaking delivery URLs.",
+            )
+        c_res = rename_cloudinary_folder(old_path, new_path)
+        if not c_res.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Cloudinary rejected folder rename: {c_res.get('error')}",
+            )
+
     folder.name = clean_name
     folder.path = new_path
 
-    # Update descendant folders
-    descendants = db.query(MediaFolder).filter(MediaFolder.path.like(f"{old_path}/%")).all()
+    # Update descendant folders with escaped SQL LIKE
+    descendants = db.query(MediaFolder).filter(MediaFolder.path.like(f"{escaped_old}/%", escape="\\")).all()
     for d in descendants:
         d.path = new_path + d.path[len(old_path):]
         if d.parent_path and d.parent_path.startswith(old_path):
             d.parent_path = new_path + d.parent_path[len(old_path):]
 
     # Update asset folder references
-    assets = db.query(MediaAsset).filter(or_(MediaAsset.folder == old_path, MediaAsset.folder.like(f"{old_path}/%"))).all()
+    assets = db.query(MediaAsset).filter(or_(MediaAsset.folder == old_path, MediaAsset.folder.like(f"{escaped_old}/%", escape="\\"))).all()
     for a in assets:
         old_a_folder = a.folder or ""
         new_a_folder = new_path + old_a_folder[len(old_path):] if old_a_folder.startswith(old_path) else new_path
         a.folder = new_a_folder
-        if a.public_id:
-            move_cloudinary_asset_folder(a.public_id, new_a_folder, getattr(a, "resource_type", "image"))
 
     db.commit()
     db.refresh(folder)
     log_activity(db, current_admin, "FOLDER_RENAMED", "media_folder", folder.id, f"Renamed folder from '{old_path}' to '{new_path}'")
 
-    asset_count = db.query(MediaAsset).filter(or_(MediaAsset.folder == folder.path, MediaAsset.folder.like(f"{folder.path}/%"))).count()
+    escaped_new = escape_like(folder.path)
+    asset_count = db.query(MediaAsset).filter(or_(MediaAsset.folder == folder.path, MediaAsset.folder.like(f"{escaped_new}/%", escape="\\"))).count()
     subfolder_count = db.query(MediaFolder).filter(MediaFolder.parent_path == folder.path).count()
 
     return MediaFolderResponse(
@@ -1935,7 +2129,11 @@ def admin_delete_media_folder(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER")),
 ):
-    """Safely delete an empty media folder. Rejects if it contains assets or subfolders."""
+    """Safely delete an empty media folder.
+    
+    Rejects if it contains assets or subfolders. Does not delete local record if
+    Cloudinary provider deletion fails.
+    """
     folder = db.query(MediaFolder).filter(MediaFolder.id == id).first()
     if not folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found.")
@@ -1947,15 +2145,22 @@ def admin_delete_media_folder(
             detail=f"Folder '{folder.name}' cannot be deleted because it contains {subfolder_count} subfolder(s). Delete or move them first.",
         )
 
-    asset_count = db.query(MediaAsset).filter(MediaAsset.folder == folder.path).count()
+    escaped_p = escape_like(folder.path)
+    asset_count = db.query(MediaAsset).filter(or_(MediaAsset.folder == folder.path, MediaAsset.folder.like(f"{escaped_p}/%", escape="\\"))).count()
     if asset_count > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Folder '{folder.name}' cannot be deleted because it contains {asset_count} asset(s). Move or delete the assets first.",
         )
 
-    # Delete remotely from Cloudinary
-    delete_cloudinary_folder(folder.path)
+    # Delete remotely from Cloudinary before deleting local record
+    if is_cloudinary_configured():
+        c_res = delete_cloudinary_folder(folder.path)
+        if not c_res.get("success") and not c_res.get("already_missing"):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Cloudinary rejected folder deletion: {c_res.get('error')}. Local folder record was preserved.",
+            )
 
     folder_path = folder.path
     db.delete(folder)
@@ -2001,7 +2206,8 @@ def admin_list_media(
         if clean_folder == "" or clean_folder.lower() == "root":
             query = query.filter(or_(MediaAsset.folder.is_(None), MediaAsset.folder == ""))
         else:
-            query = query.filter(or_(MediaAsset.folder == clean_folder, MediaAsset.folder.like(f"{clean_folder}/%")))
+            escaped_f = escape_like(clean_folder)
+            query = query.filter(or_(MediaAsset.folder == clean_folder, MediaAsset.folder.like(f"{escaped_f}/%", escape="\\")))
 
     if sort_by == "oldest":
         query = query.order_by(MediaAsset.created_at.asc())
@@ -2381,65 +2587,121 @@ def admin_delete_media(
     return {"status": "success", "message": f"Media asset '{asset.filename}' deleted successfully."}
 
 
-@router.post("/media/bulk-move")
+@router.post("/media/check-usage", response_model=MediaCheckUsageResponse)
+def admin_check_media_usage(
+    payload: BulkDeleteMediaRequest,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Check if the specified media assets are currently referenced by products or editorial sections."""
+    if not payload.asset_ids:
+        return MediaCheckUsageResponse(total_checked=0, in_use_count=0, safe_count=0, usage_details=[])
+
+    assets = db.query(MediaAsset).filter(MediaAsset.id.in_(payload.asset_ids)).all()
+    in_use_details: List[MediaUsageLocation] = []
+
+    for a in assets:
+        used_products, used_editorial = _check_asset_references(a, db)
+        locations = [f"Product: '{p.name}'" for p in used_products] + used_editorial
+        if locations:
+            in_use_details.append(
+                MediaUsageLocation(
+                    asset_id=a.id,
+                    filename=a.filename,
+                    display_name=getattr(a, "display_name", None) or a.filename,
+                    url=a.url,
+                    locations=locations,
+                )
+            )
+
+    return MediaCheckUsageResponse(
+        total_checked=len(assets),
+        in_use_count=len(in_use_details),
+        safe_count=len(assets) - len(in_use_details),
+        usage_details=in_use_details,
+    )
+
+
+@router.post("/media/bulk-move", response_model=BulkMoveMediaResponse)
 def admin_bulk_move_media(
     payload: BulkMoveMediaRequest,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
-    """Move multiple selected assets into a target folder safely using dynamic folder mode."""
+    """Move multiple selected assets into a target folder safely using dynamic folder mode.
+    
+    Verifies Cloudinary provider response per asset and prevents unsafe moves in fixed folder mode.
+    """
     if not payload.asset_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No asset IDs provided.")
 
+    # Check Cloudinary folder mode
+    if is_cloudinary_configured():
+        mode = detect_cloudinary_folder_mode()
+        if mode == "fixed":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cloudinary is in fixed folder mode. Moving assets without changing public IDs is not supported by Cloudinary in this mode.",
+            )
+
     target_folder = payload.target_folder.strip().strip("/") if payload.target_folder else None
 
-    # If target folder is provided, ensure folder exists in DB
+    # If target folder is provided, ensure folder and all ancestors exist in DB
     if target_folder:
-        folder_rec = db.query(MediaFolder).filter(MediaFolder.path == target_folder).first()
-        if not folder_rec:
-            name = target_folder.split("/")[-1]
-            parent = "/".join(target_folder.split("/")[:-1]) if "/" in target_folder else None
-            folder_rec = MediaFolder(name=name, path=target_folder, parent_path=parent)
-            db.add(folder_rec)
-            db.commit()
+        known_paths = {row[0] for row in db.query(MediaFolder.path).all()}
+        ensure_ancestor_folders(db, target_folder, known_paths)
 
     assets = db.query(MediaAsset).filter(MediaAsset.id.in_(payload.asset_ids)).all()
     moved_count = 0
+    failures: List[BulkMoveMediaFailure] = []
 
     for a in assets:
-        a.folder = target_folder
-        if a.public_id:
-            move_cloudinary_asset_folder(
+        if a.public_id and is_cloudinary_configured():
+            c_res = move_cloudinary_asset_folder(
                 public_id=a.public_id,
                 new_folder=target_folder or "",
                 resource_type=getattr(a, "resource_type", "image") or "image",
             )
+            if not c_res.get("success"):
+                failures.append(BulkMoveMediaFailure(asset_id=a.id, error=c_res.get("error") or "Move rejected by Cloudinary"))
+                continue
+
+        a.folder = target_folder
         moved_count += 1
 
     db.commit()
+
     log_activity(
         db,
         current_admin,
         "MEDIA_BULK_MOVED",
         "media",
         None,
-        f"Moved {moved_count} assets to folder '{target_folder or 'root'}'",
+        f"Moved {moved_count} assets to folder '{target_folder or 'root'}' (failed: {len(failures)})",
     )
-    return {
-        "status": "success",
-        "moved_count": moved_count,
-        "target_folder": target_folder or "root",
-        "message": f"Successfully moved {moved_count} asset(s) to '{target_folder or 'Root'}'.",
-    }
+
+    status_str = "success" if not failures else ("partial_success" if moved_count > 0 else "failed")
+    return BulkMoveMediaResponse(
+        status=status_str,
+        moved_count=moved_count,
+        failed_count=len(failures),
+        target_folder=target_folder or "root",
+        message=f"Successfully moved {moved_count} asset(s) to '{target_folder or 'Root'}'. {len(failures)} failed.",
+        failures=failures,
+    )
 
 
-@router.post("/media/bulk-attach")
+@router.post("/media/bulk-attach", response_model=BulkAttachToProductResponse)
 def admin_bulk_attach_media(
     payload: BulkAttachToProductRequest,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
-    """Attach multiple selected media assets to a product gallery with cover selection and duplicate protection."""
+    """Attach multiple selected media assets to a product gallery with cover selection, ordering, and duplicate protection.
+    
+    In append mode, explicitly selecting a cover promotes that asset to sort_order 0 (the actual cover)
+    without duplicating it, and shifts existing gallery images sequentially.
+    """
     product = db.query(Product).filter(Product.id == payload.product_id).first()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
@@ -2452,52 +2714,159 @@ def admin_bulk_attach_media(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No matching media assets found.")
 
     asset_map = {a.id: a for a in assets}
-
-    # Order assets: cover asset first (if specified and present), then the remainder
-    ordered_assets = []
-    if payload.cover_asset_id and payload.cover_asset_id in asset_map:
-        ordered_assets.append(asset_map[payload.cover_asset_id])
-    for aid in payload.asset_ids:
-        if aid in asset_map and (not payload.cover_asset_id or aid != payload.cover_asset_id):
-            ordered_assets.append(asset_map[aid])
-
-    if payload.replace_gallery:
-        # Remove all existing images for this product
-        db.query(ProductImage).filter(ProductImage.product_id == product.id).delete()
-        base_sort_order = 0
-        existing_urls = set()
-    else:
-        existing_images = db.query(ProductImage).filter(ProductImage.product_id == product.id).all()
-        base_sort_order = max([img.sort_order for img in existing_images], default=-1) + 1
-        existing_urls = {img.url for img in existing_images}
+    unavailable_ids = [aid for aid in payload.asset_ids if aid not in asset_map]
 
     added_count = 0
     skipped_duplicates = 0
 
-    for idx, asset in enumerate(ordered_assets):
-        asset_url = asset.secure_url or asset.url
-        if not payload.replace_gallery and asset_url in existing_urls:
-            skipped_duplicates += 1
-            continue
+    if payload.replace_gallery:
+        # Remove all existing images for this product
+        db.query(ProductImage).filter(ProductImage.product_id == product.id).delete()
+        
+        # Build ordered list with cover asset at position 0
+        ordered_assets = []
+        if payload.cover_asset_id and payload.cover_asset_id in asset_map:
+            ordered_assets.append(asset_map[payload.cover_asset_id])
+        for aid in payload.asset_ids:
+            if aid in asset_map and (not payload.cover_asset_id or aid != payload.cover_asset_id):
+                ordered_assets.append(asset_map[aid])
 
-        sort_idx = base_sort_order + added_count
-        new_img = ProductImage(
-            product_id=product.id,
-            url=asset_url,
-            sort_order=sort_idx,
-            alt_text=asset.alt_text or getattr(asset, "display_name", None) or product.name,
-            resource_type=getattr(asset, "resource_type", "image") or "image",
-            public_id=asset.public_id,
-            width=asset.width,
-            height=asset.height,
-            duration=asset.duration,
+        for idx, asset in enumerate(ordered_assets):
+            asset_url = asset.secure_url or asset.url
+            new_img = ProductImage(
+                product_id=product.id,
+                url=asset_url,
+                sort_order=idx,
+                alt_text=asset.alt_text or getattr(asset, "display_name", None) or product.name,
+                resource_type=getattr(asset, "resource_type", "image") or "image",
+                public_id=asset.public_id,
+                width=asset.width,
+                height=asset.height,
+                duration=asset.duration,
+            )
+            db.add(new_img)
+            added_count += 1
+    else:
+        # Append mode: preserve existing gallery images
+        existing_images = (
+            db.query(ProductImage)
+            .filter(ProductImage.product_id == product.id)
+            .order_by(ProductImage.sort_order.asc())
+            .all()
         )
-        db.add(new_img)
-        existing_urls.add(asset_url)
-        added_count += 1
+        existing_urls = {img.url for img in existing_images}
+        existing_pids = {img.public_id for img in existing_images if img.public_id}
+
+        if payload.cover_asset_id and payload.cover_asset_id in asset_map:
+            cover_asset = asset_map[payload.cover_asset_id]
+            cover_url = cover_asset.secure_url or cover_asset.url
+            cover_pid = cover_asset.public_id
+
+            # Check if chosen cover already exists in product gallery
+            matching_img = next(
+                (img for img in existing_images if img.url == cover_url or (cover_pid and img.public_id == cover_pid)),
+                None,
+            )
+            if matching_img:
+                # Promote existing image to sort_order 0, shift other existing images
+                matching_img.sort_order = 0
+                other_existing = [img for img in existing_images if img.id != matching_img.id]
+                for idx, img in enumerate(other_existing):
+                    img.sort_order = idx + 1
+                next_sort_order = len(other_existing) + 1
+            else:
+                # Shift all existing images down by 1 to make room at sort_order 0
+                for img in existing_images:
+                    img.sort_order += 1
+
+                cover_img = ProductImage(
+                    product_id=product.id,
+                    url=cover_url,
+                    sort_order=0,
+                    alt_text=cover_asset.alt_text or getattr(cover_asset, "display_name", None) or product.name,
+                    resource_type=getattr(cover_asset, "resource_type", "image") or "image",
+                    public_id=cover_pid,
+                    width=cover_asset.width,
+                    height=cover_asset.height,
+                    duration=cover_asset.duration,
+                )
+                db.add(cover_img)
+                existing_urls.add(cover_url)
+                if cover_pid:
+                    existing_pids.add(cover_pid)
+                added_count += 1
+                next_sort_order = len(existing_images) + 1
+
+            # Append remainder of payload assets
+            for aid in payload.asset_ids:
+                if aid == payload.cover_asset_id or aid not in asset_map:
+                    continue
+                a = asset_map[aid]
+                a_url = a.secure_url or a.url
+                a_pid = a.public_id
+                if a_url in existing_urls or (a_pid and a_pid in existing_pids):
+                    skipped_duplicates += 1
+                    continue
+
+                new_img = ProductImage(
+                    product_id=product.id,
+                    url=a_url,
+                    sort_order=next_sort_order,
+                    alt_text=a.alt_text or getattr(a, "display_name", None) or product.name,
+                    resource_type=getattr(a, "resource_type", "image") or "image",
+                    public_id=a_pid,
+                    width=a.width,
+                    height=a.height,
+                    duration=a.duration,
+                )
+                db.add(new_img)
+                existing_urls.add(a_url)
+                if a_pid:
+                    existing_pids.add(a_pid)
+                next_sort_order += 1
+                added_count += 1
+        else:
+            # No new cover specified: existing images retain their exact sort orders
+            base_sort_order = max([img.sort_order for img in existing_images], default=-1) + 1
+            for aid in payload.asset_ids:
+                if aid not in asset_map:
+                    continue
+                a = asset_map[aid]
+                a_url = a.secure_url or a.url
+                a_pid = a.public_id
+                if a_url in existing_urls or (a_pid and a_pid in existing_pids):
+                    skipped_duplicates += 1
+                    continue
+
+                sort_idx = base_sort_order + added_count
+                new_img = ProductImage(
+                    product_id=product.id,
+                    url=a_url,
+                    sort_order=sort_idx,
+                    alt_text=a.alt_text or getattr(a, "display_name", None) or product.name,
+                    resource_type=getattr(a, "resource_type", "image") or "image",
+                    public_id=a_pid,
+                    width=a.width,
+                    height=a.height,
+                    duration=a.duration,
+                )
+                db.add(new_img)
+                existing_urls.add(a_url)
+                if a_pid:
+                    existing_pids.add(a_pid)
+                added_count += 1
 
     db.commit()
     db.refresh(product)
+
+    # Determine cover image URL for product
+    cover_image_record = (
+        db.query(ProductImage)
+        .filter(ProductImage.product_id == product.id)
+        .order_by(ProductImage.sort_order.asc())
+        .first()
+    )
+    cover_url = cover_image_record.url if cover_image_record else None
 
     log_activity(
         db,
@@ -2508,15 +2877,16 @@ def admin_bulk_attach_media(
         f"Attached {added_count} media files to '{product.name}' (replace={payload.replace_gallery}, skipped {skipped_duplicates} duplicates)",
     )
 
-    return {
-        "status": "success",
-        "product_id": product.id,
-        "product_name": product.name,
-        "attached_count": added_count,
-        "skipped_duplicates": skipped_duplicates,
-        "total_product_images": len(product.images),
-        "message": f"Attached {added_count} asset(s) to '{product.name}'.",
-    }
+    return BulkAttachToProductResponse(
+        status="success",
+        product_id=product.id,
+        product_name=product.name,
+        added_count=added_count,
+        skipped_duplicates=skipped_duplicates,
+        unavailable_asset_ids=unavailable_ids,
+        cover_image_url=cover_url,
+        total_gallery_images=len(product.images),
+    )
 
 
 @router.post("/media/bulk-delete", response_model=BulkDeleteMediaResponse)
@@ -2551,7 +2921,7 @@ def admin_bulk_delete_media(
             continue
 
         # Cloudinary Remote Deletion
-        if asset.public_id:
+        if asset.public_id and is_cloudinary_configured():
             res_type = getattr(asset, "resource_type", "image") or "image"
             del_res = delete_from_cloudinary(asset.public_id, resource_type=res_type)
             if not del_res.get("success") and not del_res.get("already_missing"):
@@ -2624,13 +2994,17 @@ def admin_bulk_delete_media(
 
 @router.post("/media/sync", response_model=CloudinarySyncResponse)
 def admin_sync_cloudinary_media(
+    cursor: Optional[str] = Query(None, description="Pagination cursor for batched sync"),
+    max_results: int = Query(100, description="Max assets per batch (10-100)"),
+    resource_type: str = Query("all", description="Resource type: 'all', 'image', or 'video'"),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Sync media and folders directly uploaded via Cloudinary Console.
     
-    Discovers remote folders, imports images and videos without duplicating existing records,
-    and updates metadata. Never attaches synced media to products automatically.
+    Discovers remote folders recursively, creates missing ancestor records, follows
+    pagination cursors, reconciles immutable asset IDs and (public_id, resource_type) pairs,
+    and handles rate limits and partial failures safely.
     """
     if not is_cloudinary_configured():
         raise HTTPException(
@@ -2638,157 +3012,201 @@ def admin_sync_cloudinary_media(
             detail="Cloudinary is not configured on this server.",
         )
 
-    # 1. Discover remote folders and ensure they exist in local MediaFolder
-    known_folder_paths = {row[0] for row in db.query(MediaFolder.path).all()}
-    folders_discovered = 0
-    root_folders = list_cloudinary_folders(None)
-    for rf in root_folders:
-        r_path = rf.get("path")
-        r_name = rf.get("name") or r_path
-        if r_path and r_path not in known_folder_paths:
-            db.add(MediaFolder(name=r_name, path=r_path, parent_path=None))
-            known_folder_paths.add(r_path)
-            folders_discovered += 1
-        # Check subfolders
-        if r_path:
-            subfolders = list_cloudinary_folders(r_path)
-            for sf in subfolders:
-                s_path = sf.get("path")
-                s_name = sf.get("name") or s_path.split("/")[-1]
-                if s_path and s_path not in known_folder_paths:
-                    db.add(MediaFolder(name=s_name, path=s_path, parent_path=r_path))
-                    known_folder_paths.add(s_path)
-                    folders_discovered += 1
+    # Concurrency guard
+    acquired = _sync_lock.acquire(blocking=False)
+    if not acquired:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A media sync is already in progress. Please wait for the current sync to complete.",
+        )
 
-    db.commit()
+    try:
+        known_folder_paths = {row[0] for row in db.query(MediaFolder.path).all()}
+        folders_discovered = 0
 
-    # 2. Fetch images and videos from Cloudinary
-    scanned_resources = []
-    
-    # Fetch images
-    img_res = fetch_cloudinary_resources("image", max_results=100)
-    scanned_resources.extend(img_res.get("resources", []))
+        # 1. Discover remote folders recursively (performed on initial batch or when no cursor)
+        if not cursor:
+            remote_folders = list_cloudinary_folders_recursive(None)
+            for rf in remote_folders:
+                r_path = rf.get("path")
+                if r_path:
+                    created_ancestors = ensure_ancestor_folders(db, r_path, known_folder_paths)
+                    folders_discovered += created_ancestors
+            db.commit()
 
-    # Fetch videos
-    vid_res = fetch_cloudinary_resources("video", max_results=100)
-    scanned_resources.extend(vid_res.get("resources", []))
+        # 2. Fetch paginated resources for requested types
+        types_to_fetch = ["image", "video"] if resource_type == "all" else [resource_type]
+        scanned_resources = []
+        next_cursor = None
+        rate_limited = False
+        error_message = None
 
-    total_scanned = len(scanned_resources)
-    imported = 0
-    updated = 0
-    skipped = 0
-    failed = 0
+        for r_type in types_to_fetch:
+            res_dict = fetch_cloudinary_resources(
+                resource_type=r_type,
+                max_results=max_results,
+                next_cursor=cursor,
+            )
+            batch = res_dict.get("resources", [])
+            scanned_resources.extend(batch)
+            if res_dict.get("next_cursor"):
+                next_cursor = res_dict.get("next_cursor")
+            if res_dict.get("rate_limited"):
+                rate_limited = True
+            if res_dict.get("error"):
+                error_message = res_dict.get("error")
 
-    for res in scanned_resources:
-        try:
-            asset_id = res.get("asset_id")
-            public_id = res.get("public_id")
-            secure_url = res.get("secure_url") or res.get("url")
-            res_type = res.get("resource_type", "image")
-            fmt = res.get("format")
-            file_bytes = res.get("bytes", 0)
-            width = res.get("width")
-            height = res.get("height")
-            duration = res.get("duration")
-            asset_folder = res.get("asset_folder") or (os.path.dirname(public_id) if "/" in public_id else None)
-            display_name = res.get("display_name") or os.path.basename(public_id)
+        total_scanned = len(scanned_resources)
+        imported = 0
+        updated = 0
+        skipped = 0
+        failed = 0
 
-            # Check if exists by asset_id or public_id or secure_url
-            existing_asset = None
-            if asset_id:
-                existing_asset = db.query(MediaAsset).filter(MediaAsset.cloudinary_asset_id == asset_id).first()
-            if not existing_asset and public_id:
-                existing_asset = db.query(MediaAsset).filter(MediaAsset.public_id == public_id).first()
-            if not existing_asset and secure_url:
-                existing_asset = db.query(MediaAsset).filter(MediaAsset.url == secure_url).first()
+        for res in scanned_resources:
+            try:
+                asset_id = res.get("asset_id")
+                public_id = res.get("public_id")
+                secure_url = res.get("secure_url") or res.get("url")
+                res_type = res.get("resource_type", "image")
+                fmt = res.get("format")
+                file_bytes = res.get("bytes", 0)
+                width = res.get("width")
+                height = res.get("height")
+                duration = res.get("duration")
+                asset_folder = res.get("asset_folder") or (os.path.dirname(public_id) if "/" in public_id else None)
+                if asset_folder == "":
+                    asset_folder = None
+                display_name = res.get("display_name") or (os.path.basename(public_id) if public_id else None)
 
-            if existing_asset:
-                changed = False
-                if not existing_asset.cloudinary_asset_id and asset_id:
-                    existing_asset.cloudinary_asset_id = asset_id
-                    changed = True
-                if not getattr(existing_asset, "display_name", None) and display_name:
-                    existing_asset.display_name = display_name
-                    changed = True
-                if width and existing_asset.width != width:
-                    existing_asset.width = width
-                    changed = True
-                if height and existing_asset.height != height:
-                    existing_asset.height = height
-                    changed = True
-                if duration and existing_asset.duration != duration:
-                    existing_asset.duration = duration
-                    changed = True
-                if file_bytes and existing_asset.file_size != file_bytes:
-                    existing_asset.file_size = file_bytes
-                    changed = True
-                if asset_folder and existing_asset.folder != asset_folder:
-                    existing_asset.folder = asset_folder
-                    changed = True
+                # Reconcile primarily by immutable asset_id, then fallback to (public_id, resource_type)
+                existing_asset = None
+                if asset_id:
+                    existing_asset = db.query(MediaAsset).filter(MediaAsset.cloudinary_asset_id == asset_id).first()
+                if not existing_asset and public_id:
+                    existing_asset = (
+                        db.query(MediaAsset)
+                        .filter(
+                            MediaAsset.public_id == public_id,
+                            MediaAsset.resource_type == res_type,
+                        )
+                        .first()
+                    )
+                if not existing_asset and secure_url:
+                    existing_asset = (
+                        db.query(MediaAsset)
+                        .filter(
+                            MediaAsset.url == secure_url,
+                            MediaAsset.resource_type == res_type,
+                        )
+                        .first()
+                    )
 
-                if changed:
-                    updated += 1
+                if existing_asset:
+                    changed = False
+                    if not existing_asset.cloudinary_asset_id and asset_id:
+                        existing_asset.cloudinary_asset_id = asset_id
+                        changed = True
+                    if not getattr(existing_asset, "display_name", None) and display_name:
+                        existing_asset.display_name = display_name
+                        changed = True
+                    if width and existing_asset.width != width:
+                        existing_asset.width = width
+                        changed = True
+                    if height and existing_asset.height != height:
+                        existing_asset.height = height
+                        changed = True
+                    if duration and existing_asset.duration != duration:
+                        existing_asset.duration = duration
+                        changed = True
+                    if file_bytes and existing_asset.file_size != file_bytes:
+                        existing_asset.file_size = file_bytes
+                        changed = True
+                    # Reconcile moved asset, including moved back to root (asset_folder=None)
+                    if existing_asset.folder != asset_folder:
+                        existing_asset.folder = asset_folder
+                        changed = True
+
+                    if changed:
+                        updated += 1
+                    else:
+                        skipped += 1
                 else:
-                    skipped += 1
-            else:
-                ext = f".{fmt}" if fmt else ""
-                clean_filename = f"{os.path.basename(public_id)}{ext}"
-                mime_type = f"video/{fmt or 'mp4'}" if res_type == "video" else f"image/{'jpeg' if fmt == 'jpg' else (fmt or 'jpeg')}"
+                    ext = f".{fmt}" if fmt else ""
+                    clean_filename = f"{os.path.basename(public_id or 'media')}{ext}"
+                    mime_type = f"video/{fmt or 'mp4'}" if res_type == "video" else f"image/{'jpeg' if fmt == 'jpg' else (fmt or 'jpeg')}"
 
-                new_asset = MediaAsset(
-                    filename=clean_filename,
-                    display_name=display_name,
-                    public_id=public_id,
-                    cloudinary_asset_id=asset_id,
-                    url=secure_url,
-                    secure_url=secure_url,
-                    resource_type=res_type,
-                    format=fmt,
-                    width=width,
-                    height=height,
-                    duration=duration,
-                    file_size=file_bytes,
-                    mime_type=mime_type,
-                    alt_text=display_name,
-                    folder=asset_folder,
-                )
-                db.add(new_asset)
-                imported += 1
+                    new_asset = MediaAsset(
+                        filename=clean_filename,
+                        display_name=display_name or clean_filename,
+                        public_id=public_id,
+                        cloudinary_asset_id=asset_id,
+                        url=secure_url,
+                        secure_url=secure_url,
+                        resource_type=res_type,
+                        format=fmt,
+                        width=width,
+                        height=height,
+                        duration=duration,
+                        file_size=file_bytes,
+                        mime_type=mime_type,
+                        alt_text=display_name or clean_filename,
+                        folder=asset_folder,
+                    )
+                    db.add(new_asset)
+                    imported += 1
 
-                if asset_folder and asset_folder not in known_folder_paths:
-                    f_name = asset_folder.split("/")[-1]
-                    f_parent = "/".join(asset_folder.split("/")[:-1]) if "/" in asset_folder else None
-                    db.add(MediaFolder(name=f_name, path=asset_folder, parent_path=f_parent))
-                    known_folder_paths.add(asset_folder)
-                    folders_discovered += 1
+                    if asset_folder:
+                        created_anc = ensure_ancestor_folders(db, asset_folder, known_folder_paths)
+                        folders_discovered += created_anc
 
-        except Exception as err:
-            admin_media_logger.error(f"Error importing Cloudinary resource {res.get('public_id')}: {err}")
-            failed += 1
+            except Exception as err:
+                admin_media_logger.error(f"Error importing Cloudinary resource {res.get('public_id')}: {err}")
+                failed += 1
 
-    db.commit()
+        db.commit()
 
-    now = datetime.now(timezone.utc)
-    log_activity(
-        db,
-        current_admin,
-        "MEDIA_SYNCED",
-        "media",
-        None,
-        f"Synced from Cloudinary: {imported} imported, {updated} updated, {skipped} unchanged, {failed} failed",
-    )
+        has_more = bool(next_cursor)
+        is_partial = failed > 0 or rate_limited or (error_message is not None)
+        sync_status = "in_progress" if has_more else ("partial_failure" if is_partial else "complete")
 
-    return CloudinarySyncResponse(
-        status="success",
-        cloud_name=get_cloudinary_status().get("cloud_name") or "configured",
-        total_scanned=total_scanned,
-        imported=imported,
-        updated=updated,
-        skipped=skipped,
-        failed=failed,
-        folders_discovered=folders_discovered,
-        last_synced_at=now,
-    )
+        now = datetime.now(timezone.utc)
+        if sync_status == "complete":
+            log_activity(
+                db,
+                current_admin,
+                "MEDIA_SYNCED",
+                "media",
+                None,
+                f"Cloudinary sync complete: {imported} imported, {updated} updated, {skipped} unchanged, {failed} failed.",
+            )
+        else:
+            log_activity(
+                db,
+                current_admin,
+                "MEDIA_SYNC_PARTIAL",
+                "media",
+                None,
+                f"Cloudinary sync {sync_status}: {imported} imported, {failed} failed (has_more={has_more}).",
+            )
+
+        return CloudinarySyncResponse(
+            status=sync_status,
+            cloud_name=get_cloudinary_status().get("cloud_name") or "configured",
+            total_scanned=total_scanned,
+            imported=imported,
+            updated=updated,
+            skipped=skipped,
+            failed=failed,
+            remaining=0 if not has_more else max(0, total_scanned),
+            folders_discovered=folders_discovered,
+            has_more=has_more,
+            next_cursor=next_cursor,
+            last_synced_at=now if sync_status == "complete" else None,
+            error_message=error_message,
+        )
+
+    finally:
+        _sync_lock.release()
 
 
 @router.get("/media/status", response_model=CloudinaryStatusResponse)
@@ -2801,20 +3219,37 @@ def admin_get_media_status(
     total_assets = db.query(MediaAsset).count()
     total_folders = db.query(MediaFolder).count()
 
-    last_log = (
+    last_success_log = (
         db.query(ActivityLog)
         .filter(ActivityLog.action == "MEDIA_SYNCED")
         .order_by(ActivityLog.created_at.desc())
         .first()
     )
+    last_partial_log = (
+        db.query(ActivityLog)
+        .filter(ActivityLog.action == "MEDIA_SYNC_PARTIAL")
+        .order_by(ActivityLog.created_at.desc())
+        .first()
+    )
+
+    last_sync_time = last_success_log.created_at if last_success_log else None
+    last_failed_time = last_partial_log.created_at if last_partial_log else None
+
+    sync_status = "idle"
+    if last_success_log and (not last_partial_log or last_success_log.created_at >= last_partial_log.created_at):
+        sync_status = "synced"
+    elif last_partial_log:
+        sync_status = "partial_failure"
 
     return CloudinaryStatusResponse(
         configured=status_info["configured"],
         cloud_name=status_info.get("cloud_name"),
         total_assets=total_assets,
         total_folders=total_folders,
-        folder_mode="dynamic",
-        last_sync=last_log.created_at if last_log else None,
+        folder_mode=status_info.get("folder_mode", "dynamic"),
+        last_sync=last_sync_time,
+        last_sync_status=sync_status,
+        last_failed_sync=last_failed_time,
     )
 
 

@@ -480,5 +480,5 @@ class MediaAsset(Base):
     file_size = Column(Integer, nullable=False, default=0)  # bytes
     mime_type = Column(String(100), nullable=False)
     alt_text = Column(String(255), nullable=True)
-    folder = Column(String(100), nullable=True)
+    folder = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

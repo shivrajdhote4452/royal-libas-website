@@ -77,7 +77,12 @@ def get_current_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    admin = db.query(Admin).filter(Admin.id == int(admin_id)).first()
+    try:
+        admin_int_id = int(admin_id)
+        admin = db.query(Admin).filter(Admin.id == admin_int_id).first()
+    except (ValueError, TypeError):
+        admin = db.query(Admin).filter(Admin.email == str(admin_id)).first()
+
     if not admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

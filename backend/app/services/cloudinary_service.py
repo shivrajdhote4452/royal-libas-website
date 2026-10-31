@@ -12,7 +12,7 @@ Credentials remain strictly on the backend server.
 import os
 import re
 import logging
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from fastapi import HTTPException, status, UploadFile
 import cloudinary
 import cloudinary.uploader
@@ -349,20 +349,103 @@ def get_video_poster_url(video_url: str) -> str:
     return video_url
 
 
+_detected_folder_mode: Optional[str] = None
+
+
+def detect_cloudinary_folder_mode(force_refresh: bool = False) -> str:
+    """Detect whether Cloudinary is operating in 'dynamic' (Asset Folders) or 'fixed' folder mode.
+    
+    In dynamic mode, moving an asset updates its organizational asset_folder while
+    preserving delivery URLs and public_id. In fixed mode, public_id incorporates
+    the folder path and cannot be moved without changing delivery URLs.
+    """
+    global _detected_folder_mode
+    if not force_refresh and _detected_folder_mode:
+        return _detected_folder_mode
+
+    # Explicit environment override (e.g. for testing fixed mode)
+    env_mode = os.environ.get("CLOUDINARY_FOLDER_MODE", "").strip().lower()
+    if env_mode in ("dynamic", "fixed"):
+        _detected_folder_mode = env_mode
+        return env_mode
+
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return "dynamic"
+
+    try:
+        # Check resources: in dynamic mode, resources carry an 'asset_folder' key
+        sample = cloudinary.api.resources(max_results=1)
+        res_list = sample.get("resources", [])
+        if res_list:
+            first_res = res_list[0]
+            if "asset_folder" in first_res:
+                _detected_folder_mode = "dynamic"
+                return "dynamic"
+        
+        # In modern accounts created since 2020, root_folders and subfolders use asset folders
+        _detected_folder_mode = "dynamic"
+        return "dynamic"
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "asset folders are not supported" in err_msg or "fixed" in err_msg:
+            _detected_folder_mode = "fixed"
+            return "fixed"
+        logger.warning(f"Error probing Cloudinary folder mode ({e}), defaulting to dynamic")
+        _detected_folder_mode = "dynamic"
+        return "dynamic"
+
+
 def list_cloudinary_folders(parent_folder: Optional[str] = None) -> list:
-    """List root folders or subfolders from Cloudinary Admin API."""
+    """List root folders or immediate subfolders from Cloudinary Admin API with pagination."""
     init_cloudinary()
     if not is_cloudinary_configured():
         return []
+    folders = []
+    cursor = None
     try:
-        if parent_folder:
-            res = cloudinary.api.subfolders(parent_folder)
-        else:
-            res = cloudinary.api.root_folders()
-        return res.get("folders", [])
+        while True:
+            kwargs: Dict[str, Any] = {"max_results": 100}
+            if cursor:
+                kwargs["next_cursor"] = cursor
+
+            if parent_folder:
+                res = cloudinary.api.subfolders(parent_folder, **kwargs)
+            else:
+                res = cloudinary.api.root_folders(**kwargs)
+
+            batch = res.get("folders", [])
+            folders.extend(batch)
+            cursor = res.get("next_cursor")
+            if not cursor or not batch:
+                break
+        return folders
     except Exception as e:
         logger.warning(f"Failed to list Cloudinary folders (parent={parent_folder}): {e}")
         return []
+
+
+def list_cloudinary_folders_recursive(parent_folder: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Recursively discover all folders and subfolders from Cloudinary, following cursors at each level."""
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return []
+
+    discovered: List[Dict[str, Any]] = []
+    top_folders = list_cloudinary_folders(parent_folder)
+    for tf in top_folders:
+        t_path = tf.get("path")
+        t_name = tf.get("name") or (t_path.split("/")[-1] if t_path else "")
+        if t_path:
+            discovered.append({
+                "name": t_name,
+                "path": t_path,
+                "parent_path": parent_folder,
+            })
+            # Recursively fetch subfolders
+            sub_folders = list_cloudinary_folders_recursive(t_path)
+            discovered.extend(sub_folders)
+    return discovered
 
 
 def create_cloudinary_folder(folder_path: str) -> Dict[str, Any]:
@@ -378,6 +461,27 @@ def create_cloudinary_folder(folder_path: str) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def rename_cloudinary_folder(from_path: str, to_path: str) -> Dict[str, Any]:
+    """Rename an asset folder using Cloudinary Admin API."""
+    init_cloudinary()
+    if not is_cloudinary_configured():
+        return {"success": False, "error": "Cloudinary not configured"}
+
+    mode = detect_cloudinary_folder_mode()
+    if mode == "fixed":
+        return {
+            "success": False,
+            "error": "Cloudinary is in fixed folder mode. Renaming folders is restricted to prevent breaking delivery URLs.",
+        }
+
+    try:
+        res = cloudinary.api.rename_folder(from_path, to_path)
+        return {"success": True, "from_path": from_path, "to_path": to_path, "result": res}
+    except Exception as e:
+        logger.error(f"Failed to rename Cloudinary folder '{from_path}' to '{to_path}': {e}")
+        return {"success": False, "error": str(e)}
+
+
 def delete_cloudinary_folder(folder_path: str) -> Dict[str, Any]:
     """Safely delete an empty folder in Cloudinary."""
     init_cloudinary()
@@ -387,26 +491,40 @@ def delete_cloudinary_folder(folder_path: str) -> Dict[str, Any]:
         res = cloudinary.api.delete_folder(folder_path)
         return {"success": True, "result": res}
     except Exception as e:
+        err_str = str(e)
+        if "404" in err_str or "can't find folder" in err_str.lower():
+            return {"success": True, "already_missing": True}
         logger.error(f"Failed to delete Cloudinary folder '{folder_path}': {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": err_str}
 
 
 def move_cloudinary_asset_folder(public_id: str, new_folder: str, resource_type: str = "image") -> Dict[str, Any]:
     """Safely move an asset to a target folder using Dynamic Asset Folder API.
     
     In dynamic mode, this preserves delivery URLs and public_id while updating asset organization.
+    In fixed mode, moving is restricted to prevent breaking live URLs.
     """
     init_cloudinary()
     if not is_cloudinary_configured():
         return {"success": False, "error": "Cloudinary not configured"}
+
+    mode = detect_cloudinary_folder_mode()
+    if mode == "fixed":
+        return {
+            "success": False,
+            "error": "Cloudinary is in fixed folder mode. Moving assets dynamically without changing public IDs is not supported.",
+            "mode": "fixed",
+        }
+
     clean_res_type = "video" if resource_type == "video" else "image"
     try:
-        # Dynamic asset folder mode update
-        res = cloudinary.api.update(public_id, asset_folder=new_folder, resource_type=clean_res_type)
+        # Dynamic asset folder mode update; empty string moves to root
+        target_folder = new_folder if new_folder else ""
+        res = cloudinary.api.update(public_id, asset_folder=target_folder, resource_type=clean_res_type)
         return {
             "success": True,
             "public_id": public_id,
-            "asset_folder": res.get("asset_folder", new_folder),
+            "asset_folder": res.get("asset_folder", target_folder),
             "mode": "dynamic",
         }
     except Exception as e:
@@ -441,29 +559,51 @@ def fetch_cloudinary_resources(
     resource_type: str = "image",
     max_results: int = 100,
     next_cursor: Optional[str] = None,
+    max_retries: int = 3,
 ) -> Dict[str, Any]:
-    """Fetch paginated resources from Cloudinary Admin API."""
+    """Fetch paginated resources from Cloudinary Admin API with rate limit and retry handling."""
     init_cloudinary()
     if not is_cloudinary_configured():
         return {"resources": [], "next_cursor": None}
     clean_res_type = "video" if resource_type == "video" else "image"
-    try:
-        kwargs = {"resource_type": clean_res_type, "max_results": max_results}
-        if next_cursor:
-            kwargs["next_cursor"] = next_cursor
-        return cloudinary.api.resources(**kwargs)
-    except Exception as e:
-        logger.error(f"Failed to fetch Cloudinary resources ({resource_type}): {e}")
-        return {"resources": [], "next_cursor": None, "error": str(e)}
+
+    kwargs = {"resource_type": clean_res_type, "max_results": max_results}
+    if next_cursor:
+        kwargs["next_cursor"] = next_cursor
+
+    for attempt in range(max_retries):
+        try:
+            return cloudinary.api.resources(**kwargs)
+        except Exception as e:
+            err_msg = str(e).lower()
+            is_rate_limit = "429" in err_msg or "rate limit" in err_msg
+            if is_rate_limit and attempt < max_retries - 1:
+                sleep_seconds = 2 ** attempt
+                logger.warning(f"Cloudinary rate limited for {resource_type}. Retrying in {sleep_seconds}s...")
+                time.sleep(sleep_seconds)
+                continue
+            elif attempt < max_retries - 1 and ("timeout" in err_msg or "connection" in err_msg):
+                time.sleep(1)
+                continue
+            else:
+                logger.error(f"Failed to fetch Cloudinary resources ({resource_type}) after {attempt + 1} tries: {e}")
+                return {
+                    "resources": [],
+                    "next_cursor": None,
+                    "error": str(e),
+                    "rate_limited": is_rate_limit,
+                }
+    return {"resources": [], "next_cursor": None}
 
 
 def get_cloudinary_status() -> Dict[str, Any]:
     """Return non-sensitive Cloudinary configuration and connection status."""
     configured = is_cloudinary_configured()
     cloud_name = CLOUDINARY_CLOUD_NAME if configured else None
+    folder_mode = detect_cloudinary_folder_mode() if configured else "dynamic"
     return {
         "configured": configured,
         "cloud_name": cloud_name,
-        "folder_mode": "dynamic",
+        "folder_mode": folder_mode,
     }
 

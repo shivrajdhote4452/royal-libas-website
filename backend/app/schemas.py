@@ -1017,11 +1017,73 @@ class BulkMoveMediaRequest(BaseModel):
     target_folder: Optional[str] = None
 
 
+class BulkMoveMediaFailure(BaseModel):
+    asset_id: int
+    error: str
+
+
+class BulkMoveMediaResponse(BaseModel):
+    status: str
+    moved_count: int
+    failed_count: int = 0
+    target_folder: Optional[str] = None
+    message: str
+    failures: List[BulkMoveMediaFailure] = []
+
+
 class BulkAttachToProductRequest(BaseModel):
     product_id: int
     asset_ids: List[int]
     cover_asset_id: Optional[int] = None
     replace_gallery: bool = False
+
+
+class BulkAttachToProductResponse(BaseModel):
+    status: str
+    product_id: int
+    product_name: str
+    added_count: int
+    skipped_duplicates: int
+    unavailable_asset_ids: List[int] = []
+    cover_image_url: Optional[str] = None
+    total_gallery_images: int
+
+
+class FolderConflictMapping(BaseModel):
+    folder: str
+    status: str
+    message: str
+
+
+class PrepareCollectionFoldersPreviewResponse(BaseModel):
+    total_target: int
+    existing_count: int
+    to_create_count: int
+    missing_folders: List[str]
+    existing_matching_folders: List[str]
+    conflicts_and_mappings: List[FolderConflictMapping] = []
+
+
+class PrepareCollectionFoldersResponse(BaseModel):
+    status: str
+    created_count: int
+    created_folders: List[str]
+    message: str
+
+
+class MediaUsageLocation(BaseModel):
+    asset_id: int
+    filename: str
+    display_name: Optional[str] = None
+    url: str
+    locations: List[str]
+
+
+class MediaCheckUsageResponse(BaseModel):
+    total_checked: int
+    in_use_count: int
+    safe_count: int
+    usage_details: List[MediaUsageLocation] = []
 
 
 class BulkDeleteMediaRequest(BaseModel):
@@ -1038,15 +1100,19 @@ class BulkDeleteMediaResponse(BaseModel):
 
 
 class CloudinarySyncResponse(BaseModel):
-    status: str
+    status: str  # "complete", "in_progress", "partial_failure", "failed"
     cloud_name: str
     total_scanned: int
     imported: int
     updated: int
     skipped: int
     failed: int
+    remaining: int = 0
     folders_discovered: int
-    last_synced_at: datetime
+    has_more: bool = False
+    next_cursor: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
+    error_message: Optional[str] = None
 
 
 class CloudinaryStatusResponse(BaseModel):
@@ -1056,6 +1122,8 @@ class CloudinaryStatusResponse(BaseModel):
     total_folders: int
     folder_mode: str = "dynamic"
     last_sync: Optional[datetime] = None
+    last_sync_status: Optional[str] = None
+    last_failed_sync: Optional[datetime] = None
 
 
 class MediaUploadFailure(BaseModel):

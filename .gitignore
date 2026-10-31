@@ -65,8 +65,11 @@ wheels/
 Thumbs.db
 desktop.ini
 
-# Uploads
+# Uploads and Raw Assets
 backend/uploads/**
 !backend/uploads/
 !backend/uploads/.gitkeep
+Photos for royal libas/
+EDITING-NOTES.txt
+FOLDER-RENAME-GUIDE.txt
 

@@ -71,6 +71,8 @@ export interface MediaStatusResponse {
   total_folders: number;
   folder_mode: string;
   last_sync?: string | null;
+  last_sync_status?: string | null;
+  last_failed_sync?: string | null;
 }
 
 export interface MediaSyncResponse {
@@ -81,8 +83,69 @@ export interface MediaSyncResponse {
   updated: number;
   skipped: number;
   failed: number;
+  remaining?: number;
   folders_discovered: number;
-  last_synced_at: string;
+  has_more?: boolean;
+  next_cursor?: string | null;
+  last_synced_at?: string | null;
+  error_message?: string | null;
+}
+
+export interface BulkMoveResponse {
+  status: string;
+  moved_count: number;
+  failed_count: number;
+  target_folder?: string | null;
+  message: string;
+  failures?: Array<{ asset_id: number; error: string }>;
+}
+
+export interface BulkAttachResponse {
+  status: string;
+  product_id: number;
+  product_name: string;
+  added_count: number;
+  skipped_duplicates: number;
+  unavailable_asset_ids?: number[];
+  cover_image_url?: string | null;
+  total_gallery_images: number;
+}
+
+export interface FolderConflictMapping {
+  folder: string;
+  status: string;
+  message: string;
+}
+
+export interface PrepareFoldersPreviewResponse {
+  total_target: number;
+  existing_count: number;
+  to_create_count: number;
+  missing_folders: string[];
+  existing_matching_folders: string[];
+  conflicts_and_mappings: FolderConflictMapping[];
+}
+
+export interface PrepareFoldersResponse {
+  status: string;
+  created_count: number;
+  created_folders: string[];
+  message: string;
+}
+
+export interface MediaUsageItem {
+  asset_id: number;
+  filename: string;
+  display_name?: string | null;
+  url: string;
+  locations: string[];
+}
+
+export interface MediaCheckUsageResponse {
+  total_checked: number;
+  in_use_count: number;
+  safe_count: number;
+  usage_details: MediaUsageItem[];
 }
 
 export interface BulkDeleteResponse {
