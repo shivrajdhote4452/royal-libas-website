@@ -545,7 +545,7 @@ export const AdminCustomers: React.FC = () => {
                     <div>
                       <h4 className="font-serif font-bold text-gray-900 text-sm mb-2 flex items-center gap-1.5">
                         <RotateCcw className="w-4 h-4 text-purple-700" />
-                        Returns & Exchanges ({customerDossier.returns.length})
+                        Exchange Requests ({customerDossier.returns.length})
                       </h4>
                       <div className="space-y-1.5">
                         {customerDossier.returns.map((r) => (

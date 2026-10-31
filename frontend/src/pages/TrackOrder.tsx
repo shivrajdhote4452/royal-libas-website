@@ -468,7 +468,7 @@ export const TrackOrder: React.FC = () => {
             <div className="bg-white p-5 rounded-none border border-[#E8DFD0] shadow-sm space-y-3">
               <div className="flex items-center gap-2 border-b border-gray-100 pb-2 text-xs font-bold text-gray-900">
                 <RotateCcw className="w-4 h-4 text-[#B58A3C]" />
-                <span>Exchange & Return Requests</span>
+                <span>Size & Style Exchange Requests</span>
               </div>
               <div className="space-y-3">
                 {order.exchanges!.map((exch) => (

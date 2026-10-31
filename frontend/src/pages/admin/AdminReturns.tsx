@@ -180,10 +180,10 @@ export const AdminReturns: React.FC = () => {
         <div>
           <h1 className="text-2xl font-serif font-bold text-gray-900 tracking-wide flex items-center gap-2">
             <RotateCcw className="w-6 h-6 text-[#5E1224]" />
-            Returns, Exchanges & Refunds
+            Customer Exchanges
           </h1>
           <p className="text-xs text-gray-600 mt-1">
-            Review customer reverse requests, organize pickup schedules, inspect garments, and record refunds.
+            Review customer size and style exchange requests, schedule reverse pickups, inspect items, and coordinate replacements.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -192,7 +192,7 @@ export const AdminReturns: React.FC = () => {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#5E1224] text-white rounded-lg text-xs font-semibold hover:bg-[#4A0E1C] transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            New Return Request
+            New Exchange Request
           </button>
           <button
             onClick={fetchReturns}
@@ -281,7 +281,7 @@ export const AdminReturns: React.FC = () => {
               className="px-3 py-1.5 bg-[#FCF8F0]/40 border border-[#E5D9C5] rounded-lg text-xs text-gray-800 font-medium focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
             >
               <option value="ALL">All Types</option>
-              <option value="RETURN">Return for Refund</option>
+              <option value="RETURN">Store Credit Exchange</option>
               <option value="EXCHANGE">Size / Item Exchange</option>
             </select>
           </div>
@@ -292,7 +292,7 @@ export const AdminReturns: React.FC = () => {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search return code, order, customer..."
+              placeholder="Search exchange code, order, customer..."
               className="w-full pl-8 pr-3 py-1.5 bg-[#FCF8F0]/40 border border-[#E5D9C5] rounded-lg text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
             />
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
@@ -305,24 +305,24 @@ export const AdminReturns: React.FC = () => {
         {loading ? (
           <div className="p-12 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
             <RefreshCw className="w-6 h-6 text-[#5E1224] animate-spin" />
-            Loading returns and refunds...
+            Loading exchange requests...
           </div>
         ) : returns.length === 0 ? (
           <div className="p-12 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
             <RotateCcw className="w-8 h-8 text-gray-300" />
-            No return or exchange requests found.
+            No customer exchange requests found.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-[#FCF8F0] border-b border-[#E5D9C5] text-gray-600 font-semibold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Return ID</th>
+                  <th className="py-3 px-4">Exchange ID</th>
                   <th className="py-3 px-4">Order & Customer</th>
-                  <th className="py-3 px-4">Type & Reason</th>
+                  <th className="py-3 px-4">Type & Exchange Reason</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Pickup Logistics</th>
-                  <th className="py-3 px-4">Refund Info</th>
+                  <th className="py-3 px-4">Resolution / Replacement</th>
                   <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
@@ -453,7 +453,7 @@ export const AdminReturns: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                 <Plus className="w-4 h-4 text-[#5E1224]" />
-                Initiate Return / Exchange Request
+                Initiate Size / Style Exchange Request
               </h3>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
@@ -482,7 +482,7 @@ export const AdminReturns: React.FC = () => {
                   onChange={(e) => setCreateRequestType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
                 >
-                  <option value="RETURN">Return for Refund</option>
+                  <option value="RETURN">Store Credit Exchange</option>
                   <option value="EXCHANGE">Size Exchange</option>
                 </select>
               </div>
@@ -514,7 +514,7 @@ export const AdminReturns: React.FC = () => {
               )}
 
               <div>
-                <label className="block font-semibold text-gray-700 mb-1">Reason for Return</label>
+                <label className="block font-semibold text-gray-700 mb-1">Reason for Exchange</label>
                 <select
                   value={createReason}
                   onChange={(e) => setCreateReason(e.target.value)}
@@ -599,10 +599,10 @@ export const AdminReturns: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224] font-medium"
                 >
                   <option value="REQUESTED">REQUESTED (Pending Review)</option>
-                  <option value="APPROVED">APPROVED (Authorized for Return)</option>
+                  <option value="APPROVED">APPROVED (Authorized for Exchange)</option>
                   <option value="PICKUP_SCHEDULED">PICKUP_SCHEDULED (Courier Awaiting)</option>
                   <option value="RECEIVED_INSPECTION">RECEIVED_INSPECTION (At Warehouse)</option>
-                  <option value="RESOLVED">RESOLVED (Refunded / Exchanged)</option>
+                  <option value="RESOLVED">RESOLVED (Replacement Dispatched / Completed)</option>
                   <option value="REJECTED">REJECTED (Declined)</option>
                 </select>
               </div>

@@ -3,7 +3,7 @@ import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const ReturnsPolicy: React.FC = () => {
   useEffect(() => {
-    document.title = '7-Day Size Exchange & Return Policy | Royal Libas';
+    document.title = '7-Day Size Exchange Policy | Royal Libas';
     window.scrollTo(0, 0);
   }, []);
 
@@ -20,10 +20,10 @@ export const ReturnsPolicy: React.FC = () => {
             <span className="w-6 h-[1px] bg-[#B58A3C]" />
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#5E1224] mt-2">
-            7-Day Size Exchange & Returns
+            7-Day Doorstep Size Exchange Policy
           </h1>
           <p className="text-xs sm:text-sm text-gray-600 max-w-xl mx-auto font-light leading-relaxed">
-            We want every woman to feel radiant and comfortable in Royal Libas. If your set needs a different size, our exchange process is seamless and respectful.
+            Royal Libas by Tanya operates under an Exchange-Only Policy. We do not provide cash returns or refunds. If your piece needs a different size, we provide seamless doorstep exchange or store credit.
           </p>
         </div>
 

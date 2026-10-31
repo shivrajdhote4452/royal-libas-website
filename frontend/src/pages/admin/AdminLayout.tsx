@@ -6,7 +6,7 @@ import {
   Package,
   CreditCard,
   Truck,
-  RotateCcw,
+  RefreshCw,
   Boxes,
   Users,
   Image,
@@ -71,7 +71,7 @@ export const AdminLayout: React.FC = () => {
         { to: '/admin/orders', label: 'Orders', icon: Package },
         { to: '/admin/payments', label: 'Payments', icon: CreditCard },
         { to: '/admin/shipping', label: 'Shipping & Pickups', icon: Truck },
-        { to: '/admin/returns', label: 'Returns & Refunds', icon: RotateCcw },
+        { to: '/admin/returns', label: 'Exchanges', icon: RefreshCw },
       ],
     },
     {
