@@ -184,19 +184,23 @@ class TestPhotoChangeAndPublicationSafety(unittest.TestCase):
     def test_04_recovery_after_registration_failure_no_repeated_upload(self):
         """4. Compatible successful replacement recovered after registration failure: no repeated upload."""
         current_hash = compute_sha256(self.photo_path)
+        rel_key = "Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set/gulmeher-dusty-mauve-waistcoat-co-ord-set-01.png"
         manifest_data = {
             "files": {
-                "Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set/gulmeher-dusty-mauve-waistcoat-co-ord-set-01.png": {
+                rel_key: {
                     "status": "uploaded",
                     "content_hash": current_hash,
                     "cloud_name": CLOUDINARY_CLOUD_NAME,
                     "resource_type": "image",
                     "public_id": "recovered_valid_pid",
-                    "secure_url": "https://res.cloudinary.com/galbyoxi/image/upload/recovered_valid.png",
+                    "secure_url": f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/image/upload/recovered_valid.png",
                     "format": "png",
                     "width": 1080,
                     "height": 1350,
                     "file_size": os.path.getsize(self.photo_path),
+                    "folder": "Photos for royal libas/Two Pieces/Co-ord Sets/Gulmeher Dusty Mauve Waistcoat Co-ord Set",
+                    "relative_source_path": rel_key,
+                    "filename": "gulmeher-dusty-mauve-waistcoat-co-ord-set-01.png",
                 }
             }
         }

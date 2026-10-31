@@ -153,6 +153,84 @@ def compute_sha256(filepath: str) -> str:
     return h.hexdigest()
 
 
+def normalize_path(p: Optional[str]) -> str:
+    """Normalize path by replacing backslashes and stripping whitespace/slashes."""
+    if not p:
+        return ""
+    return p.replace("\\", "/").strip().strip("/")
+
+
+def validate_manifest_recovery_entry(
+    entry: Optional[Dict[str, Any]],
+    current_hash: str,
+    expected_resource_type: str,
+    target_folder: str,
+    expected_rel_path: str,
+    expected_filename: str,
+    expected_cloud_name: str,
+) -> Tuple[bool, str]:
+    """Validate manifest recovery entry against current source file identity, folder, and environment.
+
+    Returns (is_valid, failure_reason).
+    """
+    if not entry or not isinstance(entry, dict):
+        return False, "No manifest entry found"
+
+    # Status check: must represent a completed upload or registration
+    status = entry.get("status")
+    if status not in ("uploaded", "registered"):
+        return False, f"Invalid manifest status: {status}"
+
+    # Content hash check
+    entry_hash = entry.get("content_hash")
+    if not entry_hash or entry_hash != current_hash:
+        return False, f"Content hash mismatch (entry: {entry_hash}, current: {current_hash})"
+
+    # Resource type check
+    entry_res_type = entry.get("resource_type")
+    if not entry_res_type or entry_res_type != expected_resource_type:
+        return False, f"Resource type mismatch (entry: {entry_res_type}, expected: {expected_resource_type})"
+
+    # Cloudinary environment check
+    entry_cloud = entry.get("cloud_name")
+    if not entry_cloud or entry_cloud != expected_cloud_name:
+        return False, f"Cloud name mismatch (entry: {entry_cloud}, expected: {expected_cloud_name})"
+
+    # Target folder check
+    entry_folder = normalize_path(entry.get("folder"))
+    norm_target = normalize_path(target_folder)
+    if not entry_folder or entry_folder != norm_target:
+        return False, f"Folder mismatch (entry: '{entry_folder}', target: '{norm_target}')"
+
+    # Relative source path check
+    entry_rel = normalize_path(entry.get("relative_source_path"))
+    norm_rel = normalize_path(expected_rel_path)
+    if not entry_rel or entry_rel != norm_rel:
+        return False, f"Relative path mismatch (entry: '{entry_rel}', expected: '{norm_rel}')"
+
+    # Filename check
+    entry_fname = entry.get("filename")
+    if not entry_fname or entry_fname.lower() != expected_filename.lower():
+        return False, f"Filename mismatch (entry: '{entry_fname}', expected: '{expected_filename}')"
+
+    # Public ID check (non-empty string; does not assume folder prefix equals asset_folder)
+    public_id = entry.get("public_id")
+    if not public_id or not isinstance(public_id, str) or not public_id.strip():
+        return False, "Missing or invalid public_id"
+
+    # Delivery URL check
+    url = entry.get("secure_url") or entry.get("url")
+    if not url or not isinstance(url, str):
+        return False, "Missing delivery URL"
+
+    if expected_cloud_name not in url:
+        return False, f"Delivery URL does not match cloud name {expected_cloud_name}: {url}"
+    if expected_resource_type not in url:
+        return False, f"Delivery URL does not match resource type {expected_resource_type}: {url}"
+
+    return True, "Valid recovery entry"
+
+
 def detect_file_type(filename: str) -> Tuple[str, str, str]:
     """Return (resource_type, format, mime_type)."""
     ext = os.path.splitext(filename)[1].lower().lstrip(".")
@@ -291,14 +369,16 @@ def import_new_arrivals(
     source_dir: str = DEFAULT_SOURCE_DIR,
     manifest_path: str = DEFAULT_MANIFEST_PATH,
     db_session: Optional[Session] = None,
+    reconcile_taxonomy: bool = False,
 ) -> Dict[str, Any]:
     """Execute import workflow with full safety checks, changed-photo detection, and idempotency."""
     print("=" * 70)
     print(">>> ROYAL LIBAS NEW ARRIVALS IMPORT & CATALOGUE RECONCILIATION <<<")
-    print(f"Source Directory: {source_dir}")
-    print(f"Manifest Path:    {manifest_path}")
-    print(f"Mode:             {'DRY-RUN (Simulated)' if dry_run else 'LIVE EXECUTION'}")
-    print(f"Mock Uploads:     {mock_upload}")
+    print(f"Source Directory:    {source_dir}")
+    print(f"Manifest Path:       {manifest_path}")
+    print(f"Mode:                {'DRY-RUN (Simulated)' if dry_run else 'LIVE EXECUTION'}")
+    print(f"Mock Uploads:        {mock_upload}")
+    print(f"Reconcile Taxonomy:  {reconcile_taxonomy}")
     print("=" * 70)
 
     if not dry_run and not confirm:
@@ -390,6 +470,7 @@ def import_new_arrivals(
         # Step 3: Upload & Register Media Assets with Strict Changed-Photo Detection
         print("\n[Step 3] Uploading & Registering Media Assets...")
         asset_map: Dict[str, MediaAsset] = {}  # full_path -> MediaAsset
+        pending_manifest_registrations: List[Tuple[str, MediaAsset]] = []
 
         for d in designs:
             target_folder = d["target_folder"]
@@ -454,117 +535,118 @@ def import_new_arrivals(
                     summary["media_assets_replaced"] += 1
 
                 # Check manifest for previous upload metadata:
-                # VALIDATE manifest entries against CURRENT source hash before recovering an upload!
+                # VALIDATE manifest entries against CURRENT source hash, folder, relative path,
+                # filename, environment, and delivery URL before recovering an upload!
                 manifest_entry = manifest.get("files", {}).get(rel_path, {})
-                manifest_hash = manifest_entry.get("content_hash")
-                manifest_cloud = manifest_entry.get("cloud_name")
-                manifest_res_type = manifest_entry.get("resource_type")
-                manifest_url = manifest_entry.get("secure_url") or manifest_entry.get("url")
-
-                is_manifest_valid_for_current_file = (
-                    manifest_hash == content_hash
-                    and manifest_cloud == CLOUDINARY_CLOUD_NAME
-                    and manifest_res_type == res_type
-                    and bool(manifest_url)
-                    and manifest_entry.get("status") in ("uploaded", "registered")
+                is_valid_recovery, recovery_reason = validate_manifest_recovery_entry(
+                    entry=manifest_entry,
+                    current_hash=content_hash,
+                    expected_resource_type=res_type,
+                    target_folder=target_folder,
+                    expected_rel_path=rel_path,
+                    expected_filename=filename,
+                    expected_cloud_name=CLOUDINARY_CLOUD_NAME,
                 )
 
                 upload_meta = None
-                if is_manifest_valid_for_current_file:
+                if is_valid_recovery:
                     upload_meta = manifest_entry
                     print(f"  [Recovered Upload] {filename} from manifest (hash: {content_hash[:12]})")
-                elif dry_run:
-                    tag = "[Replacement Upload]" if is_changed_file else "[New Upload]"
-                    print(f"  [Dry-Run Would Upload] {filename} -> {target_folder} ({res_type}) {tag}")
-                    summary["media_assets_uploaded"] += 1
-                    continue
-                elif mock_upload:
-                    mock_pid = f"mock_{content_hash[:16]}"
-                    mock_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/{res_type}/upload/{mock_pid}.{fmt}"
-                    upload_meta = {
-                        "public_id": mock_pid,
-                        "asset_id": f"asset_{content_hash[:12]}",
-                        "secure_url": mock_url,
-                        "url": mock_url,
-                        "resource_type": res_type,
-                        "format": fmt,
-                        "width": 1080,
-                        "height": 1350,
-                        "duration": 15.0 if res_type == "video" else None,
-                        "file_size": file_size,
-                        "delivery_type": "upload",
-                        "cloud_name": CLOUDINARY_CLOUD_NAME,
-                    }
-                    manifest["files"][rel_path] = {
-                        "status": "uploaded",
-                        **upload_meta,
-                        "content_hash": content_hash,
-                        "folder": target_folder,
-                        "filename": filename,
-                        "relative_source_path": rel_path,
-                    }
-                    save_manifest(manifest, manifest_path)
                 else:
-                    # Live Cloudinary upload: upload as a new uniquely identified version
-                    max_retries = 3
-                    uploaded_res = None
-                    for attempt in range(max_retries):
-                        try:
-                            with open(full_path, "rb") as f_obj:
-                                file_bytes = f_obj.read()
-
-                            uploaded_res = cloudinary.uploader.upload(
-                                file_bytes,
-                                folder=target_folder,
-                                resource_type=res_type,
-                                overwrite=False,
-                                unique_filename=True,
-                                use_filename=True,
-                            )
-                            break
-                        except Exception as up_err:
-                            err_str = str(up_err).lower()
-                            if "429" in err_str or "rate limit" in err_str:
-                                time.sleep(2 ** attempt + 1)
-                            elif attempt < max_retries - 1:
-                                time.sleep(1)
-                            else:
-                                print(f"  [ERROR] Upload failed for {filename}: {up_err}")
-                                summary["errors"].append({"file": filename, "error": str(up_err)})
-                                uploaded_res = None
-
-                    if not uploaded_res:
+                    if manifest_entry:
+                        print(f"  [Recovery Skipped] {filename}: {recovery_reason}. Proceeding with standard upload path.")
+                    if dry_run:
+                        tag = "[Replacement Upload]" if is_changed_file else "[New Upload]"
+                        print(f"  [Dry-Run Would Upload] {filename} -> {target_folder} ({res_type}) {tag}")
+                        summary["media_assets_uploaded"] += 1
                         continue
+                    elif mock_upload:
+                        mock_pid = f"mock_{content_hash[:16]}"
+                        mock_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/{res_type}/upload/{mock_pid}.{fmt}"
+                        upload_meta = {
+                            "public_id": mock_pid,
+                            "asset_id": f"asset_{content_hash[:12]}",
+                            "secure_url": mock_url,
+                            "url": mock_url,
+                            "resource_type": res_type,
+                            "format": fmt,
+                            "width": 1080,
+                            "height": 1350,
+                            "duration": 15.0 if res_type == "video" else None,
+                            "file_size": file_size,
+                            "delivery_type": "upload",
+                            "cloud_name": CLOUDINARY_CLOUD_NAME,
+                        }
+                        manifest["files"][rel_path] = {
+                            "status": "uploaded",
+                            **upload_meta,
+                            "content_hash": content_hash,
+                            "folder": target_folder,
+                            "filename": filename,
+                            "relative_source_path": rel_path,
+                        }
+                        save_manifest(manifest, manifest_path)
+                    else:
+                        # Live Cloudinary upload: upload as a new uniquely identified version
+                        max_retries = 3
+                        uploaded_res = None
+                        for attempt in range(max_retries):
+                            try:
+                                with open(full_path, "rb") as f_obj:
+                                    file_bytes = f_obj.read()
 
-                    public_id = uploaded_res.get("public_id")
-                    secure_url = uploaded_res.get("secure_url") or uploaded_res.get("url")
-                    asset_id = uploaded_res.get("asset_id")
+                                uploaded_res = cloudinary.uploader.upload(
+                                    file_bytes,
+                                    folder=target_folder,
+                                    resource_type=res_type,
+                                    overwrite=False,
+                                    unique_filename=True,
+                                    use_filename=True,
+                                )
+                                break
+                            except Exception as up_err:
+                                err_str = str(up_err).lower()
+                                if "429" in err_str or "rate limit" in err_str:
+                                    time.sleep(2 ** attempt + 1)
+                                elif attempt < max_retries - 1:
+                                    time.sleep(1)
+                                else:
+                                    print(f"  [ERROR] Upload failed for {filename}: {up_err}")
+                                    summary["errors"].append({"file": filename, "error": str(up_err)})
+                                    uploaded_res = None
 
-                    upload_meta = {
-                        "public_id": public_id,
-                        "asset_id": asset_id,
-                        "secure_url": secure_url,
-                        "url": uploaded_res.get("url", secure_url),
-                        "resource_type": uploaded_res.get("resource_type", res_type),
-                        "format": uploaded_res.get("format", fmt),
-                        "width": uploaded_res.get("width"),
-                        "height": uploaded_res.get("height"),
-                        "duration": uploaded_res.get("duration"),
-                        "file_size": uploaded_res.get("bytes", file_size),
-                        "delivery_type": uploaded_res.get("type", "upload"),
-                        "cloud_name": CLOUDINARY_CLOUD_NAME,
-                    }
+                        if not uploaded_res:
+                            continue
 
-                    # Persist upload result to manifest immediately for recovery
-                    manifest["files"][rel_path] = {
-                        "status": "uploaded",
-                        **upload_meta,
-                        "content_hash": content_hash,
-                        "folder": target_folder,
-                        "filename": filename,
-                        "relative_source_path": rel_path,
-                    }
-                    save_manifest(manifest, manifest_path)
+                        public_id = uploaded_res.get("public_id")
+                        secure_url = uploaded_res.get("secure_url") or uploaded_res.get("url")
+                        asset_id = uploaded_res.get("asset_id")
+
+                        upload_meta = {
+                            "public_id": public_id,
+                            "asset_id": asset_id,
+                            "secure_url": secure_url,
+                            "url": uploaded_res.get("url", secure_url),
+                            "resource_type": uploaded_res.get("resource_type", res_type),
+                            "format": uploaded_res.get("format", fmt),
+                            "width": uploaded_res.get("width"),
+                            "height": uploaded_res.get("height"),
+                            "duration": uploaded_res.get("duration"),
+                            "file_size": uploaded_res.get("bytes", file_size),
+                            "delivery_type": uploaded_res.get("type", "upload"),
+                            "cloud_name": CLOUDINARY_CLOUD_NAME,
+                        }
+
+                        # Persist upload result to manifest immediately for recovery
+                        manifest["files"][rel_path] = {
+                            "status": "uploaded",
+                            **upload_meta,
+                            "content_hash": content_hash,
+                            "folder": target_folder,
+                            "filename": filename,
+                            "relative_source_path": rel_path,
+                        }
+                        save_manifest(manifest, manifest_path)
 
                 # Register MediaAsset in DB transactionally
                 if not dry_run and upload_meta:
@@ -595,11 +677,10 @@ def import_new_arrivals(
                     asset_map[full_path] = new_asset
                     summary["media_assets_uploaded"] += 1
 
-                    manifest["files"][rel_path]["status"] = "registered"
-                    manifest["files"][rel_path]["db_id"] = new_asset.id
-                    save_manifest(manifest, manifest_path)
+                    # Queue registration update for after successful DB commit (Two-Phase Commit Safety)
+                    pending_manifest_registrations.append((rel_path, new_asset))
                     action_tag = "Replacement" if is_changed_file else "New"
-                    print(f"  + Registered {action_tag} MediaAsset #{new_asset.id}: {filename} (hash: {content_hash[:12]})")
+                    print(f"  + Registered {action_tag} MediaAsset #{new_asset.id}: {filename} (hash: {content_hash[:12]}) (pending commit)")
 
         # Step 4: Integrate Dresses into Products, Inventory, and Collections
         print("\n[Step 4] Integrating Dresses into Products, Variants, and Collections...")
@@ -619,18 +700,30 @@ def import_new_arrivals(
                 print(f"  [Existing Product] #{existing_prod.id} '{existing_prod.name}' (status={existing_prod.status})")
                 summary["products_reused"] += 1
                 if not dry_run:
-                    # Preserve owner-controlled publication state, names, specs, prices, stock
-                    sync_product_category_and_collections(
-                        product=existing_prod,
-                        category=cat,
-                        subcategory=subcat,
-                        explicit_collection_ids=None,
-                        db=db,
-                    )
+                    # Issue 2: Preserve owner-edited category, subcategory, and collections
+                    if reconcile_taxonomy:
+                        if existing_prod.category != cat or existing_prod.subcategory != subcat:
+                            print(f"  [Taxonomy Reconciled] Product #{existing_prod.id} '{existing_prod.name}': updated taxonomy from '{existing_prod.category} › {existing_prod.subcategory}' to folder taxonomy '{cat} › {subcat}'")
+                        sync_product_category_and_collections(
+                            product=existing_prod,
+                            category=cat,
+                            subcategory=subcat,
+                            explicit_collection_ids=None,
+                            db=db,
+                        )
+                    else:
+                        if existing_prod.category != cat or existing_prod.subcategory != subcat:
+                            print(f"  [Owner Taxonomy Preserved] Product #{existing_prod.id} '{existing_prod.name}': preserved owner-edited taxonomy '{existing_prod.category} › {existing_prod.subcategory}' (folder is '{cat} › {subcat}')")
+                        sync_product_category_and_collections(
+                            product=existing_prod,
+                            category=existing_prod.category,
+                            subcategory=existing_prod.subcategory,
+                            explicit_collection_ids=None,
+                            db=db,
+                        )
 
-                    # Update gallery associations for replaced or new media assets:
-                    # Replace only corresponding importer-managed associations;
-                    # Preserve sort_order, cover position, unrelated gallery items, and other products.
+                    # Issue 1: Preserve owner-selected product images, custom covers, gallery order,
+                    # and owner-removed associations.
                     existing_images = (
                         db.query(ProductImage)
                         .filter(ProductImage.product_id == existing_prod.id)
@@ -643,7 +736,6 @@ def import_new_arrivals(
                         rel_path = f_info["relative_path"]
                         filename = f_info["filename"]
                         res_type = f_info["resource_type"]
-                        is_cover = f_info["is_cover"]
                         file_hash = compute_sha256(full_path)
 
                         current_asset = asset_map.get(full_path)
@@ -662,29 +754,46 @@ def import_new_arrivals(
                         # Check if this exact asset is already linked to the product
                         already_linked = any(img.media_asset_id == current_asset.id for img in existing_images)
                         if already_linked:
+                            # Already attached: preserve owner's existing sort_order and gallery position
                             continue
 
-                        # Determine target slot: cover is sort_order=1, video is sort_order=2 (or next available)
-                        target_sort = 1 if is_cover or (res_type == "image" and len(d["files"]) == 1) else (2 if res_type == "video" else len(existing_images) + 1)
+                        # Determine if this file genuinely changed compared to previous asset for this source path
+                        old_source_asset = db.query(MediaAsset).filter(
+                            MediaAsset.relative_source_path == rel_path,
+                            MediaAsset.folder == target_folder,
+                            MediaAsset.id != current_asset.id,
+                        ).order_by(MediaAsset.id.desc()).first()
 
-                        # Find the corresponding existing ProductImage to replace:
-                        # 1. By media asset's relative_source_path == rel_path or filename
-                        # 2. Or by slot (sort_order == target_sort and resource_type == res_type)
+                        is_changed_source = bool(old_source_asset and old_source_asset.content_hash != file_hash)
+
+                        if not is_changed_source:
+                            # UNCHANGED SOURCE:
+                            # If not already attached to this product, the owner deliberately
+                            # replaced the cover or removed this photo from the gallery.
+                            # NEVER restore or overwrite owner choices on unchanged source reruns!
+                            print(f"  [Owner Gallery Preserved] Product #{existing_prod.id} '{design_name}': unchanged source asset #{current_asset.id} ({filename}) is not in gallery (deliberately removed or replaced by owner); skipping gallery modification.")
+                            continue
+
+                        # GENUINELY CHANGED SOURCE:
+                        # Find the corresponding ProductImage STILL managed by this import source.
+                        # Provenance match: linked MediaAsset must match target_folder and relative_source_path.
+                        # NEVER match by sort_order, filename alone, or resource_type!
                         matched_img = None
                         for img in existing_images:
-                            linked_asset = db.query(MediaAsset).filter(MediaAsset.id == img.media_asset_id).first() if img.media_asset_id else None
-                            if linked_asset and (linked_asset.relative_source_path == rel_path or linked_asset.filename == filename):
+                            if not img.media_asset_id:
+                                continue
+                            linked_asset = db.query(MediaAsset).filter(MediaAsset.id == img.media_asset_id).first()
+                            if not linked_asset:
+                                continue
+                            if (
+                                normalize_path(linked_asset.folder) == normalize_path(target_folder)
+                                and normalize_path(linked_asset.relative_source_path) == normalize_path(rel_path)
+                            ):
                                 matched_img = img
                                 break
 
-                        if not matched_img:
-                            for img in existing_images:
-                                if img.sort_order == target_sort and img.resource_type == res_type:
-                                    matched_img = img
-                                    break
-
                         if matched_img:
-                            # Replace old asset association transactionally while preserving sort_order
+                            # Replace old asset association transactionally while strictly preserving sort_order
                             old_asset_id = matched_img.media_asset_id
                             matched_img.media_asset_id = current_asset.id
                             matched_img.url = current_asset.secure_url or current_asset.url
@@ -695,25 +804,11 @@ def import_new_arrivals(
                             matched_img.duration = current_asset.duration
                             matched_img.alt_text = f"{design_name} - {current_asset.display_name or current_asset.filename}"
                             summary["images_replaced"] += 1
-                            print(f"  [Gallery Replaced] Product #{existing_prod.id} '{design_name}' slot {matched_img.sort_order}: asset #{old_asset_id} -> #{current_asset.id}")
+                            print(f"  [Gallery Replaced] Product #{existing_prod.id} '{design_name}' slot {matched_img.sort_order}: asset #{old_asset_id} -> #{current_asset.id} (updated changed photo)")
                         else:
-                            # Append new ProductImage
-                            new_img = ProductImage(
-                                product_id=existing_prod.id,
-                                media_asset_id=current_asset.id,
-                                url=current_asset.secure_url or current_asset.url,
-                                public_id=current_asset.public_id,
-                                resource_type=current_asset.resource_type,
-                                width=current_asset.width,
-                                height=current_asset.height,
-                                duration=current_asset.duration,
-                                sort_order=target_sort,
-                                alt_text=f"{design_name} - {current_asset.display_name or current_asset.filename}",
-                            )
-                            db.add(new_img)
-                            existing_images.append(new_img)
-                            summary["images_attached"] += 1
-                            print(f"  [Gallery Attached] Product #{existing_prod.id} '{design_name}': attached new asset #{current_asset.id} at sort_order={target_sort}")
+                            # The owner had previously replaced or removed this slot with an owner-chosen asset.
+                            # Do NOT replace an unrelated image or inject into slot 1.
+                            print(f"  [Owner Gallery Preserved] Product #{existing_prod.id} '{design_name}': source photo '{filename}' changed, but its previous asset association is no longer in gallery (replaced or removed by owner); preserving owner gallery without modification.")
 
                 continue
 
@@ -855,6 +950,16 @@ def import_new_arrivals(
             db.commit()
             print("\n[DB] Successfully committed all database transactions.")
 
+            # Two-Phase Manifest Commit Safety:
+            # Only record 'registered' and 'db_id' in manifest AFTER DB commit succeeds
+            for p_rel, p_asset in pending_manifest_registrations:
+                if p_rel in manifest.get("files", {}):
+                    manifest["files"][p_rel]["status"] = "registered"
+                    manifest["files"][p_rel]["db_id"] = p_asset.id
+            if pending_manifest_registrations:
+                save_manifest(manifest, manifest_path)
+                print(f"[Manifest] Updated {len(pending_manifest_registrations)} entries to registered status.")
+
     except Exception as e:
         if not dry_run:
             db.rollback()
@@ -891,6 +996,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", default=False, help="Simulate import without Cloudinary upload or DB writes")
     parser.add_argument("--confirm", action="store_true", default=False, help="Confirm live execution")
     parser.add_argument("--mock-upload", action="store_true", default=False, help="Mock Cloudinary uploads for local testing")
+    parser.add_argument("--reconcile-taxonomy", action="store_true", default=False, help="Opt-in to overwrite owner-edited category and subcategory on existing products with folder taxonomy")
     parser.add_argument("--source-dir", default=DEFAULT_SOURCE_DIR, help="Source folder path")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST_PATH, help="Manifest file path")
 
@@ -906,6 +1012,7 @@ def main():
         mock_upload=args.mock_upload,
         source_dir=args.source_dir,
         manifest_path=args.manifest,
+        reconcile_taxonomy=args.reconcile_taxonomy,
     )
 
 
