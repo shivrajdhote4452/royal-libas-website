@@ -25,10 +25,12 @@ import {
   adminDeleteProduct,
   formatPrice,
 } from '../../lib/api';
-import { Product, ProductVariant } from '../../types/product';
+import { Product, ProductVariant, MediaAsset } from '../../types/product';
+import { MediaLibraryPickerModal } from '../../components/admin/MediaLibraryPickerModal';
 
 interface ProductMediaItem {
   id?: number;
+  media_asset_id?: number | null;
   url: string;
   public_id?: string | null;
   resource_type?: 'image' | 'video';
@@ -95,6 +97,7 @@ export const AdminProducts: React.FC = () => {
   // Image State for New Product Modal
   const [newImages, setNewImages] = useState<ProductMediaItem[]>([]);
   const [newImageUrlInput, setNewImageUrlInput] = useState('');
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<'new' | number | null>(null);
 
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -111,6 +114,7 @@ export const AdminProducts: React.FC = () => {
       res.forEach((p) => {
         initialMap[p.id] = (p.images || []).map((img) => ({
           id: img.id,
+          media_asset_id: (img as any).media_asset_id || null,
           url: img.url,
           public_id: img.public_id,
           resource_type: img.resource_type || (img.url.match(/\.(mp4|webm|mov|ogg|mkv)/i) ? 'video' : 'image'),
@@ -239,6 +243,75 @@ export const AdminProducts: React.FC = () => {
     }
   };
 
+  const handleAddFromLibrary = (target: 'new' | number | null, selectedAssets: MediaAsset[]) => {
+    if (!target || selectedAssets.length === 0) return;
+    if (target === 'new') {
+      setNewImages((prev) => {
+        const existingKeys = new Set(
+          prev.map((img) =>
+            img.public_id ? `${img.resource_type || 'image'}:${img.public_id}` : img.url.split('?')[0]
+          )
+        );
+        const newItems: ProductMediaItem[] = [];
+        for (const asset of selectedAssets) {
+          const isVid =
+            asset.resource_type === 'video' ||
+            /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
+          const rType = isVid ? 'video' : 'image';
+          const key = asset.public_id ? `${rType}:${asset.public_id}` : (asset.secure_url || asset.url).split('?')[0];
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            newItems.push({
+              media_asset_id: asset.id,
+              url: asset.secure_url || asset.url,
+              public_id: asset.public_id || null,
+              resource_type: rType,
+              width: asset.width || null,
+              height: asset.height || null,
+              duration: asset.duration || null,
+              alt_text: asset.alt_text || asset.display_name || asset.filename,
+            });
+          }
+        }
+        return [...prev, ...newItems];
+      });
+    } else {
+      setPhotosMap((prev) => {
+        const currentList = prev[target] || [];
+        const existingKeys = new Set(
+          currentList.map((img) =>
+            img.public_id ? `${img.resource_type || 'image'}:${img.public_id}` : img.url.split('?')[0]
+          )
+        );
+        const newItems: ProductMediaItem[] = [];
+        for (const asset of selectedAssets) {
+          const isVid =
+            asset.resource_type === 'video' ||
+            /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
+          const rType = isVid ? 'video' : 'image';
+          const key = asset.public_id ? `${rType}:${asset.public_id}` : (asset.secure_url || asset.url).split('?')[0];
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            newItems.push({
+              media_asset_id: asset.id,
+              url: asset.secure_url || asset.url,
+              public_id: asset.public_id || null,
+              resource_type: rType,
+              width: asset.width || null,
+              height: asset.height || null,
+              duration: asset.duration || null,
+              alt_text: asset.alt_text || asset.display_name || asset.filename,
+            });
+          }
+        }
+        return {
+          ...prev,
+          [target]: [...currentList, ...newItems],
+        };
+      });
+    }
+  };
+
   const handleSaveGallery = async (productId: number) => {
     setIsSavingGallery(productId);
     setActionError(null);
@@ -248,6 +321,7 @@ export const AdminProducts: React.FC = () => {
         throw new Error('Base64 data URLs cannot be saved. Please remove them and upload images directly.');
       }
       const imagePayload = items.map((item, idx) => ({
+        media_asset_id: item.media_asset_id || null,
         url: item.url,
         sort_order: idx + 1,
         public_id: item.public_id || null,
@@ -318,6 +392,7 @@ export const AdminProducts: React.FC = () => {
           ? selectedVariants
           : [{ size: 'Free Size', selling_price: priceNum, mrp: mrpNum, stock: 0 }],
       images: newImages.map((item, idx) => ({
+        media_asset_id: item.media_asset_id || null,
         url: item.url,
         sort_order: idx + 1,
         public_id: item.public_id || null,
@@ -961,6 +1036,15 @@ export const AdminProducts: React.FC = () => {
 
                       {/* Add Image Inputs */}
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setMediaPickerTarget(product.id)}
+                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5 text-[#E8DFD0]" />
+                          <span>Select from Media Library</span>
+                        </button>
+
                         <label className={`cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8DFD0] hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-sm transition-colors ${
                           uploadingTarget === product.id ? 'opacity-60 cursor-not-allowed' : ''
                         }`}>
@@ -1253,10 +1337,19 @@ export const AdminProducts: React.FC = () => {
 
               <div>
                 <label className="block font-semibold text-gray-700 mb-1">
-                  Product Photos ({newImages.length})
+                  Product Photos & Videos ({newImages.length})
                 </label>
-                <div className="flex items-center gap-2">
-                  <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FCF8F0] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors ${
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMediaPickerTarget('new')}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-[#E8DFD0]" />
+                    <span>Select from Media Library</span>
+                  </button>
+
+                  <label className={`cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#FCF8F0] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors ${
                     uploadingTarget === 'new' ? 'opacity-60 cursor-not-allowed' : ''
                   }`}>
                     {uploadingTarget === 'new' ? (
@@ -1329,14 +1422,26 @@ export const AdminProducts: React.FC = () => {
                               disabled={idx === 0}
                               onClick={() => handleReorder('new', idx, idx - 1)}
                               className="p-0.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded"
+                              title="Move earlier"
                             >
                               <ArrowLeft className="w-3 h-3" />
                             </button>
+                            {idx > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleReorder('new', idx, 0)}
+                                className="text-[9px] px-1 py-0.5 bg-[#FAF5EC] hover:bg-[#B58A3C] hover:text-white text-[#B58A3C] border border-[#B58A3C]/40 rounded font-semibold transition-colors"
+                                title="Set this as main cover photo"
+                              >
+                                ★ Cover
+                              </button>
+                            )}
                             <button
                               type="button"
                               disabled={idx === newImages.length - 1}
                               onClick={() => handleReorder('new', idx, idx + 1)}
                               className="p-0.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded"
+                              title="Move later"
                             >
                               <ArrowRight className="w-3 h-3" />
                             </button>
@@ -1345,6 +1450,7 @@ export const AdminProducts: React.FC = () => {
                             type="button"
                             onClick={() => handleRemoveImage('new', idx)}
                             className="p-0.5 text-red-600 hover:bg-red-50 rounded"
+                            title="Remove image"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -1472,6 +1578,34 @@ export const AdminProducts: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Media Library Picker Modal */}
+      <MediaLibraryPickerModal
+        isOpen={mediaPickerTarget !== null}
+        onClose={() => setMediaPickerTarget(null)}
+        onSelect={(selectedAssets) => handleAddFromLibrary(mediaPickerTarget, selectedAssets)}
+        alreadySelectedKeys={
+          new Set(
+            mediaPickerTarget === 'new'
+              ? newImages.map((img) =>
+                  img.public_id
+                    ? `${img.resource_type || 'image'}:${img.public_id}`
+                    : img.url.split('?')[0]
+                )
+              : typeof mediaPickerTarget === 'number'
+              ? (photosMap[mediaPickerTarget] || []).map((img) =>
+                  img.public_id
+                    ? `${img.resource_type || 'image'}:${img.public_id}`
+                    : img.url.split('?')[0]
+                )
+              : []
+          )
+        }
+        title={
+          mediaPickerTarget === 'new'
+            ? 'Select Gallery Media for New Product'
+            : 'Select Gallery Media for Product'
+        }
+      />
     </div>
   );
 };

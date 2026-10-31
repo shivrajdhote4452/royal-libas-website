@@ -100,6 +100,7 @@ class ProductImageCreate(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     duration: Optional[float] = None
+    media_asset_id: Optional[int] = None
 
 
 class ProductImageResponse(BaseModel):
@@ -112,6 +113,7 @@ class ProductImageResponse(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     duration: Optional[float] = None
+    media_asset_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

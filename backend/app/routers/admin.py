@@ -52,6 +52,7 @@ from app.schemas import (
     OrderStatusUpdateRequest,
     ProductCreate,
     ProductUpdate,
+    ProductImageCreate,
     ProductDetailResponse,
     ProductVariantCreate,
     ProductVariantUpdate,
@@ -3605,29 +3606,55 @@ def admin_attach_product_media(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
 
+    if not media_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No media IDs provided.")
+
     assets = db.query(MediaAsset).filter(MediaAsset.id.in_(media_ids)).all()
-    if not assets:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid media assets found.")
+    found_ids = {a.id for a in assets}
+    missing_ids = [mid for mid in media_ids if mid not in found_ids]
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Media assets not found for IDs: {missing_ids}",
+        )
+
+    existing_keys = {
+        (img.resource_type or "image", img.public_id if img.public_id else img.url.split("?")[0])
+        for img in product.images
+    }
 
     max_order = max([img.sort_order for img in product.images], default=-1)
-    for asset in assets:
+    asset_by_id = {a.id: a for a in assets}
+    added_count = 0
+
+    for mid in media_ids:
+        asset = asset_by_id[mid]
+        r_type = getattr(asset, "resource_type", "image") or "image"
+        pub_id = asset.public_id
+        url = asset.secure_url or asset.url
+        key = (r_type, pub_id if pub_id else url.split("?")[0])
+        if key in existing_keys:
+            continue
+        existing_keys.add(key)
         max_order += 1
         new_img = ProductImage(
             product_id=product.id,
-            url=asset.url,
+            url=url,
             sort_order=max_order,
-            alt_text=asset.alt_text or product.name,
-            resource_type=getattr(asset, "resource_type", "image") or "image",
-            public_id=asset.public_id,
+            alt_text=asset.alt_text or getattr(asset, "display_name", None) or product.name,
+            resource_type=r_type,
+            public_id=pub_id,
             width=asset.width,
             height=asset.height,
             duration=asset.duration,
         )
+        new_img.media_asset_id = asset.id
         product.images.append(new_img)
+        added_count += 1
 
     db.commit()
     db.refresh(product)
-    log_activity(db, current_admin, "PRODUCT_UPDATED", "product", product.id, f"Attached {len(assets)} media assets")
+    log_activity(db, current_admin, "PRODUCT_UPDATED", "product", product.id, f"Attached {added_count} media assets")
     return build_product_detail_response(product)
 
 
@@ -3728,6 +3755,78 @@ def admin_list_products(
     return [build_product_detail_response(p) for p in products]
 
 
+def _process_product_images(
+    images_payload: List[ProductImageCreate],
+    db: Session,
+    product_name: str,
+) -> List[ProductImage]:
+    """Validate media assets, derive authoritative registry metadata, deduplicate, and build ProductImage models."""
+    processed_images: List[ProductImage] = []
+    seen_keys = set()
+
+    for idx, img in enumerate(images_payload):
+        trusted_url = img.url
+        trusted_public_id = getattr(img, "public_id", None)
+        trusted_resource_type = getattr(img, "resource_type", "image") or "image"
+        trusted_width = getattr(img, "width", None)
+        trusted_height = getattr(img, "height", None)
+        trusted_duration = getattr(img, "duration", None)
+        trusted_alt = img.alt_text or product_name
+        asset_id = getattr(img, "media_asset_id", None)
+
+        if asset_id is not None:
+            asset = db.query(MediaAsset).filter(MediaAsset.id == asset_id).first()
+            if not asset:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Media asset with ID {asset_id} not found.",
+                )
+            # Authority: MediaAsset registry is source of truth
+            trusted_url = asset.secure_url or asset.url
+            trusted_public_id = asset.public_id
+            trusted_resource_type = getattr(asset, "resource_type", "image") or "image"
+            trusted_width = asset.width
+            trusted_height = asset.height
+            trusted_duration = asset.duration
+            trusted_alt = img.alt_text or asset.alt_text or getattr(asset, "display_name", None) or product_name
+        elif trusted_public_id:
+            # Fallback check against MediaAsset registry by public_id
+            asset = db.query(MediaAsset).filter(MediaAsset.public_id == trusted_public_id).first()
+            if asset:
+                trusted_url = asset.secure_url or asset.url
+                trusted_resource_type = getattr(asset, "resource_type", "image") or "image"
+                trusted_width = asset.width if trusted_width is None else trusted_width
+                trusted_height = asset.height if trusted_height is None else trusted_height
+                trusted_duration = asset.duration if trusted_duration is None else trusted_duration
+                asset_id = asset.id
+
+        # Normalize resource type if file extension suggests video
+        if trusted_resource_type == "image" and trusted_url and any(trusted_url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg", ".mkv")):
+            trusted_resource_type = "video"
+
+        norm_url = trusted_url.split("?")[0] if trusted_url else ""
+        dedup_key = (trusted_resource_type, trusted_public_id if trusted_public_id else norm_url)
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
+
+        p_img = ProductImage(
+            url=trusted_url,
+            sort_order=img.sort_order if img.sort_order is not None else idx,
+            alt_text=trusted_alt,
+            resource_type=trusted_resource_type,
+            public_id=trusted_public_id,
+            width=trusted_width,
+            height=trusted_height,
+            duration=trusted_duration,
+        )
+        if asset_id is not None:
+            p_img.media_asset_id = asset_id
+        processed_images.append(p_img)
+
+    return processed_images
+
+
 @router.post("/products", response_model=ProductDetailResponse, status_code=status.HTTP_201_CREATED)
 def admin_create_product(
     payload: ProductCreate,
@@ -3783,21 +3882,7 @@ def admin_create_product(
             product.variants.append(variant)
 
     if payload.images:
-        for idx, img in enumerate(payload.images):
-            r_type = getattr(img, "resource_type", "image") or "image"
-            if r_type == "image" and img.url and any(img.url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg")):
-                r_type = "video"
-            image = ProductImage(
-                url=img.url,
-                sort_order=img.sort_order if img.sort_order is not None else idx,
-                alt_text=img.alt_text,
-                resource_type=r_type,
-                public_id=getattr(img, "public_id", None),
-                width=getattr(img, "width", None),
-                height=getattr(img, "height", None),
-                duration=getattr(img, "duration", None),
-            )
-            product.images.append(image)
+        product.images = _process_product_images(payload.images, db, product.name)
 
     db.add(product)
     db.commit()
@@ -3871,19 +3956,7 @@ def admin_update_product(
         product.collections = collections
 
     if payload.images is not None:
-        product.images = [
-            ProductImage(
-                url=img.url,
-                sort_order=img.sort_order if img.sort_order is not None else idx + 1,
-                alt_text=img.alt_text,
-                resource_type="video" if (getattr(img, "resource_type", "image") == "video" or (img.url and any(img.url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg")))) else "image",
-                public_id=getattr(img, "public_id", None),
-                width=getattr(img, "width", None),
-                height=getattr(img, "height", None),
-                duration=getattr(img, "duration", None),
-            )
-            for idx, img in enumerate(payload.images)
-        ]
+        product.images = _process_product_images(payload.images, db, product.name)
 
     db.commit()
     db.refresh(product)

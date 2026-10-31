@@ -191,6 +191,15 @@ class ProductImage(Base):
     height = Column(Integer, nullable=True)
     duration = Column(Numeric(10, 2), nullable=True)  # Video duration in seconds
 
+    # Transient/In-memory attribute for media asset attribution
+    @property
+    def media_asset_id(self):
+        return getattr(self, "_media_asset_id", None)
+
+    @media_asset_id.setter
+    def media_asset_id(self, val):
+        self._media_asset_id = val
+
     # Relationships
     product = relationship("Product", back_populates="images")
 
