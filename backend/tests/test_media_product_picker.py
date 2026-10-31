@@ -777,6 +777,7 @@ class TestMediaProductPicker(unittest.TestCase):
             # Row 3: video twin -> linked to asset 3
             self.assertEqual(rows[3], 3)
             # Row 4: ambiguous (count = 2) -> left NULL
+            self.assertEqual(rows[4], None)
             self.assertIsNone(rows[4])
             # Row 5: unmatched -> left NULL
             self.assertIsNone(rows[5])
@@ -785,6 +786,171 @@ class TestMediaProductPicker(unittest.TestCase):
             if os.path.exists(temp_mig_path):
                 try:
                     os.remove(temp_mig_path)
+                except Exception:
+                    pass
+
+    def test_14_ambiguous_legacy_save_does_not_replace_photos_or_collapse(self):
+        """14. Ambiguous legacy entries resolve by unique URL match or preserve original URL without replacing photo."""
+        db = self.TestingSessionLocal()
+        try:
+            shared_ambig_pub = "royal_libas/products/ambig_duo"
+            asset_duo_a = MediaAsset(
+                filename="duo_a.jpg",
+                display_name="Duo A Photo",
+                public_id=shared_ambig_pub,
+                url="http://res.cloudinary.com/test/image/upload/v1/royal_libas/products/duo_a.jpg",
+                secure_url="https://res.cloudinary.com/test/image/upload/v1/royal_libas/products/duo_a.jpg",
+                resource_type="image",
+                format="jpg",
+                width=1000,
+                height=1200,
+                file_size=250000,
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            asset_duo_b = MediaAsset(
+                filename="duo_b.jpg",
+                display_name="Duo B Photo",
+                public_id=shared_ambig_pub,
+                url="http://res.cloudinary.com/test/image/upload/v1/royal_libas/products/duo_b.jpg",
+                secure_url="https://res.cloudinary.com/test/image/upload/v1/royal_libas/products/duo_b.jpg",
+                resource_type="image",
+                format="jpg",
+                width=1000,
+                height=1200,
+                file_size=260000,
+                mime_type="image/jpeg",
+                folder="royal_libas/products",
+            )
+            db.add_all([asset_duo_a, asset_duo_b])
+            db.commit()
+            db.refresh(asset_duo_a)
+            db.refresh(asset_duo_b)
+            duo_a_id = asset_duo_a.id
+            duo_b_id = asset_duo_b.id
+        finally:
+            db.close()
+
+        # Legacy payload without media_asset_id:
+        # Item 1 matches URL of Duo B (must resolve to Duo B, NEVER arbitrarily to Duo A)
+        # Item 2 has a custom legacy URL (must NOT be replaced with Duo A or Duo B)
+        custom_legacy_url = "https://custom-cdn.example.com/legacy_custom_photo.jpg"
+        payload = {
+            "name": "Ambiguous Legacy Test Suit",
+            "slug": "ambiguous-legacy-test-suit",
+            "category": "TWO PIECES",
+            "status": "DRAFT",
+            "variants": [{"size": "M", "selling_price": 2799.00, "mrp": 3799.00, "stock": 4}],
+            "images": [
+                {
+                    "public_id": shared_ambig_pub,
+                    "url": asset_duo_b.secure_url,
+                    "resource_type": "image",
+                    "sort_order": 1,
+                    "alt_text": "Duo B Match",
+                },
+                {
+                    "public_id": shared_ambig_pub,
+                    "url": custom_legacy_url,
+                    "resource_type": "image",
+                    "sort_order": 2,
+                    "alt_text": "Legacy Unmatched Photo",
+                },
+            ],
+        }
+
+        res_create = self.client.post("/admin/products", json=payload, headers=self.owner_headers)
+        self.assertEqual(res_create.status_code, 201)
+        created_data = res_create.json()
+        self.assertEqual(len(created_data["images"]), 2)
+        prod_id = created_data["id"]
+
+        # Item 1: resolved by exact URL match to Duo B
+        self.assertEqual(created_data["images"][0]["media_asset_id"], duo_b_id)
+        self.assertEqual(created_data["images"][0]["url"], asset_duo_b.secure_url)
+
+        # Item 2: unresolved ambiguity preserved original URL and left media_asset_id None
+        self.assertIsNone(created_data["images"][1]["media_asset_id"])
+        self.assertEqual(created_data["images"][1]["url"], custom_legacy_url)
+
+        # Subsequent save / reload: verify both remain intact and are not collapsed
+        res_patch = self.client.patch(
+            f"/admin/products/{prod_id}",
+            json={
+                "images": [
+                    {
+                        "media_asset_id": created_data["images"][0]["media_asset_id"],
+                        "url": created_data["images"][0]["url"],
+                        "public_id": created_data["images"][0]["public_id"],
+                        "resource_type": "image",
+                        "sort_order": 1,
+                    },
+                    {
+                        "media_asset_id": created_data["images"][1]["media_asset_id"],
+                        "url": created_data["images"][1]["url"],
+                        "public_id": created_data["images"][1]["public_id"],
+                        "resource_type": "image",
+                        "sort_order": 2,
+                    },
+                ]
+            },
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_patch.status_code, 200)
+        patched_data = res_patch.json()
+        self.assertEqual(len(patched_data["images"]), 2)
+        self.assertEqual(patched_data["images"][0]["media_asset_id"], duo_b_id)
+        self.assertEqual(patched_data["images"][0]["url"], asset_duo_b.secure_url)
+        self.assertIsNone(patched_data["images"][1]["media_asset_id"])
+        self.assertEqual(patched_data["images"][1]["url"], custom_legacy_url)
+
+    def test_15_migration_rerun_idempotency(self):
+        """15. Re-running migrations is idempotent and preserves existing data."""
+        from app.migrations import run_migrations
+
+        temp_rerun_fd, temp_rerun_path = tempfile.mkstemp(prefix="royal_libas_rerun_test_", suffix=".db")
+        os.close(temp_rerun_fd)
+
+        try:
+            mig_engine = create_engine(f"sqlite:///{temp_rerun_path}")
+            # First migration run on empty DB
+            Base.metadata.create_all(bind=mig_engine)
+            run_migrations(mig_engine)
+
+            # Insert test records
+            Session = sessionmaker(bind=mig_engine)
+            db = Session()
+            prod = Product(name="Idempotent Test", slug="idempotent-test", category="TWO PIECES")
+            db.add(prod)
+            db.commit()
+            db.refresh(prod)
+
+            img = ProductImage(
+                product_id=prod.id,
+                url="https://example.com/test.jpg",
+                sort_order=1,
+                media_asset_id=None,
+            )
+            db.add(img)
+            db.commit()
+            db.close()
+
+            # Second and third migration runs should succeed cleanly without errors
+            run_migrations(mig_engine)
+            run_migrations(mig_engine)
+
+            # Verify records intact
+            db = Session()
+            p = db.query(Product).filter(Product.slug == "idempotent-test").first()
+            self.assertIsNotNone(p)
+            self.assertEqual(len(p.images), 1)
+            self.assertEqual(p.images[0].url, "https://example.com/test.jpg")
+            db.close()
+            mig_engine.dispose()
+        finally:
+            if os.path.exists(temp_rerun_path):
+                try:
+                    os.remove(temp_rerun_path)
                 except Exception:
                     pass
 

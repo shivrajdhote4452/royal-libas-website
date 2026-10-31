@@ -3618,9 +3618,17 @@ def admin_attach_product_media(
             detail=f"Media assets not found for IDs: {missing_ids}",
         )
 
+    existing_asset_ids = {
+        img.media_asset_id for img in product.images if getattr(img, "media_asset_id", None) is not None
+    }
     existing_keys = {
-        (img.resource_type or "image", img.public_id if img.public_id else img.url.split("?")[0])
+        (img.resource_type or "image", img.url.split("?")[0] if img.url else img.public_id)
         for img in product.images
+    }
+    existing_legacy_pub_keys = {
+        (img.resource_type or "image", img.public_id)
+        for img in product.images
+        if getattr(img, "media_asset_id", None) is None and img.public_id
     }
 
     max_order = max([img.sort_order for img in product.images], default=-1)
@@ -3629,13 +3637,18 @@ def admin_attach_product_media(
 
     for mid in media_ids:
         asset = asset_by_id[mid]
+        if asset.id in existing_asset_ids:
+            continue
         r_type = getattr(asset, "resource_type", "image") or "image"
         pub_id = asset.public_id
         url = asset.secure_url or asset.url
-        key = (r_type, pub_id if pub_id else url.split("?")[0])
-        if key in existing_keys:
+        norm_url = url.split("?")[0] if url else ""
+        if (r_type, norm_url) in existing_keys:
             continue
-        existing_keys.add(key)
+        if (r_type, pub_id) in existing_legacy_pub_keys:
+            continue
+        existing_asset_ids.add(asset.id)
+        existing_keys.add((r_type, norm_url))
         max_order += 1
         new_img = ProductImage(
             product_id=product.id,
@@ -3647,8 +3660,8 @@ def admin_attach_product_media(
             width=asset.width,
             height=asset.height,
             duration=asset.duration,
+            media_asset_id=asset.id,
         )
-        new_img.media_asset_id = asset.id
         product.images.append(new_img)
         added_count += 1
 
@@ -3797,23 +3810,78 @@ def _process_product_images(
             trusted_alt = img.alt_text or asset.alt_text or getattr(asset, "display_name", None) or product_name
         elif trusted_public_id:
             # 3. For legacy entries without an ID, match using public_id AND resource_type. NEVER use public_id alone.
-            asset = (
+            matching_assets = (
                 db.query(MediaAsset)
                 .filter(
                     MediaAsset.public_id == trusted_public_id,
                     MediaAsset.resource_type == trusted_resource_type,
                 )
-                .first()
+                .all()
             )
-            if asset:
+            if len(matching_assets) == 1:
+                # Exactly one record matches -> link it
+                asset = matching_assets[0]
                 trusted_url = asset.secure_url or asset.url
                 trusted_resource_type = getattr(asset, "resource_type", trusted_resource_type) or trusted_resource_type
                 trusted_width = asset.width if trusted_width is None else trusted_width
                 trusted_height = asset.height if trusted_height is None else trusted_height
                 trusted_duration = asset.duration if trusted_duration is None else trusted_duration
+                trusted_alt = img.alt_text or asset.alt_text or getattr(asset, "display_name", None) or product_name
+                asset_id = asset.id
+            elif len(matching_assets) > 1:
+                # Multiple records match: do NOT arbitrarily choose the first!
+                # A unique exact URL match may resolve the ambiguity.
+                url_norm = trusted_url.split("?")[0] if trusted_url else ""
+                url_matches = [
+                    a for a in matching_assets
+                    if trusted_url and (
+                        a.url == trusted_url
+                        or a.secure_url == trusted_url
+                        or (url_norm and a.url and a.url.split("?")[0] == url_norm)
+                        or (url_norm and a.secure_url and a.secure_url.split("?")[0] == url_norm)
+                    )
+                ]
+                if len(url_matches) == 1:
+                    asset = url_matches[0]
+                    trusted_url = asset.secure_url or asset.url
+                    trusted_resource_type = getattr(asset, "resource_type", trusted_resource_type) or trusted_resource_type
+                    trusted_width = asset.width if trusted_width is None else trusted_width
+                    trusted_height = asset.height if trusted_height is None else trusted_height
+                    trusted_duration = asset.duration if trusted_duration is None else trusted_duration
+                    trusted_alt = img.alt_text or asset.alt_text or getattr(asset, "display_name", None) or product_name
+                    asset_id = asset.id
+                else:
+                    # Otherwise preserve the existing legacy URL, metadata, ordering, and null reference.
+                    asset_id = None
+            else:
+                # No matches in registry: preserve legacy values with null reference
+                asset_id = None
+        elif trusted_url:
+            # Legacy entry without public_id: attempt unambiguous URL match
+            url_norm = trusted_url.split("?")[0]
+            url_matches = (
+                db.query(MediaAsset)
+                .filter(
+                    (MediaAsset.url == trusted_url)
+                    | (MediaAsset.secure_url == trusted_url)
+                    | (MediaAsset.url.startswith(url_norm))
+                    | (MediaAsset.secure_url.startswith(url_norm)),
+                    MediaAsset.resource_type == trusted_resource_type,
+                )
+                .all()
+            )
+            if len(url_matches) == 1:
+                asset = url_matches[0]
+                trusted_url = asset.secure_url or asset.url
+                trusted_public_id = asset.public_id
+                trusted_resource_type = getattr(asset, "resource_type", trusted_resource_type) or trusted_resource_type
+                trusted_width = asset.width if trusted_width is None else trusted_width
+                trusted_height = asset.height if trusted_height is None else trusted_height
+                trusted_duration = asset.duration if trusted_duration is None else trusted_duration
+                trusted_alt = img.alt_text or asset.alt_text or getattr(asset, "display_name", None) or product_name
                 asset_id = asset.id
             else:
-                trusted_resource_type = r_type
+                asset_id = None
 
         # Normalize resource type if file extension suggests video
         if trusted_resource_type == "image" and trusted_url and any(trusted_url.lower().endswith(ext) for ext in (".mp4", ".webm", ".mov", ".ogg", ".mkv")):
@@ -3821,7 +3889,10 @@ def _process_product_images(
 
         # 4. Deduplicate repeated references to the same asset without collapsing different resource types
         norm_url = trusted_url.split("?")[0] if trusted_url else ""
-        dedup_key = (trusted_resource_type, trusted_public_id if trusted_public_id else norm_url)
+        if asset_id is not None:
+            dedup_key = (trusted_resource_type, f"asset:{asset_id}")
+        else:
+            dedup_key = (trusted_resource_type, norm_url if norm_url else trusted_public_id)
         if dedup_key in seen_keys:
             continue
         seen_keys.add(dedup_key)
