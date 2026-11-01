@@ -16,6 +16,21 @@ jobs:
   backend-tests:
     name: Backend Isolated Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: royal_libas_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -31,10 +46,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Run isolated bulk inventory tests
+      - name: Run isolated bulk inventory and postgres tests
+        env:
+          TEST_POSTGRES_URL: postgresql://test_user:test_password@localhost:5432/royal_libas_test_db
         run: |
           python -m unittest discover backend/tests -p "test_bulk_inventory_adjustment.py"
           python backend/tests/test_bulk_inventory_adjustment.py
+          python backend/tests/test_postgres_concurrency.py
 
   frontend-build:
     name: Frontend Build Check

@@ -10,16 +10,20 @@ TEST ISOLATION & COLLECTION ARCHITECTURE:
    table creation and startup migrations run EXCLUSIVELY on the disposable test database,
    even if database modules were previously imported by another test suite.
 4. Preserves and safely restores original environment and module state in tearDownClass to
-   prevent state leakage into other tests.
+   prevent state leakage into other tests, covering:
+   - When app.database was already imported and app.main was not.
+   - When both app.database and app.main were already imported.
+   - When neither was imported.
 5. Strict safety guards: immediately aborts if any production, VPS, or existing business database is detected.
 6. Tests pre-commit rollback, mid-commit honest uncertainty, and post-commit response resiliency with real IDs.
-7. Includes regression test verifying pre-existing engines are protected from migrations.
+7. Includes end-to-end process-isolated regression tests proving that pre-existing databases are completely untouched.
 """
 
 import os
 import sys
 import unittest
 import tempfile
+import subprocess
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -42,39 +46,54 @@ class TestBulkInventoryAdjustment(unittest.TestCase):
         except Exception:
             pass
 
-        # 2. Restore patched app.database objects
+        # 2. Restore app.main.engine reference
         try:
-            import app.database as app_db
-            if hasattr(cls, "_orig_app_engine") and cls._orig_app_engine is not None:
-                app_db.engine = cls._orig_app_engine
-            if hasattr(cls, "_orig_app_sessionlocal") and cls._orig_app_sessionlocal is not None:
-                app_db.SessionLocal = cls._orig_app_sessionlocal
+            if "app.main" in sys.modules:
+                import app.main as app_main
+                if hasattr(cls, "_app_main_was_loaded") and not cls._app_main_was_loaded:
+                    # app.main was first loaded during this test; restore its engine to orig app_db engine
+                    if hasattr(cls, "_orig_app_engine") and cls._orig_app_engine is not None:
+                        app_main.engine = cls._orig_app_engine
+                elif hasattr(cls, "_orig_app_main_engine") and cls._orig_app_main_engine is not None:
+                    app_main.engine = cls._orig_app_main_engine
         except Exception:
             pass
 
-        # 3. Restore patched app.config objects
+        # 3. Restore patched app.database objects
         try:
-            import app.config as app_cfg
-            if hasattr(cls, "_orig_config_db_url") and cls._orig_config_db_url is not None:
-                app_cfg.DATABASE_URL = cls._orig_config_db_url
+            if "app.database" in sys.modules:
+                import app.database as app_db
+                if hasattr(cls, "_orig_app_engine") and cls._orig_app_engine is not None:
+                    app_db.engine = cls._orig_app_engine
+                if hasattr(cls, "_orig_app_sessionlocal") and cls._orig_app_sessionlocal is not None:
+                    app_db.SessionLocal = cls._orig_app_sessionlocal
         except Exception:
             pass
 
-        # 4. Dispose test engine
+        # 4. Restore patched app.config objects
+        try:
+            if "app.config" in sys.modules:
+                import app.config as app_cfg
+                if hasattr(cls, "_orig_config_db_url") and cls._orig_config_db_url is not None:
+                    app_cfg.DATABASE_URL = cls._orig_config_db_url
+        except Exception:
+            pass
+
+        # 5. Dispose test engine
         try:
             if hasattr(cls, "test_engine") and cls.test_engine is not None:
                 cls.test_engine.dispose()
         except Exception:
             pass
 
-        # 5. Unlink temporary test database file
+        # 6. Unlink temporary test database file
         try:
             if hasattr(cls, "temp_db_path") and cls.temp_db_path and os.path.exists(cls.temp_db_path):
                 os.remove(cls.temp_db_path)
         except Exception:
             pass
 
-        # 6. Restore original environment variables
+        # 7. Restore original environment variables
         if hasattr(cls, "_orig_env_db_url") and cls._orig_env_db_url is not None:
             os.environ["DATABASE_URL"] = cls._orig_env_db_url
         else:
@@ -91,7 +110,31 @@ class TestBulkInventoryAdjustment(unittest.TestCase):
         cls._orig_env_db_url = os.environ.get("DATABASE_URL")
         cls._orig_env_jwt = os.environ.get("JWT_SECRET")
 
-        # 2. Create a dedicated temporary database file
+        # 2. Record prior import status of application modules for symmetrical restoration
+        cls._app_main_was_loaded = "app.main" in sys.modules
+        if cls._app_main_was_loaded:
+            import app.main as app_main
+            cls._orig_app_main_engine = getattr(app_main, "engine", None)
+        else:
+            cls._orig_app_main_engine = None
+
+        cls._app_database_was_loaded = "app.database" in sys.modules
+        if cls._app_database_was_loaded:
+            import app.database as app_db
+            cls._orig_app_engine = getattr(app_db, "engine", None)
+            cls._orig_app_sessionlocal = getattr(app_db, "SessionLocal", None)
+        else:
+            cls._orig_app_engine = None
+            cls._orig_app_sessionlocal = None
+
+        cls._app_config_was_loaded = "app.config" in sys.modules
+        if cls._app_config_was_loaded:
+            import app.config as app_cfg
+            cls._orig_config_db_url = getattr(app_cfg, "DATABASE_URL", None)
+        else:
+            cls._orig_config_db_url = None
+
+        # 3. Create a dedicated temporary database file
         cls.temp_fd, cls.temp_db_path = tempfile.mkstemp(prefix="royal_libas_disposable_test_", suffix=".db")
         os.close(cls.temp_fd)
 
@@ -99,7 +142,7 @@ class TestBulkInventoryAdjustment(unittest.TestCase):
         os.environ["DATABASE_URL"] = cls.test_db_url
         os.environ["JWT_SECRET"] = "phase6-isolated-test-jwt-secret-royal-libas"
 
-        # 3. Strict Safety Guard: Never allow non-disposable target
+        # 4. Strict Safety Guard: Never allow non-disposable target
         resolved_url = os.environ.get("DATABASE_URL", "").lower()
         assert "royal_libas_disposable_test_" in resolved_url, (
             f"Safety guard triggered: unexpected test DB URL '{resolved_url}'"
@@ -120,14 +163,16 @@ class TestBulkInventoryAdjustment(unittest.TestCase):
             )
             cls.TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=cls.test_engine)
 
-            # 4. Patch app.config and app.database BEFORE importing app.main
+            # 5. Patch app.config and app.database BEFORE importing app.main
             import app.config as app_cfg
-            cls._orig_config_db_url = getattr(app_cfg, "DATABASE_URL", None)
+            if not cls._app_config_was_loaded:
+                cls._orig_config_db_url = getattr(app_cfg, "DATABASE_URL", None)
             app_cfg.DATABASE_URL = cls.test_db_url
 
             import app.database as app_db
-            cls._orig_app_engine = getattr(app_db, "engine", None)
-            cls._orig_app_sessionlocal = getattr(app_db, "SessionLocal", None)
+            if not cls._app_database_was_loaded:
+                cls._orig_app_engine = getattr(app_db, "engine", None)
+                cls._orig_app_sessionlocal = getattr(app_db, "SessionLocal", None)
             # Patch app_db references immediately so app.main gets the disposable engine on import
             app_db.engine = cls.test_engine
             app_db.SessionLocal = cls.TestSessionLocal
@@ -138,7 +183,7 @@ class TestBulkInventoryAdjustment(unittest.TestCase):
             from app.migrations import run_migrations
             run_migrations(cls.test_engine)
 
-            # 5. Now import app.main safely
+            # 6. Now import app.main safely
             import app.main as app_main
             from app.main import app
             app_main.engine = cls.test_engine
@@ -154,7 +199,7 @@ class TestBulkInventoryAdjustment(unittest.TestCase):
             cls.app = app
             cls.client = TestClient(app)
 
-            # 6. Seed isolated test fixtures
+            # 7. Seed isolated test fixtures
             from app.models import Admin, Product, ProductVariant
             from app.auth import hash_password, create_access_token
 
@@ -578,65 +623,140 @@ class TestBulkInventoryAdjustment(unittest.TestCase):
         self.assertTrue(all(h["product_name"] == "Festive Chanderi Kurti Set" for h in history))
 
     def test_15_isolation_regression_pre_imported_database_engine(self):
-        """Regression test verifying that if app.database was already imported with a pre-existing engine,
-        no create_all or run_migrations is ever run against that pre-existing engine.
+        """Regression test in an isolated process verifying that if app.database was already imported
+        with a pre-existing canary database, executing the full setUpClass/teardown leaves the canary database
+        completely untouched with 0 tables and 0 migrations.
         """
-        from sqlalchemy import inspect, create_engine
-        canary_fd, canary_path = tempfile.mkstemp(prefix="royal_libas_canary_test_", suffix=".db")
-        os.close(canary_fd)
-        try:
-            canary_url = f"sqlite:///{canary_path}"
-            canary_engine = create_engine(canary_url, connect_args={"check_same_thread": False})
-            try:
-                # Pre-condition: Canary engine has NO tables
-                tables_initial = inspect(canary_engine).get_table_names()
-                self.assertEqual(tables_initial, [])
+        script = f"""
+import os
+import sys
+import tempfile
+from sqlalchemy import create_engine, inspect as sa_inspect
 
-                # Simulate a pre-existing engine in app.database
-                import app.database as app_db
-                orig_engine = app_db.engine
-                app_db.engine = canary_engine
+backend_dir = r"{backend_dir}"
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
-                # Now simulate the isolation setup logic with a separate disposable engine
-                temp_fd2, temp_path2 = tempfile.mkstemp(prefix="royal_libas_disposable_test_sub_", suffix=".db")
-                os.close(temp_fd2)
-                try:
-                    disposable_sub_engine = create_engine(f"sqlite:///{temp_path2}", connect_args={"check_same_thread": False})
-                    try:
-                        # The isolation contract: replace app_db.engine BEFORE app.main imports or creates tables
-                        app_db.engine = disposable_sub_engine
+# 1. Create canary DB
+canary_fd, canary_path = tempfile.mkstemp(prefix="canary_pre_imported_", suffix=".db")
+os.close(canary_fd)
+canary_url = f"sqlite:///{{canary_path}}"
 
-                        # Perform schema creation and migrations on disposable engine
-                        from app.database import Base
-                        Base.metadata.create_all(bind=app_db.engine)
-                        from app.migrations import run_migrations
-                        run_migrations(app_db.engine)
+try:
+    os.environ["DATABASE_URL"] = canary_url
+    os.environ["JWT_SECRET"] = "canary-jwt-secret-original"
 
-                        # Verify: Canary engine was NEVER touched
-                        canary_tables_after = inspect(canary_engine).get_table_names()
-                        self.assertEqual(
-                            canary_tables_after,
-                            [],
-                            "CRITICAL ISOLATION FAILURE: Canary engine was modified by table creation or migrations!",
-                        )
+    # Step A: Pre-import app.database before app.main is loaded
+    import app.database as app_db
+    canary_engine = app_db.engine
 
-                        # Verify: Disposable engine received the schema
-                        sub_tables = inspect(disposable_sub_engine).get_table_names()
-                        self.assertIn("products", sub_tables)
-                        self.assertIn("product_variants", sub_tables)
-                    finally:
-                        disposable_sub_engine.dispose()
-                finally:
-                    if os.path.exists(temp_path2):
-                        os.remove(temp_path2)
+    # Confirm canary engine has 0 tables
+    assert sa_inspect(canary_engine).get_table_names() == [], "Canary should be empty at start"
 
-                # Restore engine to self.test_engine
-                app_db.engine = orig_engine
-            finally:
-                canary_engine.dispose()
-        finally:
-            if os.path.exists(canary_path):
-                os.remove(canary_path)
+    # Step B: Load test suite and run real setUpClass end-to-end
+    from tests.test_bulk_inventory_adjustment import TestBulkInventoryAdjustment
+    TestBulkInventoryAdjustment.setUpClass()
+
+    # Step C: Execute an actual API call to verify the test app works
+    res = TestBulkInventoryAdjustment.client.get("/admin/inventory/summary", headers=TestBulkInventoryAdjustment.owner_headers)
+    assert res.status_code == 200, f"Expected 200, got {{res.status_code}}"
+
+    # Step D: Run real tearDownClass end-to-end
+    TestBulkInventoryAdjustment.tearDownClass()
+
+    # Step E: Verify canary database has ZERO tables (untouched!)
+    tables_in_canary = sa_inspect(canary_engine).get_table_names()
+    assert tables_in_canary == [], f"CRITICAL LEAK: Canary database received tables: {{tables_in_canary}}"
+
+    # Step F: Verify environment variables and engine references were restored
+    assert os.environ.get("DATABASE_URL") == canary_url, f"DATABASE_URL not restored: {{os.environ.get('DATABASE_URL')}}"
+    assert os.environ.get("JWT_SECRET") == "canary-jwt-secret-original", "JWT_SECRET not restored"
+    assert app_db.engine == canary_engine, "app.database.engine was not restored"
+
+    # Step G: Verify temporary disposable test DB file was removed
+    assert not os.path.exists(TestBulkInventoryAdjustment.temp_db_path), "Temp test DB was not deleted"
+
+    print("CANARY_TEST_PASSED")
+
+finally:
+    try:
+        canary_engine.dispose()
+    except Exception:
+        pass
+    try:
+        if os.path.exists(canary_path):
+            os.remove(canary_path)
+    except Exception:
+        pass
+"""
+        proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, f"Process isolation test failed!\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
+        self.assertIn("CANARY_TEST_PASSED", proc.stdout)
+
+    def test_16_isolation_regression_both_modules_already_imported(self):
+        """Regression test in an isolated process verifying that if BOTH app.database AND app.main were
+        already imported before the test, executing setUpClass/teardown restores all module references cleanly.
+        """
+        script = f"""
+import os
+import sys
+import tempfile
+from sqlalchemy import create_engine, inspect as sa_inspect
+
+backend_dir = r"{backend_dir}"
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+# 1. Create canary DB
+canary_fd, canary_path = tempfile.mkstemp(prefix="canary_both_imported_", suffix=".db")
+os.close(canary_fd)
+canary_url = f"sqlite:///{{canary_path}}"
+
+try:
+    os.environ["DATABASE_URL"] = canary_url
+    os.environ["JWT_SECRET"] = "canary-jwt-secret-original"
+
+    # Step A: Pre-import BOTH app.database AND app.main
+    import app.database as app_db
+    canary_engine = app_db.engine
+    import app.main as app_main
+    canary_main_engine = app_main.engine
+
+    # Step B: Load test suite and run real setUpClass end-to-end
+    from tests.test_bulk_inventory_adjustment import TestBulkInventoryAdjustment
+    TestBulkInventoryAdjustment.setUpClass()
+
+    # Step C: Execute an actual API call
+    res = TestBulkInventoryAdjustment.client.get("/admin/inventory/summary", headers=TestBulkInventoryAdjustment.owner_headers)
+    assert res.status_code == 200, f"Expected 200, got {{res.status_code}}"
+
+    # Step D: Run real tearDownClass end-to-end
+    TestBulkInventoryAdjustment.tearDownClass()
+
+    # Step E: Verify module references were restored
+    assert app_db.engine == canary_engine, "app.database.engine was not restored"
+    assert app_main.engine == canary_main_engine, "app.main.engine was not restored"
+    assert os.environ.get("DATABASE_URL") == canary_url, "DATABASE_URL not restored"
+
+    # Step F: Verify disposable DB file was removed
+    assert not os.path.exists(TestBulkInventoryAdjustment.temp_db_path), "Temp test DB was not deleted"
+
+    print("BOTH_MODULES_TEST_PASSED")
+
+finally:
+    try:
+        canary_engine.dispose()
+    except Exception:
+        pass
+    try:
+        if os.path.exists(canary_path):
+            os.remove(canary_path)
+    except Exception:
+        pass
+"""
+        proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, f"Both-modules isolation test failed!\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
+        self.assertIn("BOTH_MODULES_TEST_PASSED", proc.stdout)
 
 
 if __name__ == "__main__":
