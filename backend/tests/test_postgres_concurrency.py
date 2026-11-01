@@ -43,6 +43,10 @@ class TestPostgresConcurrency(unittest.TestCase):
             if forbidden in lower_url:
                 raise unittest.SkipTest(f"Safety guard: Forbidden keyword '{forbidden}' detected in TEST_POSTGRES_URL.")
 
+        # Ensure psycopg2 driver is used (psycopg2-binary is in requirements.txt)
+        if pg_url.startswith("postgresql://") and not pg_url.startswith("postgresql+"):
+            pg_url = pg_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
         try:
             from sqlalchemy import create_engine
             from sqlalchemy.orm import sessionmaker
