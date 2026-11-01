@@ -18,6 +18,7 @@ import {
   Copy,
   Tag,
   Play,
+  Maximize2,
 } from 'lucide-react';
 import type { Product, ProductVariant } from '../types/product';
 import type { CouponPublic } from '../types/order';
@@ -53,6 +54,7 @@ export const ProductPage: React.FC = () => {
   const [showAllOffersModal, setShowAllOffersModal] = useState<boolean>(false);
   const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
   const [btnState, setBtnState] = useState<'idle' | 'adding' | 'added'>('idle');
+  const [selectedZoomImage, setSelectedZoomImage] = useState<string | null>(null);
 
   // Touch swipe support for mobile product gallery
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -85,7 +87,7 @@ export const ProductPage: React.FC = () => {
             const list: number[] = raw ? JSON.parse(raw) : [];
             const updated = [data.id, ...list.filter((pid) => pid !== data.id)].slice(0, 8);
             localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(updated));
-          } catch {}
+          } catch { }
 
           // Structured variant colour initialization
           const productColours = Array.from(
@@ -120,17 +122,17 @@ export const ProductPage: React.FC = () => {
               .filter(Boolean)
               .slice(0, 4);
             setRecentlyViewedProducts(found);
-          } catch {}
+          } catch { }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     // Fetch active coupons for "Available Offers" (Point 17)
     fetchActiveCoupons()
       .then((res) => {
         if (isMounted) setCoupons(res);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       isMounted = false;
@@ -139,10 +141,10 @@ export const ProductPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-7 aspect-[4/5] skeleton-shimmer rounded-2xl border border-[#E8DFD0]" />
-          <div className="lg:col-span-5 space-y-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-start">
+          <div className="lg:col-span-6 aspect-[3/4] sm:aspect-[4/5] lg:aspect-auto lg:h-[min(72vh,620px)] skeleton-shimmer rounded-2xl border border-[#E8DFD0]" />
+          <div className="lg:col-span-6 space-y-4">
             <div className="h-8 skeleton-shimmer rounded w-3/4" />
             <div className="h-6 skeleton-shimmer rounded w-1/3" />
             <div className="h-40 skeleton-shimmer rounded-xl" />
@@ -176,8 +178,8 @@ export const ProductPage: React.FC = () => {
     product.images && product.images.length > 0
       ? product.images.map((img) => img.url)
       : product.primary_image
-      ? [product.primary_image]
-      : [];
+        ? [product.primary_image]
+        : [];
 
   const activeImageUrl = galleryImages[activeImageIndex] || galleryImages[0] || null;
 
@@ -327,190 +329,275 @@ export const ProductPage: React.FC = () => {
     <div className="min-h-screen bg-[#FAF7F2] page-enter font-sans pb-28 sm:pb-12">
       {/* Breadcrumb Navigation */}
       <div className="border-b border-[#E8DFD0] bg-white/60">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <nav className="flex items-center space-x-2 text-xs text-gray-500 font-medium">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5">
+          <nav className="flex items-center space-x-2 text-[11px] text-gray-500 font-medium">
             <Link to="/" className="hover:text-[#5B111A]">Home</Link>
-            <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+            <ChevronRight className="w-3 h-3 text-gray-400" />
             <Link to="/shop" className="hover:text-[#5B111A]">Shop</Link>
             {product.category && (
               <>
-                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                <ChevronRight className="w-3 h-3 text-gray-400" />
                 <Link to={`/shop?category=${encodeURIComponent(product.category)}`} className="hover:text-[#5B111A]">
                   {product.category}
                 </Link>
               </>
             )}
-            <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+            <ChevronRight className="w-3 h-3 text-gray-400" />
             <span className="text-gray-900 font-semibold truncate max-w-[200px]">{product.name}</span>
           </nav>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-6 sm:pt-2.5 sm:pb-8 lg:pt-3 lg:pb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
           {/* ========================================================
-              1. IMAGE GALLERY (Point 14: Desktop crossfade + mobile swipe/dots)
+              1. IMAGE GALLERY (Flipkart/Myntra 2-Column Large Grid on Desktop, Touch Carousel on Mobile)
               ======================================================== */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* Main Stage Image */}
-            <div
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              className="relative aspect-[4/5] w-full bg-[#F0E9DF] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm group touch-pan-y"
-            >
-              {activeImageUrl ? (
-                /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(activeImageUrl) ? (
-                  <video
-                    key={activeImageUrl}
-                    src={activeImageUrl}
-                    controls
-                    playsInline
-                    poster={activeImageUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg')}
-                    className="w-full h-full object-contain bg-black"
-                  />
-                ) : (
-                  <img
-                    key={activeImageUrl}
-                    src={activeImageUrl}
-                    alt={product.name}
-                    className="w-full h-full object-cover object-center transition-all duration-300 ease-out group-hover:scale-[1.03]"
-                    style={{
-                      transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                    }}
-                  />
-                )
-              ) : (
-                <ProductPlaceholder
-                  title={product.name}
-                  category={product.category || undefined}
-                  className="w-full h-full"
-                />
-              )}
+          <div className="lg:col-span-7">
+            {/* Desktop: 2-Column Large Photos Grid (Flipkart Style) */}
+            <div className="hidden lg:grid grid-cols-2 gap-3.5 items-start">
+              {galleryImages.map((imgUrl, idx) => {
+                const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(imgUrl);
+                const isSingle = galleryImages.length === 1;
+                // If odd total and this is first image, let it be featured full-width hero
+                const isFeaturedFirst = galleryImages.length % 2 !== 0 && idx === 0 && galleryImages.length > 1;
 
-              {/* Badges */}
-              <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5">
-                {product.badges?.map((badge) => (
-                  <span
-                    key={badge}
-                    className={`px-3 py-1 rounded-none text-[10px] font-bold uppercase tracking-[0.2em] shadow-sm ${
-                      badge === 'Bestseller'
-                        ? 'bg-[#B58A3C] text-[#2B1B1E]'
-                        : badge === 'Low Stock'
-                        ? 'bg-[#5E1224] text-[#FCF8F0]'
-                        : 'bg-[#2B1B1E] text-[#FCF8F0]'
-                    }`}
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => !isVid && setSelectedZoomImage(imgUrl)}
+                    className={`relative w-full aspect-[3/4] bg-[#FAF7F2] rounded-xl overflow-hidden border border-[#E8DFD0]/80 group flex items-center justify-center ${
+                      isSingle || isFeaturedFirst ? 'col-span-2' : 'col-span-1'
+                    } ${!isVid ? 'cursor-zoom-in' : ''}`}
                   >
-                    {badge}
-                  </span>
-                ))}
-              </div>
+                    {isVid ? (
+                      <video
+                        src={imgUrl}
+                        controls
+                        playsInline
+                        className="w-full h-full object-cover bg-black"
+                      />
+                    ) : (
+                      <img
+                        src={imgUrl}
+                        alt={`${product.name} - view ${idx + 1}`}
+                        className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+                        loading={idx < 2 ? 'eager' : 'lazy'}
+                      />
+                    )}
 
-              {/* Wishlist Button (Point 20) */}
-              <button
-                type="button"
-                onClick={() => toggleWishlist(product.id)}
-                className={`absolute top-4 right-4 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-                  inWishlist
-                    ? 'bg-white text-[#5E1224] shadow-md scale-105'
-                    : 'bg-white/90 text-[#2B1B1E] hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
-                }`}
-                aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-              >
-                <Heart
-                  className={`w-5 h-5 transition-transform duration-200 ${
-                    inWishlist ? 'fill-[#5E1224] stroke-[#5E1224]' : 'stroke-current'
-                  }`}
-                />
-              </button>
+                    {/* Badges on first photo */}
+                    {idx === 0 && (
+                      <div className="absolute top-3.5 left-3.5 z-10 flex flex-col gap-1.5">
+                        {product.badges?.map((badge) => (
+                          <span
+                            key={badge}
+                            className={`px-3 py-1 rounded-none text-[10px] font-bold uppercase tracking-[0.2em] shadow-sm ${
+                              badge === 'Bestseller'
+                                ? 'bg-[#B58A3C] text-[#2B1B1E]'
+                                : badge === 'Low Stock'
+                                ? 'bg-[#5E1224] text-[#FCF8F0]'
+                                : 'bg-[#2B1B1E] text-[#FCF8F0]'
+                            }`}
+                          >
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
-              {/* Mobile Carousel Indicators (Point 14) */}
-              {galleryImages.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1))
-                    }
-                    className="sm:hidden absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 text-gray-800 flex items-center justify-center shadow"
-                    aria-label="Previous photo"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setActiveImageIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0))
-                    }
-                    className="sm:hidden absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 text-gray-800 flex items-center justify-center shadow"
-                    aria-label="Next photo"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                  <div className="sm:hidden absolute bottom-3 right-3 bg-black/60 text-white text-[11px] font-bold px-2.5 py-1 rounded-none backdrop-blur-sm">
-                    {activeImageIndex + 1} / {galleryImages.length}
+                    {/* Wishlist Button on first photo */}
+                    {idx === 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleWishlist(product.id);
+                        }}
+                        className={`absolute top-3.5 right-3.5 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                          inWishlist
+                            ? 'bg-white text-[#5E1224] shadow-md scale-105'
+                            : 'bg-white/90 text-[#2B1B1E] hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
+                        }`}
+                        aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                      >
+                        <Heart
+                          className={`w-5 h-5 transition-transform duration-200 ${
+                            inWishlist ? 'fill-[#5E1224] stroke-[#5E1224]' : 'stroke-current'
+                          }`}
+                        />
+                      </button>
+                    )}
+
+                    {/* Hover Zoom Icon */}
+                    {!isVid && (
+                      <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/60 text-white p-2 rounded-full backdrop-blur-sm pointer-events-none">
+                        <Maximize2 className="w-4 h-4" />
+                      </div>
+                    )}
                   </div>
-                </>
-              )}
+                );
+              })}
             </div>
 
-            {/* Desktop Thumbnails (Point 14: subtle 180-250ms crossfade) */}
-            {galleryImages.length > 1 && (
-              <div className="hidden sm:grid grid-cols-5 gap-3">
-                {galleryImages.map((imgUrl, idx) => {
-                  const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(imgUrl);
-                  const thumbUrl = isVid ? imgUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : imgUrl;
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setActiveImageIndex(idx)}
-                      className={`relative aspect-[4/5] rounded-none overflow-hidden border-2 transition-all duration-200 ${
-                        activeImageIndex === idx
-                          ? 'border-[#5E1224] shadow-md ring-1 ring-[#5E1224]'
-                          : 'border-[#E8DFD0] hover:border-[#B58A3C] opacity-80 hover:opacity-100'
+            {/* Mobile / Tablet Swipeable Carousel */}
+            <div className="lg:hidden space-y-2.5">
+              <div
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className="relative aspect-[3/4] sm:aspect-[4/5] w-full bg-[#FAF7F2] rounded-2xl overflow-hidden border border-[#E8DFD0] shadow-sm group touch-pan-y flex items-center justify-center"
+              >
+                {activeImageUrl ? (
+                  /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(activeImageUrl) ? (
+                    <video
+                      key={activeImageUrl}
+                      src={activeImageUrl}
+                      controls
+                      playsInline
+                      poster={activeImageUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg')}
+                      className="w-full h-full object-contain bg-black"
+                    />
+                  ) : (
+                    <img
+                      key={activeImageUrl}
+                      src={activeImageUrl}
+                      alt={product.name}
+                      className="w-full h-full object-cover object-top transition-all duration-300"
+                    />
+                  )
+                ) : (
+                  <ProductPlaceholder
+                    title={product.name}
+                    category={product.category || undefined}
+                    className="w-full h-full"
+                  />
+                )}
+
+                {/* Badges */}
+                <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5">
+                  {product.badges?.map((badge) => (
+                    <span
+                      key={badge}
+                      className={`px-3 py-1 rounded-none text-[10px] font-bold uppercase tracking-[0.2em] shadow-sm ${
+                        badge === 'Bestseller'
+                          ? 'bg-[#B58A3C] text-[#2B1B1E]'
+                          : badge === 'Low Stock'
+                          ? 'bg-[#5E1224] text-[#FCF8F0]'
+                          : 'bg-[#2B1B1E] text-[#FCF8F0]'
                       }`}
                     >
-                      <img src={thumbUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
-                      {isVid && (
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
-                          <span className="w-6 h-6 rounded-full bg-white/90 text-[#5E1224] flex items-center justify-center shadow">
-                            <Play className="w-3 h-3 fill-current ml-0.5" />
-                          </span>
-                        </span>
-                      )}
+                      {badge}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Wishlist Button */}
+                <button
+                  type="button"
+                  onClick={() => toggleWishlist(product.id)}
+                  className={`absolute top-4 right-4 z-20 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    inWishlist
+                      ? 'bg-white text-[#5E1224] shadow-md scale-105'
+                      : 'bg-white/90 text-[#2B1B1E] hover:text-[#5E1224] hover:bg-white hover:scale-105 shadow-sm'
+                  }`}
+                  aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                >
+                  <Heart
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      inWishlist ? 'fill-[#5E1224] stroke-[#5E1224]' : 'stroke-current'
+                    }`}
+                  />
+                </button>
+
+                {/* Mobile Carousel Indicators */}
+                {galleryImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1))
+                      }
+                      className="sm:hidden absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 text-gray-800 flex items-center justify-center shadow"
+                      aria-label="Previous photo"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
                     </button>
-                  );
-                })}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveImageIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0))
+                      }
+                      className="sm:hidden absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 text-gray-800 flex items-center justify-center shadow"
+                      aria-label="Next photo"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                    <div className="sm:hidden absolute bottom-3 right-3 bg-black/60 text-white text-[11px] font-bold px-2.5 py-1 rounded-none backdrop-blur-sm">
+                      {activeImageIndex + 1} / {galleryImages.length}
+                    </div>
+                  </>
+                )}
               </div>
-            )}
+
+              {/* Mobile / Tablet Horizontal Thumbnails */}
+              {galleryImages.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  {galleryImages.map((imgUrl, idx) => {
+                    const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(imgUrl);
+                    const thumbUrl = isVid ? imgUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : imgUrl;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveImageIndex(idx)}
+                        className={`relative w-16 h-20 rounded-lg overflow-hidden border-2 shrink-0 transition-all duration-200 bg-[#FAF7F2] ${
+                          activeImageIndex === idx
+                            ? 'border-[#5E1224] shadow-md ring-1 ring-[#5E1224]'
+                            : 'border-[#E8DFD0] hover:border-[#B58A3C] opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={thumbUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover object-top" />
+                        {isVid && (
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
+                            <span className="w-5 h-5 rounded-full bg-white/90 text-[#5E1224] flex items-center justify-center shadow">
+                              <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
+                            </span>
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ========================================================
-              2. BUYING CONTROLS PANEL (PDF Page 5 & 13)
+              2. BUYING CONTROLS PANEL (Sticky Flipkart Style)
               ======================================================== */}
-          <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24 self-start">
+          <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-20 self-start lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:pr-2">
+            {/* Header & Title */}
             <div>
               <span className="text-[10px] uppercase tracking-[0.28em] font-bold text-[#B58A3C] block mb-1">
                 ROYAL LIBAS
               </span>
-              <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#2B1B1E] leading-tight">
+              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#2B1B1E] leading-tight">
                 {product.name}
               </h1>
-              {/* Craftsmanship and Category Header */}
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#B58A3C]">
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[#B58A3C]">
                   {product.category || 'Atelier Collection'}
                 </span>
                 <span className="text-gray-300">&bull;</span>
-                <span className="text-[11px] text-gray-500 font-medium">Handcrafted Silhouette</span>
+                <span className="text-xs text-gray-500 font-medium">Handcrafted Silhouette</span>
               </div>
             </div>
 
-            {/* Pricing Area matching PDF Page 5 */}
-            <div className="p-4 bg-white border border-[#E8DFD0] shadow-sm">
-              <div className="flex items-baseline gap-3">
-                <span className="price-display text-3xl sm:text-4xl font-serif font-bold text-[#5E1224]">
+            {/* Pricing Area (Clean Luxury Bar) */}
+            <div className="py-2.5 px-3.5 bg-white border border-[#E8DFD0] shadow-sm flex items-center justify-between">
+              <div className="flex items-baseline gap-2.5">
+                <span className="price-display text-2xl sm:text-3xl font-serif font-bold text-[#5E1224]">
                   {formatPrice(displaySellingPrice)}
                 </span>
                 {displayMrp && displayMrp > displaySellingPrice && (
@@ -524,7 +611,7 @@ export const ProductPage: React.FC = () => {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-gray-500 mt-1">Inclusive of all taxes</p>
+              <span className="text-[11px] text-gray-500 font-medium">Inclusive of all taxes</span>
             </div>
 
             {/* Product short description paragraph */}
@@ -534,7 +621,7 @@ export const ProductPage: React.FC = () => {
               </p>
             )}
 
-            {/* Color Swatches derived strictly from product variants */}
+            {/* Color Swatches derived strictly from product variants (if any) */}
             {(() => {
               const COLOR_MAP: Record<string, string> = {
                 'Deep Maroon': '#5E1224',
@@ -575,11 +662,10 @@ export const ProductPage: React.FC = () => {
                         type="button"
                         onClick={() => handleColorChange(c)}
                         style={{ backgroundColor: COLOR_MAP[c] || '#8C6F5B' }}
-                        className={`w-7 h-7 rounded-full border transition-all ${
-                          selectedColor === c
+                        className={`w-7 h-7 rounded-full border transition-all ${selectedColor === c
                             ? 'ring-2 ring-[#5E1224] ring-offset-2 scale-110 shadow-sm'
                             : 'border-black/20 hover:scale-105'
-                        }`}
+                          }`}
                         title={c}
                       />
                     ))}
@@ -596,8 +682,8 @@ export const ProductPage: React.FC = () => {
               </div>
             )}
 
-            {/* Size Selector (PDF Page 5) */}
-            <div className="space-y-2.5">
+            {/* Size Selector */}
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-900">
                   SIZE:{' '}
@@ -632,13 +718,12 @@ export const ProductPage: React.FC = () => {
                         type="button"
                         disabled={soldOut}
                         onClick={() => handleSizeChange(v)}
-                        className={`h-11 rounded-none border text-center transition-all duration-200 ${
-                          soldOut
+                        className={`h-10 sm:h-11 rounded-none border text-center transition-all duration-200 ${soldOut
                             ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
                             : isSelected
-                            ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-md font-bold'
-                            : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-[#B58A3C] font-semibold'
-                        }`}
+                              ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-md font-bold'
+                              : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-[#B58A3C] font-semibold'
+                          }`}
                       >
                         <span className="text-xs sm:text-sm">{v.size}</span>
                       </button>
@@ -696,23 +781,23 @@ export const ProductPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Action Buttons: ADD TO BAG + BUY NOW (PDF Page 5) */}
-            <div className="space-y-2.5 pt-2">
+            {/* Action Buttons: Flipkart-style 2-Column Grid */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pt-2">
               <button
                 type="button"
                 disabled={isSoldOut || isColorSoldOut || !isVariantValidAndAvailable || btnState === 'adding'}
                 onClick={handleAddToCart}
-                className="w-full py-4 px-6 rounded-none bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:cursor-not-allowed text-[#FCF8F0] font-ui font-semibold text-xs sm:text-sm uppercase tracking-[0.2em] shadow-md transition-all flex items-center justify-center gap-2"
+                className="w-full h-12 rounded-none bg-white border-2 border-[#5E1224] hover:bg-[#5E1224] hover:text-[#FCF8F0] disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed text-[#5E1224] font-ui font-bold text-xs sm:text-sm uppercase tracking-[0.14em] shadow-sm transition-all flex items-center justify-center gap-1.5"
               >
                 {btnState === 'adding' ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ADDING TO BAG...
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 border-2 border-[#5E1224]/30 border-t-[#5E1224] rounded-full animate-spin" />
+                    ADDING...
                   </span>
                 ) : btnState === 'added' ? (
-                  <span className="inline-flex items-center gap-2 text-[#B58A3C]">
+                  <span className="inline-flex items-center gap-1.5 text-emerald-700 font-bold">
                     <Check className="w-4 h-4" />
-                    ADDED TO BAG ✓
+                    ADDED ✓
                   </span>
                 ) : (
                   <>
@@ -726,20 +811,20 @@ export const ProductPage: React.FC = () => {
                 type="button"
                 disabled={isSoldOut || isColorSoldOut || !isVariantValidAndAvailable}
                 onClick={handleBuyNow}
-                className="w-full py-3.5 px-6 rounded-none bg-[#FCF8F0] border-2 border-[#5E1224] hover:bg-[#5E1224] hover:text-[#FCF8F0] disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed text-[#5E1224] font-ui font-semibold text-xs sm:text-sm uppercase tracking-[0.2em] transition-all"
+                className="w-full h-12 rounded-none bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed text-[#FCF8F0] font-ui font-bold text-xs sm:text-sm uppercase tracking-[0.14em] shadow-md transition-all flex items-center justify-center"
               >
                 BUY NOW
               </button>
             </div>
 
             {/* ========================================================
-                AVAILABLE OFFERS / COUPON PRESENTATION (Points 17 & 18)
+                AVAILABLE OFFERS / COUPON PRESENTATION
                 ======================================================== */}
             {coupons.length > 0 && (
-              <div className="bg-white p-4 rounded-none border border-[#E8DFD0] shadow-sm space-y-3">
+              <div className="bg-white p-3 rounded-none border border-[#E8DFD0] shadow-sm space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    <Tag className="w-4 h-4 text-[#B58A3C]" />
+                    <Tag className="w-3.5 h-3.5 text-[#B58A3C]" />
                     <span>Available Offers</span>
                   </div>
                   {coupons.length > 2 && (
@@ -753,33 +838,32 @@ export const ProductPage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {coupons.slice(0, 2).map((c) => {
                     const isCopied = copiedCoupon === c.code;
                     return (
                       <div
                         key={c.id}
-                        className="p-2.5 rounded-none border border-dashed border-[#E8DFD0] bg-[#FCF8F0] flex items-center justify-between gap-3"
+                        className="p-2 rounded-none border border-dashed border-[#E8DFD0] bg-[#FCF8F0] flex items-center justify-between gap-2"
                       >
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-bold text-[#5E1224] bg-white px-2 py-0.5 rounded-none border border-[#E8DFD0]">
+                            <span className="font-mono text-[11px] font-bold text-[#5E1224] bg-white px-1.5 py-0.5 rounded-none border border-[#E8DFD0]">
                               {c.code}
                             </span>
                             <span className="text-[11px] font-semibold text-emerald-800">
                               {c.type === 'PERCENT' ? `${Math.round(c.value)}% OFF` : `Flat ₹${Math.round(c.value)} OFF`}
                             </span>
                           </div>
-                          <p className="text-[10px] text-gray-500 mt-0.5">
+                          <p className="text-[10px] text-gray-500 mt-0.5 truncate">
                             Applicable on orders above {formatPrice(c.min_order_value)}
                           </p>
                         </div>
 
-                        {/* Copy Button with inline feedback (Point 18) */}
                         <button
                           type="button"
                           onClick={() => handleCopyCoupon(c.code)}
-                          className="shrink-0 px-2.5 py-1 rounded-none text-xs font-semibold bg-white border border-[#E8DFD0] text-[#5E1224] hover:bg-[#5E1224] hover:text-white transition-colors flex items-center gap-1"
+                          className="shrink-0 px-2 py-1 rounded-none text-[11px] font-semibold bg-white border border-[#E8DFD0] text-[#5E1224] hover:bg-[#5E1224] hover:text-white transition-colors flex items-center gap-1"
                         >
                           {isCopied ? (
                             <span className="text-emerald-700 flex items-center gap-1 font-bold">
@@ -801,29 +885,29 @@ export const ProductPage: React.FC = () => {
             )}
 
             {/* Assurance Strip */}
-            <div className={`grid ${settings.codEnabled ? 'grid-cols-4' : 'grid-cols-3'} gap-2 pt-3 border-t border-gray-100 text-center`}>
-              <div className="flex flex-col items-center space-y-1">
-                <Truck className="w-4 h-4 text-[#B58A3C]" />
-                <span className="text-[10px] text-gray-700 font-medium">Free Shipping above ₹{settings.freeShippingThreshold}</span>
+            <div className={`grid ${settings.codEnabled ? 'grid-cols-4' : 'grid-cols-3'} gap-2 pt-2.5 pb-0.5 border-t border-gray-100 text-center`}>
+              <div className="flex flex-col items-center space-y-0.5">
+                <Truck className="w-3.5 h-3.5 text-[#B58A3C]" />
+                <span className="text-[10px] text-gray-700 font-medium">Free Shipping &gt; ₹{settings.freeShippingThreshold}</span>
               </div>
               {settings.codEnabled && (
-                <div className="flex flex-col items-center space-y-1">
-                  <CreditCard className="w-4 h-4 text-[#B58A3C]" />
+                <div className="flex flex-col items-center space-y-0.5">
+                  <CreditCard className="w-3.5 h-3.5 text-[#B58A3C]" />
                   <span className="text-[10px] text-gray-700 font-medium">COD Available</span>
                 </div>
               )}
-              <div className="flex flex-col items-center space-y-1">
-                <RefreshCw className="w-4 h-4 text-[#B58A3C]" />
-                <span className="text-[10px] text-gray-700 font-medium">Easy Exchange 7 days</span>
+              <div className="flex flex-col items-center space-y-0.5">
+                <RefreshCw className="w-3.5 h-3.5 text-[#B58A3C]" />
+                <span className="text-[10px] text-gray-700 font-medium">7 Days Exchange</span>
               </div>
-              <div className="flex flex-col items-center space-y-1">
-                <Lock className="w-4 h-4 text-[#B58A3C]" />
-                <span className="text-[10px] text-gray-700 font-medium">Secure Payments</span>
+              <div className="flex flex-col items-center space-y-0.5">
+                <Lock className="w-3.5 h-3.5 text-[#B58A3C]" />
+                <span className="text-[10px] text-gray-700 font-medium">Secure Checkout</span>
               </div>
             </div>
 
             {/* Tabs: Description | Fabric & Care | Shipping | Exchange */}
-            <div className="pt-4 border-t border-gray-100">
+            <div className="pt-3 border-t border-gray-100">
               <div className="flex border-b border-gray-200 text-xs font-semibold">
                 {[
                   { id: 'desc', label: 'Description' },
@@ -848,12 +932,12 @@ export const ProductPage: React.FC = () => {
 
               <div className="pt-3 text-xs text-gray-600 leading-relaxed">
                 {activeTab === 'desc' && (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <p>{product.description || 'This elegant ensemble is crafted for festive occasions and intimate celebrations with pure artisan precision.'}</p>
                     <ul className="list-disc pl-4 space-y-1 pt-1 text-gray-700">
-                      <li>Intricate craftsmanship & hand-finished hems</li>
+                      <li>Intricate craftsmanship &amp; hand-finished hems</li>
                       <li>Comfortable, breathable, and flattering drape</li>
-                      <li>Includes matching bottom coordinate & dupatta</li>
+                      <li>Includes matching bottom coordinate &amp; dupatta</li>
                     </ul>
                   </div>
                 )}
@@ -1092,6 +1176,29 @@ export const ProductPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Lightbox / Fullscreen Image Zoom Modal */}
+      {selectedZoomImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setSelectedZoomImage(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setSelectedZoomImage(null)}
+            className="absolute top-5 right-5 text-white/80 hover:text-white p-2.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors z-50"
+            aria-label="Close zoom"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img
+            src={selectedZoomImage}
+            alt="Product Zoom"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl select-none"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };
