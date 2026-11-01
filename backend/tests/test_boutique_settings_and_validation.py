@@ -358,6 +358,65 @@ class TestBoutiqueSettingsAndValidation(unittest.TestCase):
         res_bad = self.client.post("/contact", json=bad_inquiry)
         self.assertEqual(res_bad.status_code, 422)
 
+    def test_09_source_url_security_and_owner_approval(self):
+        """9. Review source_url is sanitized for unsafe schemes/hosts, while owner-approved reviews remain published."""
+        headers = {"Authorization": f"Bearer {self.owner_token}"}
+
+        test_payload = [
+            {
+                "id": "js_injection_rev",
+                "author_name": "Security Tester",
+                "rating": 5,
+                "review_text": "Trying javascript injection.",
+                "source": "google",
+                "source_url": "javascript:alert(1)",
+                "owner_approved": True,
+                "is_published": True,
+            },
+            {
+                "id": "untrusted_host_rev",
+                "author_name": "Security Tester 2",
+                "rating": 5,
+                "review_text": "Trying phishing host.",
+                "source": "google",
+                "source_url": "https://malicious-reviews.com/libas",
+                "owner_approved": True,
+                "is_published": True,
+            },
+            {
+                "id": "valid_google_rev",
+                "author_name": "Genuine Patron",
+                "rating": 5,
+                "review_text": "Real review with genuine share.google link.",
+                "source": "google",
+                "source_url": "https://share.google/rdahckZ4nVz7Bgu2H",
+                "owner_approved": True,
+                "is_published": True,
+            },
+        ]
+
+        res = self.client.put(
+            "/admin/settings",
+            json={"boutique_reviews_json": json.dumps(test_payload)},
+            headers=headers,
+        )
+        self.assertEqual(res.status_code, 200)
+        parsed = json.loads(res.json()["boutique_reviews_json"])
+        rev_map = {r["id"]: r for r in parsed}
+
+        # Javascript injection sanitized to None, review text preserved
+        self.assertIsNone(rev_map["js_injection_rev"]["source_url"])
+        self.assertEqual(rev_map["js_injection_rev"]["review_text"], "Trying javascript injection.")
+        self.assertTrue(rev_map["js_injection_rev"]["is_published"])
+
+        # Phishing host sanitized to None
+        self.assertIsNone(rev_map["untrusted_host_rev"]["source_url"])
+        self.assertTrue(rev_map["untrusted_host_rev"]["is_published"])
+
+        # Genuine Google link preserved
+        self.assertEqual(rev_map["valid_google_rev"]["source_url"], "https://share.google/rdahckZ4nVz7Bgu2H")
+        self.assertTrue(rev_map["valid_google_rev"]["is_published"])
+
 
 if __name__ == "__main__":
     unittest.main()

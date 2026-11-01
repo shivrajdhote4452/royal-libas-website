@@ -756,6 +756,34 @@ class StoreSettingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+def is_trusted_google_url(url: Optional[str]) -> bool:
+    if not url or not isinstance(url, str):
+        return False
+    raw = url.strip()
+    try:
+        parsed = urllib.parse.urlsplit(raw)
+    except Exception:
+        return False
+    if parsed.scheme.lower() != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    trusted_exact = {
+        "share.google",
+        "search.google.com",
+        "maps.google.com",
+        "www.google.com",
+        "google.com",
+        "g.page",
+        "goo.gl",
+        "maps.app.goo.gl",
+    }
+    if host in trusted_exact:
+        return True
+    if any(host.endswith("." + th) for th in ["google.com", "goo.gl"]):
+        return True
+    return False
+
+
 class StoreSettingUpdate(BaseModel):
     standard_cod_free_threshold: Optional[float] = None
     free_shipping_threshold: Optional[float] = None
@@ -935,13 +963,22 @@ class StoreSettingUpdate(BaseModel):
 
                 source = str(item.get("source") or "google").strip().lower()
                 is_verified = bool(item.get("is_verified", False))
+                owner_approved = bool(item.get("owner_approved", False))
                 verified_date = str(item.get("verified_date") or "").strip() if is_verified else None
                 is_published = bool(item.get("is_published", False))
 
-                # Requirement B: Display only published, explicitly verified Google reviews with actual ratings of 4 or 5.
-                # Exclude 1-3 star and unverified records from being published.
-                if is_published and (not is_verified or rating < 4 or source != "google"):
+                # Positive reviews section: 4-star and 5-star Google/store reviews only
+                if is_published and (rating < 4 or source not in ("google", "")):
                     is_published = False
+                # Must have explicit verification OR owner approval to be published
+                if is_published and not is_verified and not owner_approved:
+                    is_published = False
+
+                # Validate per-review source_url safely: only trusted Google URLs
+                raw_source_url = str(item.get("source_url") or "").strip() or None
+                clean_source_url = None
+                if raw_source_url and is_trusted_google_url(raw_source_url):
+                    clean_source_url = raw_source_url
 
                 cleaned.append({
                     "id": str(item.get("id") or f"rev-{len(cleaned)+1}"),
@@ -950,8 +987,9 @@ class StoreSettingUpdate(BaseModel):
                     "review_text": text,
                     "review_date": str(item.get("review_date") or "").strip() or None,
                     "source": source,
-                    "source_url": str(item.get("source_url") or "").strip() or None,
+                    "source_url": clean_source_url,
                     "is_verified": is_verified,
+                    "owner_approved": owner_approved,
                     "verified_date": verified_date,
                     "is_published": is_published,
                     "sort_order": int(item.get("sort_order", len(cleaned))),

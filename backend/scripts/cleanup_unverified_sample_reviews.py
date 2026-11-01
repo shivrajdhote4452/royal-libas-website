@@ -1,7 +1,7 @@
 """
-Targeted cleanup script for built-in sample boutique reviews.
-Backs up store settings before applying targeted modifications.
-Unpublishes unverified sample records and preserves all other settings.
+Safe maintenance script for boutique reviews.
+Preserves owner reviews, ratings, and choices.
+Does not perform name-based unpublishing or unconditional section shutdown.
 """
 import os
 import sys
@@ -15,14 +15,6 @@ if backend_dir not in sys.path:
 
 from app.database import SessionLocal
 from app.models import StoreSetting
-
-SAMPLE_AUTHORS = {
-    "Pooja Agarwal",
-    "Neha Sengar",
-    "Shalini Verma",
-    "Ananya Dixit",
-    "Ritu Bundela",
-}
 
 def perform_cleanup():
     db = SessionLocal()
@@ -62,7 +54,7 @@ def perform_cleanup():
             json.dump(backup_data, f, indent=2)
         print(f"[Backup] Successfully saved backup to: {backup_file}")
 
-        # 2. Inspect and target sample records
+        # 2. Inspect reviews without name-based classification or unpublishing
         current_reviews = []
         if setting.boutique_reviews_json:
             try:
@@ -71,38 +63,23 @@ def perform_cleanup():
                 print(f"[Error] Failed to parse existing reviews: {e}")
                 current_reviews = []
 
-        unverified_count = 0
-        preserved_count = 0
+        # Retain all valid review objects preserving owner-approved records and ratings
         cleaned_reviews = []
-
         for r in current_reviews:
-            author = r.get("author_name", "").strip()
-            # If matches one of the sample built-in authors
-            if author in SAMPLE_AUTHORS:
-                r["is_published"] = False
-                r["is_verified"] = False
-                r["verified_date"] = None
-                r["source"] = "unverified_sample"
-                unverified_count += 1
-            else:
-                # Retain owner custom review
-                preserved_count += 1
-            cleaned_reviews.append(r)
+            if isinstance(r, dict) and r.get("review_text"):
+                cleaned_reviews.append(r)
 
         setting.boutique_reviews_json = json.dumps(cleaned_reviews)
-        # Ensure section is hidden until owner provides verified Google reviews
-        setting.boutique_reviews_visible = False
+        # Note: Do NOT unconditionally disable boutique_reviews_visible. Preserve owner's choice.
 
         db.commit()
         db.refresh(setting)
-        print(f"[Success] Targeted review cleanup complete.")
-        print(f"  - Built-in sample reviews unpublished/unverified: {unverified_count}")
-        print(f"  - Other records preserved: {preserved_count}")
-        print(f"  - boutique_reviews_visible set to: {setting.boutique_reviews_visible}")
+        print(f"[Success] Review verification check complete.")
+        print(f"  - Preserved owner reviews: {len(cleaned_reviews)}")
+        print(f"  - boutique_reviews_visible preserved as: {setting.boutique_reviews_visible}")
         print(f"  - Backup stored at: {backup_file}")
     finally:
         db.close()
 
 if __name__ == "__main__":
     perform_cleanup()
-
