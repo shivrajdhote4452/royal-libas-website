@@ -70,6 +70,10 @@ from app.schemas import (
     ActivityLogResponse,
     StockAdjustmentCreate,
     StockAdjustmentResponse,
+    BulkStockAdjustmentItem,
+    BulkStockAdjustmentRequest,
+    BulkStockAdjustmentResponse,
+    InventorySummaryResponse,
     ReturnRequestCreate,
     ReturnStatusUpdateRequest,
     ReturnRequestResponse,
@@ -1065,20 +1069,32 @@ def admin_list_inventory(
     elif norm_filter == "draft":
         query = query.filter(Product.status == "DRAFT")
     elif norm_filter == "low_stock":
-        # Only published live products trigger real low-stock alerts (<=5)
-        query = query.filter(
-            Product.status == "PUBLISHED",
-            Product.is_active == True,
-            ProductVariant.stock > 0,
-            ProductVariant.stock <= 5,
+        # Include all variants of published products that have any low-stock variant (<= 5)
+        subq = (
+            db.query(ProductVariant.product_id)
+            .join(Product)
+            .filter(
+                Product.status == "PUBLISHED",
+                Product.is_active == True,
+                ProductVariant.stock > 0,
+                ProductVariant.stock <= 5,
+            )
+            .distinct()
         )
+        query = query.filter(ProductVariant.product_id.in_(subq))
     elif norm_filter == "out_of_stock":
-        # Out of stock published live products
-        query = query.filter(
-            Product.status == "PUBLISHED",
-            Product.is_active == True,
-            ProductVariant.stock == 0,
+        # Include all variants of published products that have any out-of-stock variant (== 0)
+        subq = (
+            db.query(ProductVariant.product_id)
+            .join(Product)
+            .filter(
+                Product.status == "PUBLISHED",
+                Product.is_active == True,
+                ProductVariant.stock == 0,
+            )
+            .distinct()
         )
+        query = query.filter(ProductVariant.product_id.in_(subq))
     elif norm_filter in ("working", "all"):
         # Default working inventory excludes ARCHIVED legacy items
         query = query.filter(Product.status != "ARCHIVED")
@@ -1090,15 +1106,21 @@ def admin_list_inventory(
 
     if search:
         s = f"%{search.strip()}%"
-        query = query.filter(
-            or_(
-                Product.name.ilike(s),
-                ProductVariant.sku.ilike(s),
-                ProductVariant.colour.ilike(s),
+        subq = (
+            db.query(ProductVariant.product_id)
+            .join(Product)
+            .filter(
+                or_(
+                    Product.name.ilike(s),
+                    ProductVariant.sku.ilike(s),
+                    ProductVariant.colour.ilike(s),
+                )
             )
+            .distinct()
         )
+        query = query.filter(ProductVariant.product_id.in_(subq))
 
-    variants = query.order_by(ProductVariant.stock.asc()).all()
+    variants = query.order_by(Product.id.asc(), ProductVariant.id.asc()).all()
     results = []
     for v in variants:
         img_url = None
@@ -1198,14 +1220,224 @@ def admin_adjust_stock(
     )
 
 
+@router.get("/inventory/summary", response_model=InventorySummaryResponse)
+def admin_get_inventory_summary(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve stable aggregate inventory metrics across the entire boutique catalogue."""
+    # 1. Published Live Catalogue
+    pub_query = (
+        db.query(ProductVariant)
+        .join(Product)
+        .filter(Product.status == "PUBLISHED", Product.is_active == True)
+    )
+    pub_variants = pub_query.all()
+    pub_product_ids = {v.product_id for v in pub_variants}
+    published_units = sum(v.stock for v in pub_variants)
+
+    # Low stock & out of stock on published live products
+    low_stock_variants = [v for v in pub_variants if 0 < v.stock <= 5]
+    low_stock_product_ids = {v.product_id for v in low_stock_variants}
+
+    out_of_stock_variants = [v for v in pub_variants if v.stock == 0]
+    out_of_stock_product_ids = {v.product_id for v in out_of_stock_variants}
+
+    # 2. Draft Setup Catalogue
+    draft_query = (
+        db.query(ProductVariant)
+        .join(Product)
+        .filter(Product.status == "DRAFT")
+    )
+    draft_variants = draft_query.all()
+    draft_product_ids = {v.product_id for v in draft_variants}
+    draft_units = sum(v.stock for v in draft_variants)
+
+    # 3. Archived Catalogue
+    archived_query = (
+        db.query(ProductVariant)
+        .join(Product)
+        .filter(Product.status == "ARCHIVED")
+    )
+    archived_variants = archived_query.all()
+    archived_product_ids = {v.product_id for v in archived_variants}
+    archived_units = sum(v.stock for v in archived_variants)
+
+    # Working catalogue (Published + Draft)
+    working_product_ids = pub_product_ids.union(draft_product_ids)
+    working_units = published_units + draft_units
+
+    return InventorySummaryResponse(
+        published_products=len(pub_product_ids),
+        published_units=published_units,
+        published_variants=len(pub_variants),
+        draft_products=len(draft_product_ids),
+        draft_units=draft_units,
+        draft_variants=len(draft_variants),
+        archived_products=len(archived_product_ids),
+        archived_units=archived_units,
+        archived_variants=len(archived_variants),
+        low_stock_products=len(low_stock_product_ids),
+        low_stock_variants=len(low_stock_variants),
+        out_of_stock_products=len(out_of_stock_product_ids),
+        out_of_stock_variants=len(out_of_stock_variants),
+        total_working_products=len(working_product_ids),
+        total_working_units=working_units,
+    )
+
+
+@router.post("/inventory/bulk-adjust", response_model=BulkStockAdjustmentResponse)
+def admin_bulk_adjust_stock(
+    payload: BulkStockAdjustmentRequest,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Atomically adjust multiple variant stock counts for a product with audit logging and conflict detection."""
+    product = (
+        db.query(Product)
+        .filter(Product.id == payload.product_id)
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product ID {payload.product_id} not found.",
+        )
+
+    # Fetch all variants belonging to this product with row locking
+    variants = (
+        db.query(ProductVariant)
+        .with_for_update()
+        .filter(ProductVariant.product_id == payload.product_id)
+        .all()
+    )
+    variant_map = {v.id: v for v in variants}
+
+    # 1. Validation check: ensure all requested variants belong to this product
+    for item in payload.items:
+        if item.variant_id not in variant_map:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Variant ID {item.variant_id} does not belong to product '{product.name}'.",
+            )
+
+    # 2. Concurrency Conflict Detection:
+    # Mandatory expected_stock check against live database stock
+    conflicts = []
+    for item in payload.items:
+        v = variant_map[item.variant_id]
+        if v.stock != item.expected_stock:
+            conflicts.append(
+                f"{v.size}{f' ({v.colour})' if v.colour else ''}: Current is {v.stock}, form had {item.expected_stock}"
+            )
+
+    if conflicts:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Stock conflict detected! The stock for this garment was changed while your form was open: "
+                f"{'; '.join(conflicts)}. Please reload live stock to review before saving."
+            ),
+        )
+
+    # 3. Apply changes atomically in a single transaction with audit log
+    try:
+        updated_records = []
+        for item in payload.items:
+            v = variant_map[item.variant_id]
+            if item.new_stock == v.stock:
+                continue  # No change for this variant
+
+            previous_stock = v.stock
+            new_stock = item.new_stock
+            change_amount = new_stock - previous_stock
+
+            v.stock = new_stock
+
+            adj = StockAdjustment(
+                variant_id=v.id,
+                previous_stock=previous_stock,
+                new_stock=new_stock,
+                change_amount=change_amount,
+                reason=payload.reason.upper().strip(),
+                note=payload.note.strip() if payload.note else None,
+                actor_email=current_admin.email,
+            )
+            db.add(adj)
+            updated_records.append((adj, v))
+
+        if updated_records:
+            summary_str = ", ".join(
+                [f"{v.size}: {adj.previous_stock}->{adj.new_stock}" for adj, v in updated_records]
+            )
+            act_entry = ActivityLog(
+                actor_email=current_admin.email,
+                actor_role=current_admin.role or "OWNER",
+                action="BULK_STOCK_ADJUSTMENT",
+                target_type="product",
+                target_id=str(product.id),
+                details=f"{product.name}: Updated {len(updated_records)} variant(s) [{summary_str}] ({payload.reason})",
+            )
+            db.add(act_entry)
+            db.commit()
+
+            for adj, v in updated_records:
+                db.refresh(adj)
+
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to adjust stock atomically: {str(exc)}",
+        )
+
+    # Total stock across all variants of this product
+    total_stock = sum(v.stock for v in variants)
+
+    response_items = [
+        StockAdjustmentResponse(
+            id=adj.id,
+            variant_id=v.id,
+            product_name=product.name,
+            product_slug=product.slug,
+            size=v.size,
+            colour=v.colour,
+            sku=v.sku,
+            previous_stock=adj.previous_stock,
+            new_stock=adj.new_stock,
+            change_amount=adj.change_amount,
+            reason=adj.reason,
+            note=adj.note,
+            actor_email=adj.actor_email,
+            created_at=adj.created_at,
+        )
+        for adj, v in updated_records
+    ]
+
+    msg = (
+        f"Updated {len(updated_records)} variant(s) for '{product.name}'."
+        if updated_records
+        else "No stock changes were made."
+    )
+
+    return BulkStockAdjustmentResponse(
+        product_id=product.id,
+        product_name=product.name,
+        total_stock=total_stock,
+        updated_variants=response_items,
+        message=msg,
+    )
+
+
 @router.get("/inventory/adjustments", response_model=List[StockAdjustmentResponse])
 def admin_list_stock_adjustments(
     variant_id: Optional[int] = None,
+    product_id: Optional[int] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """Retrieve audit history of stock adjustments."""
+    """Retrieve audit history of stock adjustments (filtered by variant or product)."""
     query = (
         db.query(StockAdjustment)
         .join(ProductVariant)
@@ -1216,6 +1448,8 @@ def admin_list_stock_adjustments(
     )
     if variant_id:
         query = query.filter(StockAdjustment.variant_id == variant_id)
+    if product_id:
+        query = query.filter(ProductVariant.product_id == product_id)
 
     adjustments = query.order_by(StockAdjustment.created_at.desc()).limit(limit).all()
     results = []

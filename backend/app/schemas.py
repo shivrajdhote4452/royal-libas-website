@@ -1107,6 +1107,87 @@ class StockAdjustmentCreate(BaseModel):
         return v
 
 
+class BulkStockAdjustmentItem(BaseModel):
+    variant_id: int
+    new_stock: int
+    expected_stock: int
+
+    @field_validator("new_stock", "expected_stock", mode="before")
+    @classmethod
+    def validate_strict_whole_number(cls, v: Any) -> Any:
+        if isinstance(v, bool):
+            raise ValueError("Boolean values are not valid stock counts.")
+        if isinstance(v, float) and not v.is_integer():
+            raise ValueError("Decimals are not permitted. Stock must be a whole integer.")
+        return v
+
+    @field_validator("new_stock")
+    @classmethod
+    def validate_new_stock_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("New stock count must be >= 0")
+        return v
+
+    @field_validator("expected_stock")
+    @classmethod
+    def validate_expected_stock_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("Expected stock count must be >= 0")
+        return v
+
+
+class BulkStockAdjustmentRequest(BaseModel):
+    product_id: int
+    reason: str  # RESTOCK, CORRECTION, DAMAGED, RETURN, OTHER
+    note: Optional[str] = None
+    items: List[BulkStockAdjustmentItem]
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, v: str) -> str:
+        clean = (v or "").upper().strip()
+        allowed = {"RESTOCK", "CORRECTION", "DAMAGED", "RETURN", "OTHER"}
+        if clean not in allowed:
+            raise ValueError(f"Invalid adjustment reason '{v}'. Allowed: {', '.join(sorted(allowed))}")
+        return clean
+
+    @field_validator("items")
+    @classmethod
+    def validate_items_unique_and_non_empty(cls, v: List[BulkStockAdjustmentItem]) -> List[BulkStockAdjustmentItem]:
+        if not v:
+            raise ValueError("At least one variant adjustment must be provided.")
+        vids = [item.variant_id for item in v]
+        if len(vids) != len(set(vids)):
+            raise ValueError("Duplicate variant IDs detected in adjustment payload. Each variant can only appear once.")
+        return v
+
+
+class InventorySummaryResponse(BaseModel):
+    published_products: int
+    published_units: int
+    published_variants: int
+    draft_products: int
+    draft_units: int
+    draft_variants: int
+    archived_products: int
+    archived_units: int
+    archived_variants: int
+    low_stock_products: int
+    low_stock_variants: int
+    out_of_stock_products: int
+    out_of_stock_variants: int
+    total_working_products: int
+    total_working_units: int
+
+
+class BulkStockAdjustmentResponse(BaseModel):
+    product_id: int
+    product_name: str
+    total_stock: int
+    updated_variants: List["StockAdjustmentResponse"]
+    message: str
+
+
 class StockAdjustmentResponse(BaseModel):
     id: int
     variant_id: int
