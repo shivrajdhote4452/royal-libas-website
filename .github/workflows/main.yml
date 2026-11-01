@@ -1,16 +1,25 @@
-name: VPS Connection Test
+name: Deploy Royal Libas
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: royal-libas-vps-deploy
+  cancel-in-progress: false
+
 jobs:
-  connection-test:
+  deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Connect securely to VPS
+      - name: Build and deploy to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -18,12 +27,33 @@ jobs:
           VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
         run: |
           set -eu
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+
           printf '%s %s\n' "$VPS_HOST" "$VPS_HOST_KEY" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes \
+
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
-            "$VPS_USER@$VPS_HOST" 'whoami'
+            "$VPS_USER@$VPS_HOST" bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+
+          expected="$1"
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+
+          bash /usr/local/lib/royal-libas/prepare-release.sh "$expected" | tee "$log"
+
+          release="$(sed -n 's/^RELEASE_NAME=//p' "$log" | tail -n 1)"
+          actual="$(sed -n 's/^RELEASE_SHA=//p' "$log" | tail -n 1)"
+
+          [[ "$release" =~ ^release-[A-Za-z0-9]{8}$ ]]
+          [[ "$actual" = "$expected" ]]
+
+          sudo -n /usr/local/lib/royal-libas/activate-release.sh "$release" "$expected"
+          REMOTE
