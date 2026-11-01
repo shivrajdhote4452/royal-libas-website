@@ -133,7 +133,8 @@ class TestPostgresConcurrency(unittest.TestCase):
 
         except Exception as e:
             cls._cleanup()
-            raise unittest.SkipTest(f"Disposable PostgreSQL unavailable or connection failed: {e}")
+            print(f"PostgreSQL disposable test setup failed: {type(e).__name__}: {e}", file=sys.stderr)
+            raise
 
     @classmethod
     def _cleanup(cls):
@@ -247,3 +248,4 @@ class TestPostgresConcurrency(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
