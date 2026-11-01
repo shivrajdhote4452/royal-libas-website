@@ -658,11 +658,77 @@ export async function adminAdjustStock(
   return response.json();
 }
 
+export interface BulkStockAdjustmentPayload {
+  product_id: number;
+  reason: string;
+  note?: string;
+  items: {
+    variant_id: number;
+    new_stock: number;
+    expected_stock: number;
+  }[];
+}
+
+export interface InventorySummaryData {
+  published_products: number;
+  published_units: number;
+  published_variants: number;
+  draft_products: number;
+  draft_units: number;
+  draft_variants: number;
+  archived_products: number;
+  archived_units: number;
+  archived_variants: number;
+  low_stock_products: number;
+  low_stock_variants: number;
+  out_of_stock_products: number;
+  out_of_stock_variants: number;
+  total_working_products: number;
+  total_working_units: number;
+}
+
+export async function adminGetInventorySummary(token: string): Promise<InventorySummaryData> {
+  const response = await fetch(`${API_BASE_URL}/admin/inventory/summary`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to load inventory summary');
+  }
+  return response.json();
+}
+
+export async function adminBulkAdjustStock(
+  token: string,
+  payload: BulkStockAdjustmentPayload
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/inventory/bulk-adjust`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const err: any = new Error(errorData.detail || 'Failed to adjust product stock');
+    err.status = response.status;
+    err.detail = errorData.detail;
+    throw err;
+  }
+  return response.json();
+}
+
 export async function adminListStockAdjustments(
   token: string,
-  variantId?: number
+  variantId?: number,
+  productId?: number
 ): Promise<any[]> {
-  const query = variantId ? `?variant_id=${variantId}` : '';
+  const params = new URLSearchParams();
+  if (variantId) params.append('variant_id', variantId.toString());
+  if (productId) params.append('product_id', productId.toString());
+  const query = params.toString() ? `?${params.toString()}` : '';
+
   const response = await fetch(`${API_BASE_URL}/admin/inventory/adjustments${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });

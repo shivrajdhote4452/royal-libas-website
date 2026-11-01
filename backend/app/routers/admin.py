@@ -70,6 +70,10 @@ from app.schemas import (
     ActivityLogResponse,
     StockAdjustmentCreate,
     StockAdjustmentResponse,
+    BulkStockAdjustmentItem,
+    BulkStockAdjustmentRequest,
+    BulkStockAdjustmentResponse,
+    InventorySummaryResponse,
     ReturnRequestCreate,
     ReturnStatusUpdateRequest,
     ReturnRequestResponse,
@@ -1065,20 +1069,32 @@ def admin_list_inventory(
     elif norm_filter == "draft":
         query = query.filter(Product.status == "DRAFT")
     elif norm_filter == "low_stock":
-        # Only published live products trigger real low-stock alerts (<=5)
-        query = query.filter(
-            Product.status == "PUBLISHED",
-            Product.is_active == True,
-            ProductVariant.stock > 0,
-            ProductVariant.stock <= 5,
+        # Include all variants of published products that have any low-stock variant (<= 5)
+        subq = (
+            db.query(ProductVariant.product_id)
+            .join(Product)
+            .filter(
+                Product.status == "PUBLISHED",
+                Product.is_active == True,
+                ProductVariant.stock > 0,
+                ProductVariant.stock <= 5,
+            )
+            .distinct()
         )
+        query = query.filter(ProductVariant.product_id.in_(subq))
     elif norm_filter == "out_of_stock":
-        # Out of stock published live products
-        query = query.filter(
-            Product.status == "PUBLISHED",
-            Product.is_active == True,
-            ProductVariant.stock == 0,
+        # Include all variants of published products that have any out-of-stock variant (== 0)
+        subq = (
+            db.query(ProductVariant.product_id)
+            .join(Product)
+            .filter(
+                Product.status == "PUBLISHED",
+                Product.is_active == True,
+                ProductVariant.stock == 0,
+            )
+            .distinct()
         )
+        query = query.filter(ProductVariant.product_id.in_(subq))
     elif norm_filter in ("working", "all"):
         # Default working inventory excludes ARCHIVED legacy items
         query = query.filter(Product.status != "ARCHIVED")
@@ -1090,15 +1106,21 @@ def admin_list_inventory(
 
     if search:
         s = f"%{search.strip()}%"
-        query = query.filter(
-            or_(
-                Product.name.ilike(s),
-                ProductVariant.sku.ilike(s),
-                ProductVariant.colour.ilike(s),
+        subq = (
+            db.query(ProductVariant.product_id)
+            .join(Product)
+            .filter(
+                or_(
+                    Product.name.ilike(s),
+                    ProductVariant.sku.ilike(s),
+                    ProductVariant.colour.ilike(s),
+                )
             )
+            .distinct()
         )
+        query = query.filter(ProductVariant.product_id.in_(subq))
 
-    variants = query.order_by(ProductVariant.stock.asc()).all()
+    variants = query.order_by(Product.id.asc(), ProductVariant.id.asc()).all()
     results = []
     for v in variants:
         img_url = None
@@ -1198,14 +1220,286 @@ def admin_adjust_stock(
     )
 
 
+@router.get("/inventory/summary", response_model=InventorySummaryResponse)
+def admin_get_inventory_summary(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve stable aggregate inventory metrics across the entire boutique catalogue."""
+    # 1. Published Live Catalogue
+    pub_query = (
+        db.query(ProductVariant)
+        .join(Product)
+        .filter(Product.status == "PUBLISHED", Product.is_active == True)
+    )
+    pub_variants = pub_query.all()
+    pub_product_ids = {v.product_id for v in pub_variants}
+    published_units = sum(v.stock for v in pub_variants)
+
+    # Low stock & out of stock on published live products
+    low_stock_variants = [v for v in pub_variants if 0 < v.stock <= 5]
+    low_stock_product_ids = {v.product_id for v in low_stock_variants}
+
+    out_of_stock_variants = [v for v in pub_variants if v.stock == 0]
+    out_of_stock_product_ids = {v.product_id for v in out_of_stock_variants}
+
+    # 2. Draft Setup Catalogue
+    draft_query = (
+        db.query(ProductVariant)
+        .join(Product)
+        .filter(Product.status == "DRAFT")
+    )
+    draft_variants = draft_query.all()
+    draft_product_ids = {v.product_id for v in draft_variants}
+    draft_units = sum(v.stock for v in draft_variants)
+
+    # 3. Archived Catalogue
+    archived_query = (
+        db.query(ProductVariant)
+        .join(Product)
+        .filter(Product.status == "ARCHIVED")
+    )
+    archived_variants = archived_query.all()
+    archived_product_ids = {v.product_id for v in archived_variants}
+    archived_units = sum(v.stock for v in archived_variants)
+
+    # Working catalogue (Published + Draft)
+    working_product_ids = pub_product_ids.union(draft_product_ids)
+    working_units = published_units + draft_units
+
+    return InventorySummaryResponse(
+        published_products=len(pub_product_ids),
+        published_units=published_units,
+        published_variants=len(pub_variants),
+        draft_products=len(draft_product_ids),
+        draft_units=draft_units,
+        draft_variants=len(draft_variants),
+        archived_products=len(archived_product_ids),
+        archived_units=archived_units,
+        archived_variants=len(archived_variants),
+        low_stock_products=len(low_stock_product_ids),
+        low_stock_variants=len(low_stock_variants),
+        out_of_stock_products=len(out_of_stock_product_ids),
+        out_of_stock_variants=len(out_of_stock_variants),
+        total_working_products=len(working_product_ids),
+        total_working_units=working_units,
+    )
+
+
+@router.post("/inventory/bulk-adjust", response_model=BulkStockAdjustmentResponse)
+def admin_bulk_adjust_stock(
+    payload: BulkStockAdjustmentRequest,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Atomically adjust multiple variant stock counts for a product with audit logging and conflict detection."""
+    product = (
+        db.query(Product)
+        .filter(Product.id == payload.product_id)
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product ID {payload.product_id} not found.",
+        )
+
+    # Fetch all variants belonging to this product with row locking
+    variants = (
+        db.query(ProductVariant)
+        .with_for_update()
+        .filter(ProductVariant.product_id == payload.product_id)
+        .all()
+    )
+    variant_map = {v.id: v for v in variants}
+
+    # 1. Validation check: ensure all requested variants belong to this product
+    for item in payload.items:
+        if item.variant_id not in variant_map:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Variant ID {item.variant_id} does not belong to product '{product.name}'.",
+            )
+
+    # 2. Concurrency Conflict Detection:
+    # Mandatory expected_stock check against live database stock
+    conflicts = []
+    for item in payload.items:
+        v = variant_map[item.variant_id]
+        if v.stock != item.expected_stock:
+            conflicts.append(
+                f"{v.size}{f' ({v.colour})' if v.colour else ''}: Current is {v.stock}, form had {item.expected_stock}"
+            )
+
+    if conflicts:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Stock conflict detected! The stock for this garment was changed while your form was open: "
+                f"{'; '.join(conflicts)}. Please reload live stock to review before saving."
+            ),
+        )
+
+    # 3. Apply changes atomically in a single transaction with audit log
+    commit_initiated = False
+    committed = False
+    now_utc = datetime.now(timezone.utc)
+    product_id = product.id
+    product_name = product.name
+    product_slug = product.slug
+
+    # Capture in-memory snapshot of variant metadata safely before modifying state
+    variant_snapshot = {
+        v.id: {
+            "size": v.size,
+            "colour": v.colour,
+            "sku": v.sku,
+            "stock": v.stock,
+        }
+        for v in variants
+    }
+
+    try:
+        adj_records = []
+        for item in payload.items:
+            v = variant_map[item.variant_id]
+            if item.new_stock == v.stock:
+                continue  # No change for this variant
+
+            previous_stock = v.stock
+            new_stock = item.new_stock
+            change_amount = new_stock - previous_stock
+
+            v.stock = new_stock
+            variant_snapshot[v.id]["stock"] = new_stock
+
+            adj = StockAdjustment(
+                variant_id=v.id,
+                previous_stock=previous_stock,
+                new_stock=new_stock,
+                change_amount=change_amount,
+                reason=payload.reason.upper().strip(),
+                note=payload.note.strip() if payload.note else None,
+                actor_email=current_admin.email,
+                created_at=now_utc,
+            )
+            db.add(adj)
+            adj_records.append((adj, v.id, previous_stock, new_stock, change_amount))
+
+        if adj_records:
+            summary_str = ", ".join(
+                [f"{variant_snapshot[vid]['size']}: {prev}->{new}" for adj, vid, prev, new, chg in adj_records]
+            )
+            act_entry = ActivityLog(
+                actor_email=current_admin.email,
+                actor_role=current_admin.role or "OWNER",
+                action="BULK_STOCK_ADJUSTMENT",
+                target_type="product",
+                target_id=str(product_id),
+                details=f"{product_name}: Updated {len(adj_records)} variant(s) [{summary_str}] ({payload.reason})",
+                created_at=now_utc,
+            )
+            db.add(act_entry)
+
+            # Flush to database before commit so real primary key IDs (adj.id) are assigned
+            # while the transaction is active and session attributes are still valid and unexpired.
+            db.flush()
+
+        # Capture complete response data before commit so no post-commit lazy-loads or queries are needed.
+        response_items = []
+        for adj, vid, prev_stock, new_stock, change_amount in adj_records:
+            snap = variant_snapshot[vid]
+            real_adj_id = adj.id
+            if real_adj_id is None:
+                real_adj_id = getattr(adj, "id", None) or 0
+            created_ts = adj.created_at or now_utc
+
+            response_items.append(
+                StockAdjustmentResponse(
+                    id=real_adj_id,
+                    variant_id=vid,
+                    product_name=product_name,
+                    product_slug=product_slug,
+                    size=snap["size"],
+                    colour=snap["colour"],
+                    sku=snap["sku"],
+                    previous_stock=prev_stock,
+                    new_stock=new_stock,
+                    change_amount=change_amount,
+                    reason=payload.reason.upper().strip(),
+                    note=payload.note.strip() if payload.note else None,
+                    actor_email=current_admin.email,
+                    created_at=created_ts,
+                )
+            )
+
+        total_stock = sum(s["stock"] for s in variant_snapshot.values())
+        msg = (
+            f"Updated {len(adj_records)} variant(s) for '{product_name}'."
+            if adj_records
+            else "No stock changes were made."
+        )
+
+        final_response = BulkStockAdjustmentResponse(
+            product_id=product_id,
+            product_name=product_name,
+            total_stock=total_stock,
+            updated_variants=response_items,
+            message=msg,
+        )
+
+        if adj_records:
+            commit_initiated = True
+            db.commit()
+
+        committed = True
+
+    except HTTPException:
+        if not committed:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        raise
+    except Exception as exc:
+        if not commit_initiated:
+            # Failure occurred BEFORE commit was initiated (e.g. during flush or data prep).
+            # The transaction was rolled back and zero stock changes were committed.
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update inventory. The transaction was rolled back and no stock changes were committed.",
+            )
+        elif not committed:
+            # Failure occurred DURING the commit call itself.
+            # Commit outcome could be uncertain; never claim "no changes were committed".
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An error occurred while committing the stock transaction. The final commit status could not be verified. Please reload live stock to check current quantities before retrying.",
+            )
+        else:
+            # Committed is True. Response was already constructed safely.
+            pass
+
+    return final_response
+
+
 @router.get("/inventory/adjustments", response_model=List[StockAdjustmentResponse])
 def admin_list_stock_adjustments(
     variant_id: Optional[int] = None,
+    product_id: Optional[int] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """Retrieve audit history of stock adjustments."""
+    """Retrieve audit history of stock adjustments (filtered by variant or product)."""
     query = (
         db.query(StockAdjustment)
         .join(ProductVariant)
@@ -1216,6 +1510,8 @@ def admin_list_stock_adjustments(
     )
     if variant_id:
         query = query.filter(StockAdjustment.variant_id == variant_id)
+    if product_id:
+        query = query.filter(ProductVariant.product_id == product_id)
 
     adjustments = query.order_by(StockAdjustment.created_at.desc()).limit(limit).all()
     results = []
