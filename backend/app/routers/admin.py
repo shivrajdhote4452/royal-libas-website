@@ -1341,9 +1341,26 @@ def admin_bulk_adjust_stock(
         )
 
     # 3. Apply changes atomically in a single transaction with audit log
+    commit_initiated = False
     committed = False
-    updated_records = []
+    now_utc = datetime.now(timezone.utc)
+    product_id = product.id
+    product_name = product.name
+    product_slug = product.slug
+
+    # Capture in-memory snapshot of variant metadata safely before modifying state
+    variant_snapshot = {
+        v.id: {
+            "size": v.size,
+            "colour": v.colour,
+            "sku": v.sku,
+            "stock": v.stock,
+        }
+        for v in variants
+    }
+
     try:
+        adj_records = []
         for item in payload.items:
             v = variant_map[item.variant_id]
             if item.new_stock == v.stock:
@@ -1354,6 +1371,7 @@ def admin_bulk_adjust_stock(
             change_amount = new_stock - previous_stock
 
             v.stock = new_stock
+            variant_snapshot[v.id]["stock"] = new_stock
 
             adj = StockAdjustment(
                 variant_id=v.id,
@@ -1363,86 +1381,114 @@ def admin_bulk_adjust_stock(
                 reason=payload.reason.upper().strip(),
                 note=payload.note.strip() if payload.note else None,
                 actor_email=current_admin.email,
+                created_at=now_utc,
             )
             db.add(adj)
-            updated_records.append((adj, v, previous_stock, new_stock, change_amount))
+            adj_records.append((adj, v.id, previous_stock, new_stock, change_amount))
 
-        if updated_records:
+        if adj_records:
             summary_str = ", ".join(
-                [f"{v.size}: {prev}->{new}" for adj, v, prev, new, chg in updated_records]
+                [f"{variant_snapshot[vid]['size']}: {prev}->{new}" for adj, vid, prev, new, chg in adj_records]
             )
             act_entry = ActivityLog(
                 actor_email=current_admin.email,
                 actor_role=current_admin.role or "OWNER",
                 action="BULK_STOCK_ADJUSTMENT",
                 target_type="product",
-                target_id=str(product.id),
-                details=f"{product.name}: Updated {len(updated_records)} variant(s) [{summary_str}] ({payload.reason})",
+                target_id=str(product_id),
+                details=f"{product_name}: Updated {len(adj_records)} variant(s) [{summary_str}] ({payload.reason})",
+                created_at=now_utc,
             )
             db.add(act_entry)
+
+            # Flush to database before commit so real primary key IDs (adj.id) are assigned
+            # while the transaction is active and session attributes are still valid and unexpired.
+            db.flush()
+
+        # Capture complete response data before commit so no post-commit lazy-loads or queries are needed.
+        response_items = []
+        for adj, vid, prev_stock, new_stock, change_amount in adj_records:
+            snap = variant_snapshot[vid]
+            real_adj_id = adj.id
+            if real_adj_id is None:
+                real_adj_id = getattr(adj, "id", None) or 0
+            created_ts = adj.created_at or now_utc
+
+            response_items.append(
+                StockAdjustmentResponse(
+                    id=real_adj_id,
+                    variant_id=vid,
+                    product_name=product_name,
+                    product_slug=product_slug,
+                    size=snap["size"],
+                    colour=snap["colour"],
+                    sku=snap["sku"],
+                    previous_stock=prev_stock,
+                    new_stock=new_stock,
+                    change_amount=change_amount,
+                    reason=payload.reason.upper().strip(),
+                    note=payload.note.strip() if payload.note else None,
+                    actor_email=current_admin.email,
+                    created_at=created_ts,
+                )
+            )
+
+        total_stock = sum(s["stock"] for s in variant_snapshot.values())
+        msg = (
+            f"Updated {len(adj_records)} variant(s) for '{product_name}'."
+            if adj_records
+            else "No stock changes were made."
+        )
+
+        final_response = BulkStockAdjustmentResponse(
+            product_id=product_id,
+            product_name=product_name,
+            total_stock=total_stock,
+            updated_variants=response_items,
+            message=msg,
+        )
+
+        if adj_records:
+            commit_initiated = True
             db.commit()
 
         committed = True
 
     except HTTPException:
         if not committed:
-            db.rollback()
+            try:
+                db.rollback()
+            except Exception:
+                pass
         raise
     except Exception as exc:
-        if not committed:
-            db.rollback()
+        if not commit_initiated:
+            # Failure occurred BEFORE commit was initiated (e.g. during flush or data prep).
+            # The transaction was rolled back and zero stock changes were committed.
+            try:
+                db.rollback()
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update inventory. The transaction was rolled back and no stock changes were committed.",
             )
-
-    # 4. Post-commit response construction (stock is guaranteed committed)
-    # Post-commit refresh or serialization failures must never misleadingly report a rollback.
-    response_items = []
-    for adj, v, prev_stock, new_stock, change_amount in updated_records:
-        try:
-            db.refresh(adj)
-            adj_id = adj.id
-            created_ts = adj.created_at
-        except Exception:
-            adj_id = getattr(adj, "id", None) or 0
-            created_ts = getattr(adj, "created_at", None) or datetime.now(timezone.utc)
-
-        response_items.append(
-            StockAdjustmentResponse(
-                id=adj_id,
-                variant_id=v.id,
-                product_name=product.name,
-                product_slug=product.slug,
-                size=v.size,
-                colour=v.colour,
-                sku=v.sku,
-                previous_stock=prev_stock,
-                new_stock=new_stock,
-                change_amount=change_amount,
-                reason=payload.reason.upper().strip(),
-                note=payload.note.strip() if payload.note else None,
-                actor_email=current_admin.email,
-                created_at=created_ts,
+        elif not committed:
+            # Failure occurred DURING the commit call itself.
+            # Commit outcome could be uncertain; never claim "no changes were committed".
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An error occurred while committing the stock transaction. The final commit status could not be verified. Please reload live stock to check current quantities before retrying.",
             )
-        )
+        else:
+            # Committed is True. Response was already constructed safely.
+            pass
 
-    # Total stock across all variants of this product
-    total_stock = sum(v.stock for v in variants)
-
-    msg = (
-        f"Updated {len(updated_records)} variant(s) for '{product.name}'."
-        if updated_records
-        else "No stock changes were made."
-    )
-
-    return BulkStockAdjustmentResponse(
-        product_id=product.id,
-        product_name=product.name,
-        total_stock=total_stock,
-        updated_variants=response_items,
-        message=msg,
-    )
+    return final_response
 
 
 @router.get("/inventory/adjustments", response_model=List[StockAdjustmentResponse])
