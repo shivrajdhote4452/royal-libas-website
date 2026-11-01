@@ -11,10 +11,25 @@ import {
   CreditCard,
   AlertTriangle,
   ShieldAlert,
-  Info,
+  MapPin,
+  Image as ImageIcon,
+  Plus,
+  Trash2,
+  MoveLeft,
+  MoveRight,
+  MoveUp,
+  MoveDown,
+  Star,
+  Upload,
+  Eye,
+  EyeOff,
+  X,
+  Edit2,
 } from 'lucide-react';
-import { useStoreSettings } from '../../lib/settings';
-import { updateAdminStoreSettings } from '../../lib/api';
+import { useStoreSettings, BoutiqueGalleryItem, BoutiqueReviewItem } from '../../lib/settings';
+import { updateAdminStoreSettings, adminUploadMedia } from '../../lib/api';
+import { MediaLibraryPickerModal } from '../../components/admin/MediaLibraryPickerModal';
+import { MediaAsset } from '../../types/product';
 
 export const AdminSettings: React.FC = () => {
   const { settings, updateSettings, syncWithServer } = useStoreSettings();
@@ -33,6 +48,50 @@ export const AdminSettings: React.FC = () => {
   const [codEnabled, setCodEnabled] = useState<boolean>(settings.codEnabled);
   const [onlinePaymentEnabled, setOnlinePaymentEnabled] = useState<boolean>(settings.onlinePaymentEnabled);
   const [showConfirmBothDisabledModal, setShowConfirmBothDisabledModal] = useState<boolean>(false);
+
+  // Boutique Location & Visiting Hours State
+  const [boutiqueName, setBoutiqueName] = useState(settings.boutiqueName);
+  const [boutiqueIntro, setBoutiqueIntro] = useState(settings.boutiqueIntro);
+  const [boutiqueAddress, setBoutiqueAddress] = useState(settings.boutiqueAddress);
+  const [boutiqueShortAddress, setBoutiqueShortAddress] = useState(settings.boutiqueShortAddress);
+  const [boutiquePincode, setBoutiquePincode] = useState(settings.boutiquePincode);
+  const [boutiqueLandmark, setBoutiqueLandmark] = useState(settings.boutiqueLandmark);
+  const [boutiquePhone, setBoutiquePhone] = useState(settings.boutiquePhone);
+  const [boutiqueWhatsapp, setBoutiqueWhatsapp] = useState(settings.boutiqueWhatsapp);
+  const [boutiqueOpeningHours, setBoutiqueOpeningHours] = useState(settings.boutiqueOpeningHours);
+  const [boutiqueWeeklyHoliday, setBoutiqueWeeklyHoliday] = useState(settings.boutiqueWeeklyHoliday);
+  const [boutiqueSpecialNotice, setBoutiqueSpecialNotice] = useState(settings.boutiqueSpecialNotice || '');
+  const [boutiqueDirectionsUrl, setBoutiqueDirectionsUrl] = useState(settings.boutiqueDirectionsUrl);
+  const [boutiqueEmbedUrl, setBoutiqueEmbedUrl] = useState(settings.boutiqueEmbedUrl || '');
+  const [boutiqueReviewsUrl, setBoutiqueReviewsUrl] = useState(settings.boutiqueReviewsUrl || '');
+  const [boutiqueMainImage, setBoutiqueMainImage] = useState(settings.boutiqueMainImage || '');
+  const [boutiqueGallery, setBoutiqueGallery] = useState<BoutiqueGalleryItem[]>(settings.boutiqueGallery || []);
+  const [boutiqueSectionVisible, setBoutiqueSectionVisible] = useState<boolean>(settings.boutiqueSectionVisible ?? true);
+
+  // Selected Customer Reviews State
+  const [boutiqueReviews, setBoutiqueReviews] = useState<BoutiqueReviewItem[]>(settings.boutiqueReviews || []);
+  const [boutiqueReviewsVisible, setBoutiqueReviewsVisible] = useState<boolean>(settings.boutiqueReviewsVisible ?? false);
+
+  // Media Library & Upload State
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<'main' | 'gallery'>('main');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Review Dialog State
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [editingReviewIndex, setEditingReviewIndex] = useState<number | null>(null);
+  const [reviewForm, setReviewForm] = useState<BoutiqueReviewItem>({
+    id: '',
+    author_name: '',
+    rating: 5,
+    review_text: '',
+    review_date: '',
+    source_url: '',
+    verified_date: '',
+    is_published: true,
+    sort_order: 0,
+  });
 
   // RBAC role state
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
@@ -63,7 +122,192 @@ export const AdminSettings: React.FC = () => {
     setInstagramHandle(settings.instagramHandle);
     setCodEnabled(settings.codEnabled);
     setOnlinePaymentEnabled(settings.onlinePaymentEnabled);
+
+    // Boutique state sync
+    setBoutiqueName(settings.boutiqueName);
+    setBoutiqueIntro(settings.boutiqueIntro);
+    setBoutiqueAddress(settings.boutiqueAddress);
+    setBoutiqueShortAddress(settings.boutiqueShortAddress);
+    setBoutiquePincode(settings.boutiquePincode);
+    setBoutiqueLandmark(settings.boutiqueLandmark);
+    setBoutiquePhone(settings.boutiquePhone);
+    setBoutiqueWhatsapp(settings.boutiqueWhatsapp);
+    setBoutiqueOpeningHours(settings.boutiqueOpeningHours);
+    setBoutiqueWeeklyHoliday(settings.boutiqueWeeklyHoliday);
+    setBoutiqueSpecialNotice(settings.boutiqueSpecialNotice || '');
+    setBoutiqueDirectionsUrl(settings.boutiqueDirectionsUrl);
+    setBoutiqueEmbedUrl(settings.boutiqueEmbedUrl || '');
+    setBoutiqueReviewsUrl(settings.boutiqueReviewsUrl || '');
+    setBoutiqueMainImage(settings.boutiqueMainImage || '');
+    setBoutiqueGallery(settings.boutiqueGallery || []);
+    setBoutiqueSectionVisible(settings.boutiqueSectionVisible ?? true);
+
+    // Reviews state sync
+    setBoutiqueReviews(settings.boutiqueReviews || []);
+    setBoutiqueReviewsVisible(settings.boutiqueReviewsVisible ?? false);
   }, [settings]);
+
+  // Handle iframe or direct embed URL cleaning
+  const handleEmbedUrlChange = (val: string) => {
+    const trimmed = val.trim();
+    if (trimmed.includes('<iframe') && trimmed.includes('src=')) {
+      const match = trimmed.match(/src=["'](https:\/\/[^"']+)["']/i);
+      if (match && match[1]) {
+        setBoutiqueEmbedUrl(match[1]);
+        return;
+      }
+    }
+    setBoutiqueEmbedUrl(trimmed);
+  };
+
+  // Upload handler for main image or gallery
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'main' | 'gallery') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      const uploaded = await adminUploadMedia(token, file, 'royal_libas/boutique');
+      const assetUrl = uploaded.secure_url || uploaded.url;
+      if (target === 'main') {
+        setBoutiqueMainImage(assetUrl);
+      } else {
+        if (boutiqueGallery.length >= 4) {
+          setUploadError('Maximum 4 photographs allowed in the boutique gallery.');
+          return;
+        }
+        setBoutiqueGallery([
+          ...boutiqueGallery,
+          {
+            id: String(uploaded.id || Date.now()),
+            url: assetUrl,
+            caption: file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' '),
+          },
+        ]);
+      }
+    } catch (err: any) {
+      setUploadError(err.message || 'Failed to upload photo.');
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  // Media picker select callback
+  const handleSelectMedia = (selectedAssets: MediaAsset[]) => {
+    if (selectedAssets.length === 0) return;
+    if (pickerTarget === 'main') {
+      const asset = selectedAssets[0];
+      setBoutiqueMainImage(asset.secure_url || asset.url);
+    } else {
+      const remainingSlots = 4 - boutiqueGallery.length;
+      if (remainingSlots <= 0) {
+        setUploadError('Maximum 4 photographs allowed in the boutique gallery.');
+        setIsPickerOpen(false);
+        return;
+      }
+      const newItems: BoutiqueGalleryItem[] = selectedAssets.slice(0, remainingSlots).map((asset) => ({
+        id: String(asset.id || asset.public_id || Date.now()),
+        url: asset.secure_url || asset.url,
+        caption: asset.filename ? asset.filename.replace(/\.[^/.]+$/, '').replace(/_/g, ' ') : 'Boutique Photo',
+      }));
+      setBoutiqueGallery([...boutiqueGallery, ...newItems]);
+    }
+    setIsPickerOpen(false);
+  };
+
+  // Gallery manipulation
+  const handleMoveGallery = (index: number, direction: -1 | 1) => {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= boutiqueGallery.length) return;
+    const updated = [...boutiqueGallery];
+    const [item] = updated.splice(index, 1);
+    updated.splice(targetIdx, 0, item);
+    setBoutiqueGallery(updated);
+  };
+
+  const handleRemoveGallery = (index: number) => {
+    setBoutiqueGallery(boutiqueGallery.filter((_, i) => i !== index));
+  };
+
+  const handleGalleryCaptionChange = (index: number, caption: string) => {
+    const updated = [...boutiqueGallery];
+    updated[index] = { ...updated[index], caption };
+    setBoutiqueGallery(updated);
+  };
+
+  // Reviews manipulation
+  const handleMoveReview = (index: number, direction: -1 | 1) => {
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= boutiqueReviews.length) return;
+    const updated = [...boutiqueReviews];
+    const [item] = updated.splice(index, 1);
+    updated.splice(targetIdx, 0, item);
+    updated.forEach((r, idx) => {
+      r.sort_order = idx;
+    });
+    setBoutiqueReviews(updated);
+  };
+
+  const handleRemoveReview = (index: number) => {
+    setBoutiqueReviews(boutiqueReviews.filter((_, i) => i !== index));
+  };
+
+  const handleToggleReviewPublished = (index: number) => {
+    const updated = [...boutiqueReviews];
+    updated[index] = { ...updated[index], is_published: !updated[index].is_published };
+    setBoutiqueReviews(updated);
+  };
+
+  const openAddReviewModal = () => {
+    setEditingReviewIndex(null);
+    setReviewForm({
+      id: `rev-${Date.now()}`,
+      author_name: '',
+      rating: 5,
+      review_text: '',
+      review_date: '',
+      source_url: '',
+      verified_date: new Date().toISOString().split('T')[0],
+      is_published: true,
+      sort_order: boutiqueReviews.length,
+    });
+    setIsReviewModalOpen(true);
+  };
+
+  const openEditReviewModal = (index: number) => {
+    setEditingReviewIndex(index);
+    setReviewForm({ ...boutiqueReviews[index] });
+    setIsReviewModalOpen(true);
+  };
+
+  const handleSaveReviewModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewForm.author_name.trim() || !reviewForm.review_text.trim()) {
+      return;
+    }
+
+    if (editingReviewIndex !== null) {
+      const updated = [...boutiqueReviews];
+      updated[editingReviewIndex] = {
+        ...reviewForm,
+        author_name: reviewForm.author_name.trim(),
+        review_text: reviewForm.review_text.trim(),
+      };
+      setBoutiqueReviews(updated);
+    } else {
+      setBoutiqueReviews([
+        ...boutiqueReviews,
+        {
+          ...reviewForm,
+          author_name: reviewForm.author_name.trim(),
+          review_text: reviewForm.review_text.trim(),
+          sort_order: boutiqueReviews.length,
+        },
+      ]);
+    }
+    setIsReviewModalOpen(false);
+  };
 
   const executeSave = async () => {
     setIsSaving(true);
@@ -89,6 +333,26 @@ export const AdminSettings: React.FC = () => {
           instagram_handle: instagramHandle.trim(),
           cod_enabled: codEnabled,
           online_payment_enabled: onlinePaymentEnabled,
+          // Boutique Location & Information
+          boutique_name: boutiqueName.trim(),
+          boutique_intro: boutiqueIntro.trim(),
+          boutique_address: boutiqueAddress.trim(),
+          boutique_short_address: boutiqueShortAddress.trim(),
+          boutique_pincode: boutiquePincode.trim(),
+          boutique_landmark: boutiqueLandmark.trim(),
+          boutique_phone: boutiquePhone.trim(),
+          boutique_whatsapp: boutiqueWhatsapp.trim(),
+          boutique_opening_hours: boutiqueOpeningHours.trim(),
+          boutique_weekly_holiday: boutiqueWeeklyHoliday.trim(),
+          boutique_special_notice: boutiqueSpecialNotice.trim() || null,
+          boutique_directions_url: boutiqueDirectionsUrl.trim() || null,
+          boutique_embed_url: boutiqueEmbedUrl.trim() || null,
+          boutique_reviews_url: boutiqueReviewsUrl.trim() || null,
+          boutique_main_image: boutiqueMainImage.trim() || null,
+          boutique_gallery_json: JSON.stringify(boutiqueGallery),
+          boutique_section_visible: boutiqueSectionVisible,
+          boutique_reviews_json: JSON.stringify(boutiqueReviews),
+          boutique_reviews_visible: boutiqueReviewsVisible,
         });
       }
 
@@ -101,6 +365,26 @@ export const AdminSettings: React.FC = () => {
         instagramHandle: instagramHandle.trim(),
         codEnabled,
         onlinePaymentEnabled,
+        // Boutique Location & Information
+        boutiqueName: boutiqueName.trim(),
+        boutiqueIntro: boutiqueIntro.trim(),
+        boutiqueAddress: boutiqueAddress.trim(),
+        boutiqueShortAddress: boutiqueShortAddress.trim(),
+        boutiquePincode: boutiquePincode.trim(),
+        boutiqueLandmark: boutiqueLandmark.trim(),
+        boutiquePhone: boutiquePhone.trim(),
+        boutiqueWhatsapp: boutiqueWhatsapp.trim(),
+        boutiqueOpeningHours: boutiqueOpeningHours.trim(),
+        boutiqueWeeklyHoliday: boutiqueWeeklyHoliday.trim(),
+        boutiqueSpecialNotice: boutiqueSpecialNotice.trim() || null,
+        boutiqueDirectionsUrl: boutiqueDirectionsUrl.trim() || 'https://share.google/rdahckZ4nVz7Bgu2H',
+        boutiqueEmbedUrl: boutiqueEmbedUrl.trim() || null,
+        boutiqueReviewsUrl: boutiqueReviewsUrl.trim() || null,
+        boutiqueMainImage: boutiqueMainImage.trim() || '/images/editorial/brand_story_hero.jpg',
+        boutiqueGallery,
+        boutiqueSectionVisible,
+        boutiqueReviews,
+        boutiqueReviewsVisible,
       });
 
       setSaved(true);
@@ -115,7 +399,6 @@ export const AdminSettings: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    // If both payment methods are disabled, warn the user before proceeding
     if (!codEnabled && !onlinePaymentEnabled) {
       setShowConfirmBothDisabledModal(true);
       return;
@@ -126,7 +409,7 @@ export const AdminSettings: React.FC = () => {
   const isRoleUnauthorized = currentUserRole !== null && currentUserRole !== 'OWNER';
 
   return (
-    <div className="space-y-6 font-sans max-w-4xl">
+    <div className="space-y-6 font-sans max-w-4xl pb-16">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-[#E8DFD0]">
         <div>
@@ -135,7 +418,7 @@ export const AdminSettings: React.FC = () => {
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">Store Settings</h1>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
-            Configure payment methods, logistics thresholds, top announcement bar, and boutique contacts
+            Configure boutique location, visiting hours, customer reviews, payment methods, and thresholds
           </p>
         </div>
 
@@ -160,14 +443,626 @@ export const AdminSettings: React.FC = () => {
             <p className="font-bold">Restricted Access (Role: {currentUserRole})</p>
             <p className="mt-0.5 text-amber-800">
               Only store administrators with the <strong>OWNER</strong> role have permission to save modifications to
-              payment methods and shipping settings. Settings are shown in read-only preview mode.
+              store settings and location. Settings are shown in read-only preview mode.
             </p>
           </div>
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* Payment Methods Section (Point 1: Payment Controls) */}
+      <form onSubmit={handleSave} className="space-y-8">
+        {/* ========================================================
+            1. BOUTIQUE LOCATION & VISITING HOURS (New Feature)
+            ======================================================== */}
+        <div className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-[#5E1224]/10 border border-[#B58A3C]/40 flex items-center justify-center">
+                <MapPin className="w-5 h-5 text-[#5E1224]" />
+              </div>
+              <div>
+                <h2 className="font-serif font-bold text-base text-gray-900">
+                  Flagship Boutique Location & Visiting Hours
+                </h2>
+                <p className="text-[11px] text-gray-500">
+                  Manage physical store address, hours, Google Maps links, and gallery
+                </p>
+              </div>
+            </div>
+
+            {/* Homepage Section Visibility Toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-700 hidden sm:inline">
+                Homepage Visibility
+              </span>
+              <button
+                type="button"
+                disabled={isRoleUnauthorized}
+                onClick={() => setBoutiqueSectionVisible(!boutiqueSectionVisible)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  boutiqueSectionVisible ? 'bg-emerald-600' : 'bg-gray-300'
+                } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                role="switch"
+                aria-checked={boutiqueSectionVisible}
+                aria-label="Toggle Boutique Section on Homepage"
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    boutiqueSectionVisible ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Name & Intro */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Boutique Display Name
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueName}
+                onChange={(e) => setBoutiqueName(e.target.value)}
+                placeholder="Royal Libas by Tanya"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Short Introduction / Tagline
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueIntro}
+                onChange={(e) => setBoutiqueIntro(e.target.value)}
+                placeholder="Experience our master craftsmanship in person at our flagship Jhansi boutique."
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+          </div>
+
+          {/* Addresses */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Full Postal Address (Contact Page & Directions)
+              </label>
+              <textarea
+                rows={2}
+                disabled={isRoleUnauthorized}
+                value={boutiqueAddress}
+                onChange={(e) => setBoutiqueAddress(e.target.value)}
+                placeholder="Opposite Hotel Ambrosia, Prem Ganj, Sipri Bazar, Jhansi, Uttar Pradesh 284003"
+                className="w-full px-3.5 py-2 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Short Footer Address (Footer Brand Column)
+              </label>
+              <textarea
+                rows={2}
+                disabled={isRoleUnauthorized}
+                value={boutiqueShortAddress}
+                onChange={(e) => setBoutiqueShortAddress(e.target.value)}
+                placeholder="Opp. Hotel Ambrosia, Prem Ganj, Sipri Bazar, Jhansi, UP 284003"
+                className="w-full px-3.5 py-2 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+          </div>
+
+          {/* Landmark & PIN */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Landmark</label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueLandmark}
+                onChange={(e) => setBoutiqueLandmark(e.target.value)}
+                placeholder="Opposite Hotel Ambrosia"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Postal PIN Code</label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiquePincode}
+                onChange={(e) => setBoutiquePincode(e.target.value)}
+                placeholder="284003"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+          </div>
+
+          {/* Phone & WhatsApp */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Boutique Phone Number
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiquePhone}
+                onChange={(e) => setBoutiquePhone(e.target.value)}
+                placeholder="+91 98112 23344"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Boutique WhatsApp Number
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueWhatsapp}
+                onChange={(e) => setBoutiqueWhatsapp(e.target.value)}
+                placeholder="+91 98112 23344"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+          </div>
+
+          {/* Visiting Hours, Weekly Holiday, Special Notice */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Physical Visiting Hours
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueOpeningHours}
+                onChange={(e) => setBoutiqueOpeningHours(e.target.value)}
+                placeholder="Mon – Sat: 10:30 AM – 8:30 PM"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Weekly Holiday
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueWeeklyHoliday}
+                onChange={(e) => setBoutiqueWeeklyHoliday(e.target.value)}
+                placeholder="Sunday"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Special Closure Notice (Optional)
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueSpecialNotice}
+                onChange={(e) => setBoutiqueSpecialNotice(e.target.value)}
+                placeholder="Closed on Diwali, Nov 1"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+          </div>
+
+          {/* URLs: Directions, Embed, Reviews */}
+          <div className="space-y-4 pt-2 border-t border-gray-100">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Google Maps Directions URL
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueDirectionsUrl}
+                onChange={(e) => setBoutiqueDirectionsUrl(e.target.value)}
+                placeholder="https://share.google/rdahckZ4nVz7Bgu2H"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Destination for &ldquo;Get Directions&rdquo; buttons on Homepage and Contact page
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Google Map Embed URL (or paste &lt;iframe&gt; code)
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueEmbedUrl}
+                onChange={(e) => handleEmbedUrlChange(e.target.value)}
+                placeholder="https://www.google.com/maps/embed?pb=... or paste <iframe> code"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60 font-mono text-[11px]"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                If omitted, an elegant fallback directions card is rendered without a broken iframe
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Google Reviews / Listing URL
+              </label>
+              <input
+                type="text"
+                disabled={isRoleUnauthorized}
+                value={boutiqueReviewsUrl}
+                onChange={(e) => setBoutiqueReviewsUrl(e.target.value)}
+                placeholder="https://share.google/rdahckZ4nVz7Bgu2H"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DFD0] text-xs font-medium focus:outline-none focus:border-[#5E1224] bg-[#FCF8F0] disabled:opacity-60"
+              />
+            </div>
+          </div>
+
+          {/* Main Homepage Boutique Photo */}
+          <div className="pt-4 border-t border-gray-100 space-y-3">
+            <label className="block text-xs font-semibold text-gray-700">
+              Main Homepage Boutique Photograph
+            </label>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="w-40 aspect-video rounded-lg overflow-hidden border border-[#B58A3C]/40 bg-gray-100 shrink-0">
+                {boutiqueMainImage ? (
+                  <img
+                    src={boutiqueMainImage}
+                    alt="Boutique main preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                    No Photo Set
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isRoleUnauthorized || isUploading}
+                    onClick={() => {
+                      setPickerTarget('main');
+                      setIsPickerOpen(true);
+                    }}
+                    className="px-3.5 py-2 bg-[#5E1224] text-white rounded-lg text-xs font-medium hover:bg-[#4A0E1C] transition-colors flex items-center gap-1.5"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-[#B58A3C]" />
+                    <span>Choose from Media Library</span>
+                  </button>
+
+                  <label className="px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5 text-gray-500" />
+                    <span>Upload New</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={isRoleUnauthorized || isUploading}
+                      onChange={(e) => handleFileUpload(e, 'main')}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {boutiqueMainImage && (
+                    <button
+                      type="button"
+                      disabled={isRoleUnauthorized}
+                      onClick={() => setBoutiqueMainImage('')}
+                      className="px-3 py-2 text-xs text-red-600 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Featured on the left side of the &ldquo;Visit Our Boutique&rdquo; homepage section
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Boutique Gallery (Up to 4 Photos) */}
+          <div className="pt-4 border-t border-gray-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Boutique Gallery Showcase (Up to 4 Photographs)
+                </label>
+                <p className="text-[11px] text-gray-400">
+                  Featured on the Contact page &ldquo;Visit Our Boutique&rdquo; section with interactive lightbox preview
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRoleUnauthorized || isUploading || boutiqueGallery.length >= 4}
+                  onClick={() => {
+                    setPickerTarget('gallery');
+                    setIsPickerOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-[#5E1224] text-white rounded-lg text-xs font-medium hover:bg-[#4A0E1C] transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add from Library</span>
+                </button>
+
+                <label
+                  className={`px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center gap-1.5 ${
+                    boutiqueGallery.length >= 4 ? 'opacity-40 pointer-events-none' : ''
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5 text-gray-500" />
+                  <span>Upload</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={isRoleUnauthorized || isUploading || boutiqueGallery.length >= 4}
+                    onChange={(e) => handleFileUpload(e, 'gallery')}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {uploadError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
+            {/* Gallery Thumbnails List */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {boutiqueGallery.map((item, idx) => (
+                <div
+                  key={item.id || idx}
+                  className="p-3 bg-[#FCF8F0] border border-[#B58A3C]/30 rounded-xl space-y-2.5"
+                >
+                  <div className="aspect-[4/3] rounded-lg overflow-hidden border border-gray-200 bg-black/5 relative group">
+                    <img src={item.url} alt={item.caption || 'Gallery photo'} className="w-full h-full object-cover" />
+                    <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-black/60 text-white text-[10px] font-mono font-bold">
+                      #{idx + 1}
+                    </span>
+                  </div>
+
+                  <input
+                    type="text"
+                    disabled={isRoleUnauthorized}
+                    value={item.caption || ''}
+                    onChange={(e) => handleGalleryCaptionChange(idx, e.target.value)}
+                    placeholder="Caption / description"
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
+                  />
+
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-200/60">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={isRoleUnauthorized || idx === 0}
+                        onClick={() => handleMoveGallery(idx, -1)}
+                        className="p-1 text-gray-600 hover:text-gray-900 disabled:opacity-20"
+                        title="Move left"
+                      >
+                        <MoveLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isRoleUnauthorized || idx === boutiqueGallery.length - 1}
+                        onClick={() => handleMoveGallery(idx, 1)}
+                        className="p-1 text-gray-600 hover:text-gray-900 disabled:opacity-20"
+                        title="Move right"
+                      >
+                        <MoveRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isRoleUnauthorized}
+                      onClick={() => handleRemoveGallery(idx)}
+                      className="p-1 text-red-600 hover:text-red-800"
+                      title="Remove image"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {boutiqueGallery.length === 0 && (
+              <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                No boutique gallery photos selected. Default atelier editorial images are shown on the Contact page.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ========================================================
+            2. SELECTED CUSTOMER REVIEWS MANAGER
+            ======================================================== */}
+        <div className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-[#B58A3C]/10 border border-[#B58A3C]/40 flex items-center justify-center">
+                <Star className="w-5 h-5 text-[#B58A3C]" />
+              </div>
+              <div>
+                <h2 className="font-serif font-bold text-base text-gray-900">
+                  Selected Customer Reviews
+                </h2>
+                <p className="text-[11px] text-gray-500">
+                  Curate verified Google reviews and patron experiences to feature on the homepage
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-gray-700 hidden sm:inline">
+                Publish on Homepage
+              </span>
+              <button
+                type="button"
+                disabled={isRoleUnauthorized}
+                onClick={() => setBoutiqueReviewsVisible(!boutiqueReviewsVisible)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  boutiqueReviewsVisible ? 'bg-emerald-600' : 'bg-gray-300'
+                } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                role="switch"
+                aria-checked={boutiqueReviewsVisible}
+                aria-label="Toggle Reviews on Homepage"
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    boutiqueReviewsVisible ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-[#FCF8F0] border border-[#B58A3C]/30 text-xs text-gray-700 rounded-xl space-y-1">
+            <p className="font-semibold text-[#5E1224]">Authenticity Standard:</p>
+            <p className="text-gray-600 leading-relaxed text-[11.5px]">
+              Only genuine patron reviews verified from Google Maps, Justdial, or direct boutique visits should be
+              entered. Do not fabricate ratings or invent reviews. If no verified reviews are ready, keep this section
+              unpublished.
+            </p>
+          </div>
+
+          {/* Reviews List */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                Curated Reviews ({boutiqueReviews.length})
+              </span>
+              <button
+                type="button"
+                disabled={isRoleUnauthorized}
+                onClick={openAddReviewModal}
+                className="px-3.5 py-1.5 bg-[#5E1224] text-white rounded-lg text-xs font-medium hover:bg-[#4A0E1C] transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Verified Review</span>
+              </button>
+            </div>
+
+            {boutiqueReviews.map((rev, idx) => (
+              <div
+                key={rev.id || idx}
+                className="p-4 bg-[#FCF8F0]/70 border border-[#E8DFD0] rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+              >
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-gray-900">{rev.author_name}</span>
+                    <div className="flex items-center text-[#B58A3C]">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`w-3.5 h-3.5 ${
+                            i < Math.round(rev.rating) ? 'fill-[#B58A3C] text-[#B58A3C]' : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    {rev.is_published ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                        Published
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-200 text-gray-700">
+                        Draft
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-700 italic font-light">&ldquo;{rev.review_text}&rdquo;</p>
+                  <div className="flex items-center gap-3 text-[10px] text-gray-500 font-mono">
+                    {rev.review_date && <span>Date: {rev.review_date}</span>}
+                    {rev.verified_date && <span>Verified: {rev.verified_date}</span>}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                  <button
+                    type="button"
+                    disabled={isRoleUnauthorized}
+                    onClick={() => handleToggleReviewPublished(idx)}
+                    className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-white"
+                    title={rev.is_published ? 'Unpublish' : 'Publish'}
+                  >
+                    {rev.is_published ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-emerald-600" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isRoleUnauthorized || idx === 0}
+                    onClick={() => handleMoveReview(idx, -1)}
+                    className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-white disabled:opacity-20"
+                    title="Move up"
+                  >
+                    <MoveUp className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isRoleUnauthorized || idx === boutiqueReviews.length - 1}
+                    onClick={() => handleMoveReview(idx, 1)}
+                    className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-white disabled:opacity-20"
+                    title="Move down"
+                  >
+                    <MoveDown className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isRoleUnauthorized}
+                    onClick={() => openEditReviewModal(idx)}
+                    className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-white"
+                    title="Edit review"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isRoleUnauthorized}
+                    onClick={() => handleRemoveReview(idx)}
+                    className="p-2 text-red-600 hover:text-red-800 rounded-lg hover:bg-white"
+                    title="Delete review"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {boutiqueReviews.length === 0 && (
+              <p className="text-xs text-gray-400 italic text-center py-5 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                No customer reviews added yet. Click &ldquo;Add Verified Review&rdquo; to add your first review.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ========================================================
+            3. PAYMENT SETTINGS & CHECKOUT CONTROLS
+            ======================================================== */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-5">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div className="flex items-center gap-2">
@@ -184,22 +1079,20 @@ export const AdminSettings: React.FC = () => {
             without requiring server restarts or code changes.
           </p>
 
-          {/* Both Methods Disabled Critical Alert */}
           {!codEnabled && !onlinePaymentEnabled && (
             <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-3 animate-pulse">
               <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold text-red-800">Warning: All Payment Methods Disabled</p>
                 <p className="mt-0.5 text-red-700">
-                  With both COD and Online Payments turned OFF, customers cannot place any orders at checkout. The
-                  checkout page will display a paused notification until at least one method is re-enabled.
+                  With both COD and Online Payments turned OFF, customers cannot place any orders at checkout.
                 </p>
               </div>
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Cash on Delivery (COD) Toggle */}
+            {/* COD Toggle */}
             <div
               className={`p-4 rounded-xl border transition-all ${
                 codEnabled ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 bg-gray-50/50'
@@ -239,11 +1132,6 @@ export const AdminSettings: React.FC = () => {
                 </span>
                 <span className="text-[11px] text-gray-500">Default: OFF for new orders</span>
               </div>
-
-              <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
-                When enabled, eligible customers can pay in cash or UPI to the courier upon delivery. When disabled, COD
-                is hidden from checkout and rejected by the API.
-              </p>
             </div>
 
             {/* Cashfree Online Payments Toggle */}
@@ -286,37 +1174,13 @@ export const AdminSettings: React.FC = () => {
                 </span>
                 <span className="text-[11px] text-gray-500">Default: ON</span>
               </div>
-
-              <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
-                Supports instant online checkout via UPI (Google Pay, PhonePe, Paytm), Credit/Debit Cards, Net Banking,
-                and Wallets through Cashfree gateway.
-              </p>
-            </div>
-          </div>
-
-          {/* Granular Instrument Note */}
-          <div className="p-3.5 rounded-xl bg-[#FCF8F0] border border-[#E8DFD0] text-xs text-gray-700 flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-[#B58A3C] shrink-0 mt-0.5" />
-            <div className="text-[11.5px] leading-relaxed">
-              <span className="font-semibold text-gray-900">Cashfree Gateway Configuration Note:</span>
-              <p className="text-gray-600 mt-0.5">
-                Specific payment instruments (e.g. enabling or disabling specific credit card issuers, EMIs, or UPI apps)
-                are managed inside your{' '}
-                <a
-                  href="https://merchant.cashfree.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#5E1224] underline hover:text-[#4A0E1C] font-medium"
-                >
-                  Cashfree Merchant Dashboard
-                </a>
-                . The toggles above control whether online checkout is permitted on Royal Libas.
-              </p>
             </div>
           </div>
         </div>
 
-        {/* Logistics & Delivery Settings */}
+        {/* ========================================================
+            4. LOGISTICS & DELIVERY SETTINGS
+            ======================================================== */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
             <Truck className="w-5 h-5 text-[#B58A3C]" />
@@ -354,7 +1218,9 @@ export const AdminSettings: React.FC = () => {
           </div>
         </div>
 
-        {/* Announcement Bar Message */}
+        {/* ========================================================
+            5. TOP ANNOUNCEMENT BANNER
+            ======================================================== */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
             <Bell className="w-5 h-5 text-[#B58A3C]" />
@@ -378,11 +1244,13 @@ export const AdminSettings: React.FC = () => {
           </div>
         </div>
 
-        {/* Contact & Social Channels */}
+        {/* ========================================================
+            6. BOUTIQUE CONTACT CHANNELS (Concierge Support)
+            ======================================================== */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8DFD0] shadow-sm space-y-4">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
             <MessageCircle className="w-5 h-5 text-[#B58A3C]" />
-            <h2 className="font-serif font-bold text-base text-gray-900">Boutique Contact Channels</h2>
+            <h2 className="font-serif font-bold text-base text-gray-900">Online Concierge Channels</h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -398,7 +1266,7 @@ export const AdminSettings: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Customer Email</label>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Customer Support Email</label>
               <input
                 type="text"
                 disabled={isRoleUnauthorized}
@@ -422,14 +1290,14 @@ export const AdminSettings: React.FC = () => {
         </div>
 
         {/* Save Button */}
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <button
             type="submit"
             disabled={isSaving || isRoleUnauthorized}
-            className="inline-flex items-center gap-2 px-7 py-3 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white text-xs font-ui font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors"
+            className="inline-flex items-center gap-2 px-8 py-3.5 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white text-xs font-ui font-semibold uppercase tracking-wider rounded-lg shadow-md transition-colors"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{isSaving ? 'Saving to Server...' : 'Save Settings'}</span>
+            <span>{isSaving ? 'Saving Settings...' : 'Save All Settings'}</span>
           </button>
         </div>
       </form>
@@ -475,6 +1343,140 @@ export const AdminSettings: React.FC = () => {
                 <span>Confirm & Save</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Media Library Picker Modal */}
+      <MediaLibraryPickerModal
+        isOpen={isPickerOpen}
+        onClose={() => setIsPickerOpen(false)}
+        onSelect={handleSelectMedia}
+        title={pickerTarget === 'main' ? 'Select Main Boutique Photo' : 'Select Gallery Photos'}
+      />
+
+      {/* Add / Edit Review Modal */}
+      {isReviewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="font-serif font-bold text-base text-gray-900">
+                {editingReviewIndex !== null ? 'Edit Customer Review' : 'Add Verified Customer Review'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsReviewModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveReviewModal} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">Customer / Author Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={reviewForm.author_name}
+                  onChange={(e) => setReviewForm({ ...reviewForm, author_name: e.target.value })}
+                  placeholder="e.g. Meenakshi Sharma"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">Rating (1 to 5 Stars)</label>
+                  <select
+                    value={reviewForm.rating}
+                    onChange={(e) => setReviewForm({ ...reviewForm, rating: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224] bg-white"
+                  >
+                    <option value={5}>5 Stars (Exceptional)</option>
+                    <option value={4}>4 Stars (Very Good)</option>
+                    <option value={3}>3 Stars (Good)</option>
+                    <option value={2}>2 Stars (Fair)</option>
+                    <option value={1}>1 Star</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">Review Date</label>
+                  <input
+                    type="text"
+                    value={reviewForm.review_date || ''}
+                    onChange={(e) => setReviewForm({ ...reviewForm, review_date: e.target.value })}
+                    placeholder="e.g. October 2026"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1">Review Text / Excerpt *</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={reviewForm.review_text}
+                  onChange={(e) => setReviewForm({ ...reviewForm, review_text: e.target.value })}
+                  placeholder="The craftsmanship and bespoke fitting of my festive suit were extraordinary..."
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">Source URL (Google Link)</label>
+                  <input
+                    type="text"
+                    value={reviewForm.source_url || ''}
+                    onChange={(e) => setReviewForm({ ...reviewForm, source_url: e.target.value })}
+                    placeholder="https://maps.google.com/..."
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 mb-1">Verification Date</label>
+                  <input
+                    type="date"
+                    value={reviewForm.verified_date || ''}
+                    onChange={(e) => setReviewForm({ ...reviewForm, verified_date: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="rev_publish"
+                  checked={reviewForm.is_published}
+                  onChange={(e) => setReviewForm({ ...reviewForm, is_published: e.target.checked })}
+                  className="w-4 h-4 text-[#5E1224] rounded border-gray-300"
+                />
+                <label htmlFor="rev_publish" className="font-semibold text-gray-700 cursor-pointer">
+                  Mark as Published (Visible on storefront if section is enabled)
+                </label>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsReviewModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded-lg font-semibold uppercase tracking-wider"
+                >
+                  Save Review
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,3 +1,6 @@
+import json
+import re
+import urllib.parse
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
@@ -729,6 +732,27 @@ class StoreSettingResponse(BaseModel):
     cod_enabled: bool = False
     online_payment_enabled: bool = True
 
+    # Boutique Location & Visiting Hours
+    boutique_name: Optional[str] = "Royal Libas by Tanya"
+    boutique_intro: Optional[str] = "Experience our master craftsmanship, bespoke tailoring consultations, and luxury handloom collections in person at our flagship Jhansi boutique."
+    boutique_address: Optional[str] = "Opposite Hotel Ambrosia, Prem Ganj, Sipri Bazar, Jhansi, Uttar Pradesh 284003"
+    boutique_short_address: Optional[str] = "Prem Ganj, Sipri Bazar, Jhansi, UP 284003"
+    boutique_pincode: Optional[str] = "284003"
+    boutique_landmark: Optional[str] = "Opposite Hotel Ambrosia"
+    boutique_phone: Optional[str] = "+91 98112 23344"
+    boutique_whatsapp: Optional[str] = "+91 98112 23344"
+    boutique_opening_hours: Optional[str] = "Mon – Sat: 10:30 AM – 8:30 PM"
+    boutique_weekly_holiday: Optional[str] = "Sunday"
+    boutique_special_notice: Optional[str] = None
+    boutique_directions_url: Optional[str] = "https://share.google/rdahckZ4nVz7Bgu2H"
+    boutique_embed_url: Optional[str] = None
+    boutique_reviews_url: Optional[str] = "https://share.google/rdahckZ4nVz7Bgu2H"
+    boutique_main_image: Optional[str] = "/images/editorial/brand_story_hero.jpg"
+    boutique_gallery_json: Optional[str] = "[]"
+    boutique_section_visible: bool = True
+    boutique_reviews_json: Optional[str] = "[]"
+    boutique_reviews_visible: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -759,6 +783,150 @@ class StoreSettingUpdate(BaseModel):
     return_policy_content: Optional[str] = None
     cod_enabled: Optional[bool] = None
     online_payment_enabled: Optional[bool] = None
+
+    # Boutique Location & Visiting Hours
+    boutique_name: Optional[str] = None
+    boutique_intro: Optional[str] = None
+    boutique_address: Optional[str] = None
+    boutique_short_address: Optional[str] = None
+    boutique_pincode: Optional[str] = None
+    boutique_landmark: Optional[str] = None
+    boutique_phone: Optional[str] = None
+    boutique_whatsapp: Optional[str] = None
+    boutique_opening_hours: Optional[str] = None
+    boutique_weekly_holiday: Optional[str] = None
+    boutique_special_notice: Optional[str] = None
+    boutique_directions_url: Optional[str] = None
+    boutique_embed_url: Optional[str] = None
+    boutique_reviews_url: Optional[str] = None
+    boutique_main_image: Optional[str] = None
+    boutique_gallery_json: Optional[str] = None
+    boutique_section_visible: Optional[bool] = None
+    boutique_reviews_json: Optional[str] = None
+    boutique_reviews_visible: Optional[bool] = None
+
+    @field_validator("boutique_embed_url")
+    @classmethod
+    def validate_boutique_embed_url(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return None
+        raw = v.strip()
+        # If wrapped in <iframe ... src="..." ...>, extract src
+        if "<iframe" in raw.lower():
+            m = re.search(r'src=["\']([^"\']+)["\']', raw, re.IGNORECASE)
+            if m:
+                raw = m.group(1).strip()
+            else:
+                raise ValueError("Invalid iframe tag; no src URL found")
+
+        parsed = urllib.parse.urlsplit(raw)
+        if parsed.scheme.lower() != "https":
+            raise ValueError("Google Maps embed URL must use HTTPS scheme")
+
+        host = (parsed.hostname or "").lower()
+        trusted_hosts = {"www.google.com", "google.com", "maps.google.com", "maps.google.co.in"}
+        if host not in trusted_hosts:
+            raise ValueError(f"Google Maps embed URL must point to a trusted Google Maps host ({', '.join(sorted(trusted_hosts))}), got: {host}")
+
+        path = parsed.path.lower()
+        if not (path.startswith("/maps/embed") or (path.startswith("/maps") and "output=embed" in parsed.query.lower())):
+            raise ValueError("Google Maps embed URL must be a valid /maps/embed URL")
+
+        return raw
+
+    @field_validator("boutique_directions_url")
+    @classmethod
+    def validate_boutique_directions_url(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return None
+        raw = v.strip()
+        parsed = urllib.parse.urlsplit(raw)
+        if parsed.scheme.lower() != "https":
+            raise ValueError("Google Maps directions URL must use HTTPS scheme")
+
+        host = (parsed.hostname or "").lower()
+        trusted_hosts = {
+            "share.google",
+            "maps.google.com",
+            "www.google.com",
+            "google.com",
+            "maps.app.goo.gl",
+            "goo.gl",
+            "g.page",
+        }
+        if host not in trusted_hosts and not any(host.endswith("." + th) for th in ["google.com", "goo.gl"]):
+            raise ValueError(f"Directions URL host '{host}' is not a trusted Google Maps host")
+        return raw
+
+    @field_validator("boutique_reviews_url")
+    @classmethod
+    def validate_boutique_reviews_url(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return None
+        raw = v.strip()
+        parsed = urllib.parse.urlsplit(raw)
+        if parsed.scheme.lower() != "https":
+            raise ValueError("Google reviews URL must use HTTPS scheme")
+
+        host = (parsed.hostname or "").lower()
+        trusted_hosts = {
+            "share.google",
+            "search.google.com",
+            "maps.google.com",
+            "www.google.com",
+            "google.com",
+            "g.page",
+            "goo.gl",
+        }
+        if host not in trusted_hosts and not any(host.endswith("." + th) for th in ["google.com", "goo.gl"]):
+            raise ValueError(f"Reviews URL host '{host}' is not a trusted Google host")
+        return raw
+
+    @field_validator("boutique_gallery_json")
+    @classmethod
+    def validate_boutique_gallery_json(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return "[]"
+        try:
+            data = json.loads(v)
+            if not isinstance(data, list):
+                raise ValueError("Boutique gallery must be a JSON array")
+            if len(data) > 4:
+                raise ValueError("Boutique gallery allows a maximum of 4 photos")
+            for item in data:
+                url = item.get("url") if isinstance(item, dict) else str(item)
+                if not url or not isinstance(url, str):
+                    raise ValueError("Each gallery item must include a valid URL string")
+                if not (url.startswith("http://") or url.startswith("https://") or url.startswith("/")):
+                    raise ValueError(f"Unsafe gallery URL protocol: {url}")
+            return json.dumps(data)
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON string for boutique gallery")
+
+    @field_validator("boutique_reviews_json")
+    @classmethod
+    def validate_boutique_reviews_json(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return "[]"
+        try:
+            data = json.loads(v)
+            if not isinstance(data, list):
+                raise ValueError("Boutique reviews must be a JSON array")
+            if len(data) > 20:
+                raise ValueError("Maximum 20 reviews allowed in boutique reviews")
+            for item in data:
+                if not isinstance(item, dict):
+                    raise ValueError("Each review item must be a JSON object")
+                if not item.get("author_name") or not str(item.get("author_name")).strip():
+                    raise ValueError("Each review must specify an author_name")
+                rating = item.get("rating")
+                if rating is None or not (1 <= float(rating) <= 5):
+                    raise ValueError("Review rating must be between 1 and 5")
+                if not item.get("review_text") or not str(item.get("review_text")).strip():
+                    raise ValueError("Each review must include review_text")
+            return json.dumps(data)
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON string for boutique reviews")
 
 
 class ContactInquiryCreate(BaseModel):

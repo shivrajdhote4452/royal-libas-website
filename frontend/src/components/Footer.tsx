@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Mail, ArrowRight, Check, Loader2 } from 'lucide-react';
+import { Instagram, Mail, ArrowRight, Check, Loader2, MapPin } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { subscribeNewsletter } from '../lib/api';
 import { useStoreSettings } from '../lib/settings';
@@ -44,6 +44,13 @@ export const Footer: React.FC = () => {
             <p className="text-xs text-[#FCF8F0]/80 leading-relaxed max-w-sm">
               Rooted in timeless Indian heritage and handcrafted luxury. Meticulously tailored festive silhouettes, kurti sets, and everyday co-ords crafted for the modern woman.
             </p>
+            <div className="pt-1 text-[11px] text-[#FCF8F0]/75 flex items-start gap-2 max-w-sm">
+              <MapPin className="w-3.5 h-3.5 text-[#B58A3C] shrink-0 mt-0.5" />
+              <span>
+                <strong className="text-[#FCF8F0] font-semibold block">{settings.boutiqueName || 'Royal Libas by Tanya'}</strong>
+                {settings.boutiqueShortAddress || settings.boutiqueAddress || 'Opposite Hotel Ambrosia, Prem Ganj, Sipri Bazar, Jhansi'}
+              </span>
+            </div>
             <div className="flex items-center space-x-3 pt-1">
               <a
                 href={`https://instagram.com/${(settings.instagramHandle || '@royal_libas_by_tanya').replace('@', '')}`}
@@ -117,6 +124,11 @@ export const Footer: React.FC = () => {
               <li>
                 <Link to="/about" className="hover:text-[#B58A3C] transition-colors">
                   Craftsmanship
+                </Link>
+              </li>
+              <li>
+                <Link to="/#boutique" className="hover:text-[#B58A3C] transition-colors">
+                  Visit Our Boutique
                 </Link>
               </li>
               <li>

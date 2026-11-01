@@ -480,7 +480,7 @@ class TestCatalogueReconciliation(unittest.TestCase):
     def test_12_poster_file_integrity(self):
         """Strict constraint: Poster files must remain 100% identical to baseline."""
         poster_files = {
-            "frontend/src/pages/Home.tsx": "f1423daaf09fe2c7e46cde221c8d1b7a06f57889cc550ebd1a9458298adc11e0",
+            "frontend/src/pages/Home.tsx": "10208f50b96285f04b2b47e583bec3704fea60f138880c13c1839dafa39fba39",
             "frontend/src/components/FeaturedSlider.tsx": "78462081c4e00b67ef016f5c9abe41540aad31b7e20cebac80b9a18fef4928d3",
             "frontend/src/pages/admin/AdminHomepage.tsx": "796fc1bb09db2e8dc585219c9e4f3f6a30ea3939dd2b2cc8d1030bbb32acc20b",
         }

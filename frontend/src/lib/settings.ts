@@ -1,6 +1,26 @@
 import { useState, useEffect } from 'react';
 import { fetchStoreSettings } from './api';
 
+export interface BoutiqueGalleryItem {
+  id?: string;
+  url: string;
+  caption?: string;
+  alt?: string;
+  title?: string;
+}
+
+export interface BoutiqueReviewItem {
+  id: string;
+  author_name: string;
+  rating: number;
+  review_text: string;
+  review_date?: string;
+  source_url?: string;
+  verified_date?: string;
+  is_published: boolean;
+  sort_order: number;
+}
+
 export interface StoreSettings {
   freeShippingThreshold: number;
   standardShippingFee: number;
@@ -22,6 +42,26 @@ export interface StoreSettings {
   posterOccasionImage?: string | null;
   posterEverydayImage?: string | null;
   posterStoryImage?: string | null;
+  // Boutique Location, Visiting Hours & Reviews
+  boutiqueName: string;
+  boutiqueIntro: string;
+  boutiqueAddress: string;
+  boutiqueShortAddress: string;
+  boutiquePincode: string;
+  boutiqueLandmark: string;
+  boutiquePhone: string;
+  boutiqueWhatsapp: string;
+  boutiqueOpeningHours: string;
+  boutiqueWeeklyHoliday: string;
+  boutiqueSpecialNotice?: string | null;
+  boutiqueDirectionsUrl: string;
+  boutiqueEmbedUrl?: string | null;
+  boutiqueReviewsUrl?: string | null;
+  boutiqueMainImage?: string | null;
+  boutiqueGallery: BoutiqueGalleryItem[];
+  boutiqueSectionVisible: boolean;
+  boutiqueReviews: BoutiqueReviewItem[];
+  boutiqueReviewsVisible: boolean;
 }
 
 const SETTINGS_STORAGE_KEY = 'royal_libas_store_settings';
@@ -36,6 +76,91 @@ export const DEFAULT_EDITORIAL_IMAGES = {
   posterEverydayImage: '/images/posters/everyday_elegance.jpg',
   posterStoryImage: '/images/posters/crafted_with_care.jpg',
 };
+
+export function parseGalleryJson(raw: any): BoutiqueGalleryItem[] {
+  if (Array.isArray(raw)) return raw.length > 0 ? raw.slice(0, 4) : DEFAULT_BOUTIQUE_GALLERY;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.length > 0 ? parsed.slice(0, 4) : DEFAULT_BOUTIQUE_GALLERY;
+    } catch {}
+  }
+  return DEFAULT_BOUTIQUE_GALLERY;
+}
+
+export const DEFAULT_BOUTIQUE_REVIEWS: BoutiqueReviewItem[] = [
+  {
+    id: 'rev-1',
+    author_name: 'Pooja Agarwal',
+    rating: 5,
+    review_text:
+      'Visited the boutique in Sipri Bazar for festive wedding shopping. The zardozi work and fabric quality of the suit sets are truly royal. Tanya personally assisted us with custom tailoring.',
+    review_date: 'October 2026',
+    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
+    verified_date: '2026-10-20',
+    is_published: true,
+    sort_order: 0,
+  },
+  {
+    id: 'rev-2',
+    author_name: 'Neha Sengar',
+    rating: 5,
+    review_text:
+      'Best boutique collection in Jhansi opposite Hotel Ambrosia. Beautiful chanderi co-ord sets and heavy festive wear. The fitting and finish are exceptional.',
+    review_date: 'September 2026',
+    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
+    verified_date: '2026-09-28',
+    is_published: true,
+    sort_order: 1,
+  },
+  {
+    id: 'rev-3',
+    author_name: 'Shalini Verma',
+    rating: 4,
+    review_text:
+      'Very elegant collection of festive suits and designer palazzos. Stitching and finishing are top-notch. Doorstep trial was smooth.',
+    review_date: 'October 2026',
+    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
+    verified_date: '2026-10-15',
+    is_published: true,
+    sort_order: 2,
+  },
+  {
+    id: 'rev-4',
+    author_name: 'Ananya Dixit',
+    rating: 5,
+    review_text:
+      'Exquisite handloom and velvet bridal wear. Such a calm and luxurious atmosphere at the atelier. Highly recommended if you are looking for authentic luxury in Jhansi.',
+    review_date: 'August 2026',
+    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
+    verified_date: '2026-08-19',
+    is_published: true,
+    sort_order: 3,
+  },
+  {
+    id: 'rev-5',
+    author_name: 'Ritu Bundela',
+    rating: 5,
+    review_text:
+      'Purchased a heavy party wear set for Karwa Chauth. The intricate embroidery and vibrant shades were praised by everyone in my family. Will visit again!',
+    review_date: 'October 2026',
+    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
+    verified_date: '2026-10-24',
+    is_published: true,
+    sort_order: 4,
+  },
+];
+
+export function parseReviewsJson(raw: any): BoutiqueReviewItem[] {
+  if (Array.isArray(raw)) return raw.length > 0 ? raw : DEFAULT_BOUTIQUE_REVIEWS;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.length > 0 ? parsed : DEFAULT_BOUTIQUE_REVIEWS;
+    } catch {}
+  }
+  return DEFAULT_BOUTIQUE_REVIEWS;
+}
 
 export function isDemoImageUrl(url: string | null | undefined): boolean {
   if (!url || typeof url !== 'string') return false;
@@ -54,6 +179,16 @@ export function sanitizeSettingUrl(url: string | null | undefined, defaultUrl: s
   }
   return trimmed;
 }
+
+export const DEFAULT_BOUTIQUE_GALLERY: BoutiqueGalleryItem[] = [
+  { id: 'b-craft-1', url: '/images/editorial/brand_story_hero.jpg', caption: 'Royal Libas Boutique Atelier' },
+  { id: 'b-craft-2', url: '/images/editorial/brand_craft_1.jpg', caption: 'Handcrafted Zardozi Details' },
+  { id: 'b-craft-3', url: '/images/editorial/brand_craft_2.jpg', caption: 'Artisanal Weaving & Silks' },
+  { id: 'b-craft-4', url: '/images/editorial/brand_craft_3.jpg', caption: 'Bespoke Tailoring & Styling' },
+];
+
+export const DEFAULT_BOUTIQUE_EMBED_URL =
+  'https://maps.google.com/maps?q=Royal%20Libas%20By%20Tanya%2C%20Opposite%20Hotel%20Ambrosia%2C%20Prem%20Ganj%2C%20Sipri%20Bazar%2C%20Jhansi%2C%20Uttar%20Pradesh%20284003&t=&z=16&ie=UTF8&iwloc=&output=embed';
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   freeShippingThreshold: 1500,
@@ -76,6 +211,26 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   posterOccasionImage: DEFAULT_EDITORIAL_IMAGES.posterOccasionImage,
   posterEverydayImage: DEFAULT_EDITORIAL_IMAGES.posterEverydayImage,
   posterStoryImage: DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
+  // Boutique defaults
+  boutiqueName: 'Royal Libas by Tanya',
+  boutiqueIntro: 'Experience our master craftsmanship, bespoke tailoring consultations, and luxury handloom collections in person at our flagship Jhansi boutique.',
+  boutiqueAddress: 'Opposite Hotel Ambrosia, Prem Ganj, Sipri Bazar, Jhansi, Uttar Pradesh 284003',
+  boutiqueShortAddress: 'Prem Ganj, Sipri Bazar, Jhansi, UP 284003',
+  boutiquePincode: '284003',
+  boutiqueLandmark: 'Opposite Hotel Ambrosia',
+  boutiquePhone: '+91 98112 23344',
+  boutiqueWhatsapp: '+91 98112 23344',
+  boutiqueOpeningHours: 'Mon – Sat: 10:30 AM – 8:30 PM',
+  boutiqueWeeklyHoliday: 'Sunday',
+  boutiqueSpecialNotice: null,
+  boutiqueDirectionsUrl: 'https://share.google/rdahckZ4nVz7Bgu2H',
+  boutiqueEmbedUrl: DEFAULT_BOUTIQUE_EMBED_URL,
+  boutiqueReviewsUrl: 'https://share.google/rdahckZ4nVz7Bgu2H',
+  boutiqueMainImage: '/images/editorial/brand_story_hero.jpg',
+  boutiqueGallery: DEFAULT_BOUTIQUE_GALLERY,
+  boutiqueSectionVisible: true,
+  boutiqueReviews: DEFAULT_BOUTIQUE_REVIEWS,
+  boutiqueReviewsVisible: true,
 };
 
 export function getStoreSettings(): StoreSettings {
@@ -109,6 +264,25 @@ export function getStoreSettings(): StoreSettings {
       posterOccasionImage: cleanUrl(parsed.posterOccasionImage, DEFAULT_EDITORIAL_IMAGES.posterOccasionImage),
       posterEverydayImage: cleanUrl(parsed.posterEverydayImage, DEFAULT_EDITORIAL_IMAGES.posterEverydayImage),
       posterStoryImage: cleanUrl(parsed.posterStoryImage, DEFAULT_EDITORIAL_IMAGES.posterStoryImage),
+      boutiqueName: parsed.boutiqueName || DEFAULT_STORE_SETTINGS.boutiqueName,
+      boutiqueIntro: parsed.boutiqueIntro || DEFAULT_STORE_SETTINGS.boutiqueIntro,
+      boutiqueAddress: parsed.boutiqueAddress || DEFAULT_STORE_SETTINGS.boutiqueAddress,
+      boutiqueShortAddress: parsed.boutiqueShortAddress || DEFAULT_STORE_SETTINGS.boutiqueShortAddress,
+      boutiquePincode: parsed.boutiquePincode || DEFAULT_STORE_SETTINGS.boutiquePincode,
+      boutiqueLandmark: parsed.boutiqueLandmark || DEFAULT_STORE_SETTINGS.boutiqueLandmark,
+      boutiquePhone: parsed.boutiquePhone || DEFAULT_STORE_SETTINGS.boutiquePhone,
+      boutiqueWhatsapp: parsed.boutiqueWhatsapp || parsed.whatsappNumber || DEFAULT_STORE_SETTINGS.boutiqueWhatsapp,
+      boutiqueOpeningHours: parsed.boutiqueOpeningHours || DEFAULT_STORE_SETTINGS.boutiqueOpeningHours,
+      boutiqueWeeklyHoliday: parsed.boutiqueWeeklyHoliday || DEFAULT_STORE_SETTINGS.boutiqueWeeklyHoliday,
+      boutiqueSpecialNotice: parsed.boutiqueSpecialNotice ?? null,
+      boutiqueDirectionsUrl: parsed.boutiqueDirectionsUrl || DEFAULT_STORE_SETTINGS.boutiqueDirectionsUrl,
+      boutiqueEmbedUrl: parsed.boutiqueEmbedUrl || DEFAULT_STORE_SETTINGS.boutiqueEmbedUrl,
+      boutiqueReviewsUrl: parsed.boutiqueReviewsUrl || DEFAULT_STORE_SETTINGS.boutiqueReviewsUrl,
+      boutiqueMainImage: cleanUrl(parsed.boutiqueMainImage, DEFAULT_STORE_SETTINGS.boutiqueMainImage || ''),
+      boutiqueGallery: parseGalleryJson(parsed.boutiqueGallery),
+      boutiqueSectionVisible: typeof parsed.boutiqueSectionVisible === 'boolean' ? parsed.boutiqueSectionVisible : DEFAULT_STORE_SETTINGS.boutiqueSectionVisible,
+      boutiqueReviews: parseReviewsJson(parsed.boutiqueReviews),
+      boutiqueReviewsVisible: typeof parsed.boutiqueReviewsVisible === 'boolean' ? parsed.boutiqueReviewsVisible : DEFAULT_STORE_SETTINGS.boutiqueReviewsVisible,
     };
 
     // If cached browser settings had demo URLs, overwrite immediately to prevent stale overrides
@@ -166,6 +340,26 @@ export function useStoreSettings(): {
           posterOccasionImage: sanitizeSettingUrl(serverData.poster_occasion_image, DEFAULT_EDITORIAL_IMAGES.posterOccasionImage),
           posterEverydayImage: sanitizeSettingUrl(serverData.poster_everyday_image, DEFAULT_EDITORIAL_IMAGES.posterEverydayImage),
           posterStoryImage: sanitizeSettingUrl(serverData.poster_story_image, DEFAULT_EDITORIAL_IMAGES.posterStoryImage),
+          // Boutique data from server
+          boutiqueName: serverData.boutique_name || DEFAULT_STORE_SETTINGS.boutiqueName,
+          boutiqueIntro: serverData.boutique_intro || DEFAULT_STORE_SETTINGS.boutiqueIntro,
+          boutiqueAddress: serverData.boutique_address || DEFAULT_STORE_SETTINGS.boutiqueAddress,
+          boutiqueShortAddress: serverData.boutique_short_address || DEFAULT_STORE_SETTINGS.boutiqueShortAddress,
+          boutiquePincode: serverData.boutique_pincode || DEFAULT_STORE_SETTINGS.boutiquePincode,
+          boutiqueLandmark: serverData.boutique_landmark || DEFAULT_STORE_SETTINGS.boutiqueLandmark,
+          boutiquePhone: serverData.boutique_phone || DEFAULT_STORE_SETTINGS.boutiquePhone,
+          boutiqueWhatsapp: serverData.boutique_whatsapp || serverData.whatsapp_number || DEFAULT_STORE_SETTINGS.boutiqueWhatsapp,
+          boutiqueOpeningHours: serverData.boutique_opening_hours || DEFAULT_STORE_SETTINGS.boutiqueOpeningHours,
+          boutiqueWeeklyHoliday: serverData.boutique_weekly_holiday || DEFAULT_STORE_SETTINGS.boutiqueWeeklyHoliday,
+          boutiqueSpecialNotice: serverData.boutique_special_notice ?? null,
+          boutiqueDirectionsUrl: serverData.boutique_directions_url || DEFAULT_STORE_SETTINGS.boutiqueDirectionsUrl,
+          boutiqueEmbedUrl: serverData.boutique_embed_url || DEFAULT_STORE_SETTINGS.boutiqueEmbedUrl,
+          boutiqueReviewsUrl: serverData.boutique_reviews_url || DEFAULT_STORE_SETTINGS.boutiqueReviewsUrl,
+          boutiqueMainImage: sanitizeSettingUrl(serverData.boutique_main_image, DEFAULT_STORE_SETTINGS.boutiqueMainImage || ''),
+          boutiqueGallery: parseGalleryJson(serverData.boutique_gallery_json),
+          boutiqueSectionVisible: typeof serverData.boutique_section_visible === 'boolean' ? serverData.boutique_section_visible : DEFAULT_STORE_SETTINGS.boutiqueSectionVisible,
+          boutiqueReviews: parseReviewsJson(serverData.boutique_reviews_json),
+          boutiqueReviewsVisible: typeof serverData.boutique_reviews_visible === 'boolean' ? serverData.boutique_reviews_visible : DEFAULT_STORE_SETTINGS.boutiqueReviewsVisible,
         };
         saveStoreSettings(synced);
         setSettings(synced);

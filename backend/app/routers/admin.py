@@ -4228,6 +4228,25 @@ def admin_get_settings(
         return_policy_content=setting.return_policy_content,
         cod_enabled=bool(setting.cod_enabled),
         online_payment_enabled=bool(setting.online_payment_enabled),
+        boutique_name=setting.boutique_name,
+        boutique_intro=setting.boutique_intro,
+        boutique_address=setting.boutique_address,
+        boutique_short_address=setting.boutique_short_address,
+        boutique_pincode=setting.boutique_pincode,
+        boutique_landmark=setting.boutique_landmark,
+        boutique_phone=setting.boutique_phone,
+        boutique_whatsapp=setting.boutique_whatsapp or setting.whatsapp_number,
+        boutique_opening_hours=setting.boutique_opening_hours,
+        boutique_weekly_holiday=setting.boutique_weekly_holiday,
+        boutique_special_notice=setting.boutique_special_notice,
+        boutique_directions_url=setting.boutique_directions_url,
+        boutique_embed_url=setting.boutique_embed_url,
+        boutique_reviews_url=setting.boutique_reviews_url,
+        boutique_main_image=setting.boutique_main_image,
+        boutique_gallery_json=setting.boutique_gallery_json or "[]",
+        boutique_section_visible=bool(setting.boutique_section_visible),
+        boutique_reviews_json=setting.boutique_reviews_json or "[]",
+        boutique_reviews_visible=bool(setting.boutique_reviews_visible),
     )
 
 
@@ -4298,6 +4317,46 @@ def admin_update_settings(
         setting.online_payment_enabled = payload.online_payment_enabled
         payment_settings_changed = True
 
+    # Boutique Location & Visiting Hours
+    if payload.boutique_name is not None:
+        setting.boutique_name = payload.boutique_name.strip()
+    if payload.boutique_intro is not None:
+        setting.boutique_intro = payload.boutique_intro.strip()
+    if payload.boutique_address is not None:
+        setting.boutique_address = payload.boutique_address.strip()
+    if payload.boutique_short_address is not None:
+        setting.boutique_short_address = payload.boutique_short_address.strip()
+    if payload.boutique_pincode is not None:
+        setting.boutique_pincode = payload.boutique_pincode.strip()
+    if payload.boutique_landmark is not None:
+        setting.boutique_landmark = payload.boutique_landmark.strip()
+    if payload.boutique_phone is not None:
+        setting.boutique_phone = payload.boutique_phone.strip()
+    if payload.boutique_whatsapp is not None:
+        setting.boutique_whatsapp = payload.boutique_whatsapp.strip()
+    if payload.boutique_opening_hours is not None:
+        setting.boutique_opening_hours = payload.boutique_opening_hours.strip()
+    if payload.boutique_weekly_holiday is not None:
+        setting.boutique_weekly_holiday = payload.boutique_weekly_holiday.strip()
+    if payload.boutique_special_notice is not None:
+        setting.boutique_special_notice = payload.boutique_special_notice.strip() if payload.boutique_special_notice else None
+    if payload.boutique_directions_url is not None:
+        setting.boutique_directions_url = payload.boutique_directions_url.strip() if payload.boutique_directions_url else None
+    if payload.boutique_embed_url is not None:
+        setting.boutique_embed_url = payload.boutique_embed_url.strip() if payload.boutique_embed_url else None
+    if payload.boutique_reviews_url is not None:
+        setting.boutique_reviews_url = payload.boutique_reviews_url.strip() if payload.boutique_reviews_url else None
+    if payload.boutique_main_image is not None:
+        setting.boutique_main_image = payload.boutique_main_image.strip() if payload.boutique_main_image else None
+    if payload.boutique_gallery_json is not None:
+        setting.boutique_gallery_json = payload.boutique_gallery_json
+    if payload.boutique_section_visible is not None:
+        setting.boutique_section_visible = payload.boutique_section_visible
+    if payload.boutique_reviews_json is not None:
+        setting.boutique_reviews_json = payload.boutique_reviews_json
+    if payload.boutique_reviews_visible is not None:
+        setting.boutique_reviews_visible = payload.boutique_reviews_visible
+
     db.commit()
     db.refresh(setting)
     if payment_settings_changed:
@@ -4338,6 +4397,25 @@ def admin_update_settings(
         return_policy_content=setting.return_policy_content,
         cod_enabled=bool(setting.cod_enabled),
         online_payment_enabled=bool(setting.online_payment_enabled),
+        boutique_name=setting.boutique_name,
+        boutique_intro=setting.boutique_intro,
+        boutique_address=setting.boutique_address,
+        boutique_short_address=setting.boutique_short_address,
+        boutique_pincode=setting.boutique_pincode,
+        boutique_landmark=setting.boutique_landmark,
+        boutique_phone=setting.boutique_phone,
+        boutique_whatsapp=setting.boutique_whatsapp or setting.whatsapp_number,
+        boutique_opening_hours=setting.boutique_opening_hours,
+        boutique_weekly_holiday=setting.boutique_weekly_holiday,
+        boutique_special_notice=setting.boutique_special_notice,
+        boutique_directions_url=setting.boutique_directions_url,
+        boutique_embed_url=setting.boutique_embed_url,
+        boutique_reviews_url=setting.boutique_reviews_url,
+        boutique_main_image=setting.boutique_main_image,
+        boutique_gallery_json=setting.boutique_gallery_json or "[]",
+        boutique_section_visible=bool(setting.boutique_section_visible),
+        boutique_reviews_json=setting.boutique_reviews_json or "[]",
+        boutique_reviews_visible=bool(setting.boutique_reviews_visible),
     )
 
 

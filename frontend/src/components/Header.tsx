@@ -391,12 +391,12 @@ export const Header: React.FC = () => {
                   OUR STORY
                 </Link>
                 <Link
-                  to="/about#journal"
+                  to="/contact"
                   className={`transition-colors py-1 hover:text-[#5E1224] ${
-                    location.hash === '#journal' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                    location.pathname === '/contact' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
                 >
-                  JOURNAL
+                  CONTACT US
                 </Link>
               </nav>
 

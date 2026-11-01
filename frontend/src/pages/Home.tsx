@@ -13,6 +13,8 @@ import { fetchProducts } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
 import { FeaturedSlider } from '../components/FeaturedSlider';
 import { EditorialPoster } from '../components/EditorialPoster';
+import { BoutiqueHomepageSection } from '../components/BoutiqueHomepageSection';
+import { BoutiqueReviewsSection } from '../components/BoutiqueReviewsSection';
 import { useStoreSettings } from '../lib/settings';
 
 export const Home: React.FC = () => {
@@ -596,6 +598,17 @@ export const Home: React.FC = () => {
         imageAlt="Intricate zardozi and gold thread embroidery textile concept"
         layout="content-left"
       />
+
+      {/* ========================================================
+          10. VISIT OUR BOUTIQUE SECTION
+          Order: New Arrivals -> Story Poster -> Visit Our Boutique -> Reviews -> Footer
+          ======================================================== */}
+      <BoutiqueHomepageSection />
+
+      {/* ========================================================
+          11. SELECTED CUSTOMER REVIEWS SECTION
+          ======================================================== */}
+      <BoutiqueReviewsSection />
     </div>
   );
 };

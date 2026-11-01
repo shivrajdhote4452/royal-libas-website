@@ -410,6 +410,28 @@ class StoreSetting(Base):
     instagram_handle = Column(String(100), default="@royal_libas_by_tanya", nullable=False)
     shipping_policy_content = Column(Text, nullable=True)
     return_policy_content = Column(Text, nullable=True)
+
+    # Boutique Location & Visiting Hours
+    boutique_name = Column(String(255), default="Royal Libas by Tanya", nullable=True)
+    boutique_intro = Column(Text, default="Experience our master craftsmanship, bespoke tailoring consultations, and luxury handloom collections in person at our flagship Jhansi boutique.", nullable=True)
+    boutique_address = Column(Text, default="Opposite Hotel Ambrosia, Prem Ganj, Sipri Bazar, Jhansi, Uttar Pradesh 284003", nullable=True)
+    boutique_short_address = Column(String(255), default="Prem Ganj, Sipri Bazar, Jhansi, UP 284003", nullable=True)
+    boutique_pincode = Column(String(20), default="284003", nullable=True)
+    boutique_landmark = Column(String(255), default="Opposite Hotel Ambrosia", nullable=True)
+    boutique_phone = Column(String(50), default="+91 98112 23344", nullable=True)
+    boutique_whatsapp = Column(String(50), default="+91 98112 23344", nullable=True)
+    boutique_opening_hours = Column(String(255), default="Mon – Sat: 10:30 AM – 8:30 PM", nullable=True)
+    boutique_weekly_holiday = Column(String(100), default="Sunday", nullable=True)
+    boutique_special_notice = Column(Text, nullable=True)
+    boutique_directions_url = Column(String(500), default="https://share.google/rdahckZ4nVz7Bgu2H", nullable=True)
+    boutique_embed_url = Column(String(1000), nullable=True)
+    boutique_reviews_url = Column(String(500), default="https://share.google/rdahckZ4nVz7Bgu2H", nullable=True)
+    boutique_main_image = Column(String(500), default="/images/editorial/brand_story_hero.jpg", nullable=True)
+    boutique_gallery_json = Column(Text, default="[]", nullable=True)
+    boutique_section_visible = Column(Boolean, default=True, nullable=False)
+    boutique_reviews_json = Column(Text, default="[]", nullable=True)
+    boutique_reviews_visible = Column(Boolean, default=False, nullable=False)
+
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
