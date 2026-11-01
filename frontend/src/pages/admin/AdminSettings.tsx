@@ -90,6 +90,7 @@ export const AdminSettings: React.FC = () => {
     source: 'google',
     source_url: '',
     is_verified: false,
+    owner_approved: false,
     verified_date: null,
     is_published: false,
     sort_order: 0,
@@ -258,21 +259,27 @@ export const AdminSettings: React.FC = () => {
   const handleToggleReviewPublished = (index: number) => {
     const rev = boutiqueReviews[index];
     if (!rev.is_published) {
-      if (!rev.is_verified) {
-        alert('Review cannot be published: It must be explicitly verified first.');
-        return;
-      }
-      if (Number(rev.rating) < 4) {
-        alert('Review cannot be published: Only 4-star and 5-star positive reviews are eligible for this section.');
-        return;
-      }
-      if (rev.source && rev.source !== 'google') {
-        alert('Review cannot be published: Only genuine Google reviews are eligible for this section.');
+      const isEligible = (rev.is_verified || rev.owner_approved) && Number(rev.rating) >= 4 && (!rev.source || rev.source === 'google');
+      if (!isEligible) {
+        if (Number(rev.rating) < 4) {
+          alert('Review cannot be published: Only 4-star and 5-star positive reviews are eligible for this section.');
+          return;
+        }
+        if (rev.source && rev.source !== 'google') {
+          alert('Review cannot be published: Only genuine Google reviews are eligible for this section.');
+          return;
+        }
+        alert('Review cannot be published: It requires valid owner approval or explicit Google verification.');
         return;
       }
     }
     const updated = [...boutiqueReviews];
-    updated[index] = { ...updated[index], is_published: !updated[index].is_published };
+    const willBePublished = !updated[index].is_published;
+    updated[index] = {
+      ...updated[index],
+      is_published: willBePublished,
+      owner_approved: willBePublished ? (updated[index].owner_approved ?? true) : updated[index].owner_approved,
+    };
     setBoutiqueReviews(updated);
   };
 
@@ -287,6 +294,7 @@ export const AdminSettings: React.FC = () => {
       source: 'google',
       source_url: '',
       is_verified: false,
+      owner_approved: false,
       verified_date: null,
       is_published: false,
       sort_order: boutiqueReviews.length,
@@ -308,8 +316,9 @@ export const AdminSettings: React.FC = () => {
 
     const ratingNum = Number(reviewForm.rating) || 5;
     const isGoogle = !reviewForm.source || reviewForm.source === 'google';
+    const isEligible = (reviewForm.is_verified || reviewForm.owner_approved) && ratingNum >= 4 && isGoogle;
     let published = Boolean(reviewForm.is_published);
-    if (published && (!reviewForm.is_verified || ratingNum < 4 || !isGoogle)) {
+    if (published && !isEligible) {
       published = false;
     }
 
@@ -322,6 +331,7 @@ export const AdminSettings: React.FC = () => {
       source: reviewForm.source || 'google',
       source_url: reviewForm.source_url ? reviewForm.source_url.trim() : null,
       is_verified: Boolean(reviewForm.is_verified),
+      owner_approved: Boolean(reviewForm.owner_approved),
       verified_date: reviewForm.is_verified
         ? reviewForm.verified_date || new Date().toISOString().split('T')[0]
         : null,
@@ -1027,6 +1037,15 @@ export const AdminSettings: React.FC = () => {
                         Draft
                       </span>
                     )}
+                    {rev.is_verified ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        Verified Google
+                      </span>
+                    ) : rev.owner_approved ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                        Owner Approved
+                      </span>
+                    ) : null}
                   </div>
                   <p className="text-xs text-gray-700 italic font-light">&ldquo;{rev.review_text}&rdquo;</p>
                   <div className="flex items-center gap-3 text-[10px] text-gray-500 font-mono">
@@ -1488,6 +1507,32 @@ export const AdminSettings: React.FC = () => {
                 </div>
               </div>
 
+              {/* Owner Approval Toggle */}
+              <div className="p-3 bg-amber-50/60 border border-[#B58A3C]/40 rounded-lg space-y-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="rev_owner_approved"
+                    checked={Boolean(reviewForm.owner_approved)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setReviewForm({
+                        ...reviewForm,
+                        owner_approved: checked,
+                        is_published: checked ? reviewForm.is_published : (reviewForm.is_verified ? reviewForm.is_published : false),
+                      });
+                    }}
+                    className="w-4 h-4 text-[#5E1224] rounded border-gray-300"
+                  />
+                  <label htmlFor="rev_owner_approved" className="font-semibold text-gray-800 cursor-pointer text-xs">
+                    Owner Approved for Storefront Publication
+                  </label>
+                </div>
+                <p className="text-[10.5px] text-gray-500 pl-6">
+                  Approves patron review for storefront display without requiring independent API verification.
+                </p>
+              </div>
+
               {/* Explicit Verification Toggle */}
               <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
                 <div className="flex items-center gap-2">
@@ -1501,13 +1546,13 @@ export const AdminSettings: React.FC = () => {
                         ...reviewForm,
                         is_verified: checked,
                         verified_date: checked ? (reviewForm.verified_date || new Date().toISOString().split('T')[0]) : null,
-                        is_published: checked ? reviewForm.is_published : false,
+                        is_published: checked ? reviewForm.is_published : (reviewForm.owner_approved ? reviewForm.is_published : false),
                       });
                     }}
                     className="w-4 h-4 text-[#5E1224] rounded border-gray-300"
                   />
                   <label htmlFor="rev_verified" className="font-semibold text-gray-800 cursor-pointer text-xs">
-                    Explicitly Verify as Genuine Google Review
+                    Independently Verified by Google
                   </label>
                 </div>
                 {reviewForm.is_verified && (
@@ -1523,34 +1568,44 @@ export const AdminSettings: React.FC = () => {
                 )}
               </div>
 
-              {/* Publication Toggle (Only enabled if verified && rating >= 4 && source === 'google') */}
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="rev_publish"
-                    disabled={!reviewForm.is_verified || Number(reviewForm.rating) < 4 || reviewForm.source !== 'google'}
-                    checked={reviewForm.is_published}
-                    onChange={(e) => setReviewForm({ ...reviewForm, is_published: e.target.checked })}
-                    className="w-4 h-4 text-[#5E1224] rounded border-gray-300 disabled:opacity-40"
-                  />
-                  <label
-                    htmlFor="rev_publish"
-                    className={`font-semibold cursor-pointer text-xs ${
-                      !reviewForm.is_verified || Number(reviewForm.rating) < 4 || reviewForm.source !== 'google'
-                        ? 'text-gray-400'
-                        : 'text-gray-700'
-                    }`}
-                  >
-                    Mark as Published (Visible on storefront if section is enabled)
-                  </label>
-                </div>
-                {(!reviewForm.is_verified || Number(reviewForm.rating) < 4 || reviewForm.source !== 'google') && (
-                  <p className="text-[10.5px] text-amber-700 pl-6">
-                    Requirement: Only verified Google reviews with actual 4 or 5 stars can be published in the storefront section.
-                  </p>
-                )}
-              </div>
+              {/* Publication Toggle (Enabled if owner approved OR verified, rating >= 4, and source === 'google') */}
+              {(() => {
+                const isEligible = (reviewForm.is_verified || reviewForm.owner_approved) && Number(reviewForm.rating) >= 4 && (!reviewForm.source || reviewForm.source === 'google');
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="checkbox"
+                        id="rev_publish"
+                        disabled={!isEligible}
+                        checked={reviewForm.is_published}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setReviewForm({
+                            ...reviewForm,
+                            is_published: checked,
+                            owner_approved: checked ? (reviewForm.owner_approved ?? true) : reviewForm.owner_approved,
+                          });
+                        }}
+                        className="w-4 h-4 text-[#5E1224] rounded border-gray-300 disabled:opacity-40"
+                      />
+                      <label
+                        htmlFor="rev_publish"
+                        className={`font-semibold cursor-pointer text-xs ${
+                          !isEligible ? 'text-gray-400' : 'text-gray-700'
+                        }`}
+                      >
+                        Mark as Published (Visible on storefront if section is enabled)
+                      </label>
+                    </div>
+                    {!isEligible && (
+                      <p className="text-[10.5px] text-amber-700 pl-6">
+                        Requirement: Requires valid owner approval or Google verification, plus actual rating 4 or 5 stars.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="pt-3 flex justify-end gap-2 border-t border-gray-100">
                 <button

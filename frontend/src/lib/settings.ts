@@ -18,6 +18,7 @@ export interface BoutiqueReviewItem {
   source?: string;
   source_url?: string | null;
   is_verified: boolean;
+  owner_approved?: boolean;
   verified_date?: string | null;
   is_published: boolean;
   sort_order: number;
@@ -125,6 +126,7 @@ export function parseReviewsJson(raw: any): BoutiqueReviewItem[] {
     source: String(item.source || 'google').trim().toLowerCase(),
     source_url: item.source_url ? String(item.source_url).trim() : null,
     is_verified: Boolean(item.is_verified),
+    owner_approved: item.owner_approved !== undefined ? Boolean(item.owner_approved) : Boolean(item.is_published),
     verified_date: item.verified_date ? String(item.verified_date).trim() : null,
     is_published: Boolean(item.is_published),
     sort_order: typeof item.sort_order === 'number' ? item.sort_order : idx,

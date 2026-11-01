@@ -143,17 +143,75 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
   const touchStartXRef = useRef<number | null>(null);
+  const isNavigatingRef = useRef(false);
+  const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Seamless Next navigation
+  // Check reduced motion preference
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Reconcile position if review count or itemsPerView changes
+  useEffect(() => {
+    if (displayIndex >= reviews.length) {
+      setWithTransition(false);
+      setDisplayIndex(0);
+      isNavigatingRef.current = false;
+    }
+  }, [reviews.length, itemsPerView, displayIndex]);
+
+  // Clean up animation timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+    };
+  }, []);
+
+  // Seamless Next navigation with rapid-click and overshoot prevention
   const handleNext = useCallback(() => {
     if (!isCarousel) return;
+
+    if (prefersReducedMotion) {
+      setDisplayIndex((prev) => (prev + 1) % reviews.length);
+      return;
+    }
+
+    if (isNavigatingRef.current) return;
+
+    // Guard against advancing beyond the clone track
+    if (displayIndex >= reviews.length) {
+      setWithTransition(false);
+      setDisplayIndex(0);
+      return;
+    }
+
+    isNavigatingRef.current = true;
     setWithTransition(true);
     setDisplayIndex((prev) => prev + 1);
-  }, [isCarousel]);
 
-  // Seamless Prev navigation
+    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+    animTimeoutRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 650);
+  }, [isCarousel, prefersReducedMotion, displayIndex, reviews.length]);
+
+  // Seamless Prev navigation with rapid-click and overshoot prevention
   const handlePrev = useCallback(() => {
     if (!isCarousel) return;
+
+    if (prefersReducedMotion) {
+      setDisplayIndex((prev) => (prev - 1 + reviews.length) % reviews.length);
+      return;
+    }
+
+    if (isNavigatingRef.current) return;
+
+    isNavigatingRef.current = true;
+    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+    animTimeoutRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 650);
+
     if (displayIndex === 0) {
       // Instantly jump to clone position without transition, then animate back
       setWithTransition(false);
@@ -166,12 +224,23 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
       });
     } else {
       setWithTransition(true);
-      setDisplayIndex((prev) => prev - 1);
+      setDisplayIndex((prev) => Math.max(0, prev - 1));
     }
-  }, [isCarousel, displayIndex, reviews.length]);
+  }, [isCarousel, prefersReducedMotion, displayIndex, reviews.length]);
 
-  // On transition end, if we reached the clone position, snap back to 0 seamlessly
-  const handleTransitionEnd = () => {
+  // On transition end, release navigation lock and snap seamlessly to 0 if at clone boundary
+  const handleTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    // Ensure transition-end handling ONLY responds to the intended track transform
+    if (e.target !== trackRef.current || e.propertyName !== 'transform') {
+      return;
+    }
+
+    if (animTimeoutRef.current) {
+      clearTimeout(animTimeoutRef.current);
+      animTimeoutRef.current = null;
+    }
+    isNavigatingRef.current = false;
+
     if (displayIndex >= reviews.length) {
       setWithTransition(false);
       setDisplayIndex(0);
