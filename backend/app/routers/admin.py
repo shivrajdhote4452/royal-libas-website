@@ -1341,8 +1341,9 @@ def admin_bulk_adjust_stock(
         )
 
     # 3. Apply changes atomically in a single transaction with audit log
+    committed = False
+    updated_records = []
     try:
-        updated_records = []
         for item in payload.items:
             v = variant_map[item.variant_id]
             if item.new_stock == v.stock:
@@ -1364,11 +1365,11 @@ def admin_bulk_adjust_stock(
                 actor_email=current_admin.email,
             )
             db.add(adj)
-            updated_records.append((adj, v))
+            updated_records.append((adj, v, previous_stock, new_stock, change_amount))
 
         if updated_records:
             summary_str = ", ".join(
-                [f"{v.size}: {adj.previous_stock}->{adj.new_stock}" for adj, v in updated_records]
+                [f"{v.size}: {prev}->{new}" for adj, v, prev, new, chg in updated_records]
             )
             act_entry = ActivityLog(
                 actor_email=current_admin.email,
@@ -1381,38 +1382,53 @@ def admin_bulk_adjust_stock(
             db.add(act_entry)
             db.commit()
 
-            for adj, v in updated_records:
-                db.refresh(adj)
+        committed = True
 
+    except HTTPException:
+        if not committed:
+            db.rollback()
+        raise
     except Exception as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to adjust stock atomically: {str(exc)}",
+        if not committed:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update inventory. The transaction was rolled back and no stock changes were committed.",
+            )
+
+    # 4. Post-commit response construction (stock is guaranteed committed)
+    # Post-commit refresh or serialization failures must never misleadingly report a rollback.
+    response_items = []
+    for adj, v, prev_stock, new_stock, change_amount in updated_records:
+        try:
+            db.refresh(adj)
+            adj_id = adj.id
+            created_ts = adj.created_at
+        except Exception:
+            adj_id = getattr(adj, "id", None) or 0
+            created_ts = getattr(adj, "created_at", None) or datetime.now(timezone.utc)
+
+        response_items.append(
+            StockAdjustmentResponse(
+                id=adj_id,
+                variant_id=v.id,
+                product_name=product.name,
+                product_slug=product.slug,
+                size=v.size,
+                colour=v.colour,
+                sku=v.sku,
+                previous_stock=prev_stock,
+                new_stock=new_stock,
+                change_amount=change_amount,
+                reason=payload.reason.upper().strip(),
+                note=payload.note.strip() if payload.note else None,
+                actor_email=current_admin.email,
+                created_at=created_ts,
+            )
         )
 
     # Total stock across all variants of this product
     total_stock = sum(v.stock for v in variants)
-
-    response_items = [
-        StockAdjustmentResponse(
-            id=adj.id,
-            variant_id=v.id,
-            product_name=product.name,
-            product_slug=product.slug,
-            size=v.size,
-            colour=v.colour,
-            sku=v.sku,
-            previous_stock=adj.previous_stock,
-            new_stock=adj.new_stock,
-            change_amount=adj.change_amount,
-            reason=adj.reason,
-            note=adj.note,
-            actor_email=adj.actor_email,
-            created_at=adj.created_at,
-        )
-        for adj, v in updated_records
-    ]
 
     msg = (
         f"Updated {len(updated_records)} variant(s) for '{product.name}'."
