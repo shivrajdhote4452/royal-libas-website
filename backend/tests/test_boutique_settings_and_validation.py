@@ -78,7 +78,6 @@ class TestBoutiqueSettingsAndValidation(unittest.TestCase):
         self.assertIn("boutique_address", data)
         self.assertIn("boutique_short_address", data)
         self.assertIn("boutique_landmark", data)
-        self.assertIn("boutique_opening_hours", data)
         self.assertIn("boutique_directions_url", data)
         self.assertIn("boutique_section_visible", data)
         self.assertIn("boutique_reviews_json", data)
@@ -206,7 +205,9 @@ class TestBoutiqueSettingsAndValidation(unittest.TestCase):
                 "rating": 5,
                 "review_text": "Exquisite bespoke suit set craftsmanship and wonderful in-store attention.",
                 "review_date": "October 2026",
+                "source": "google",
                 "source_url": "https://share.google/rdahckZ4nVz7Bgu2H",
+                "is_verified": True,
                 "verified_date": "2026-10-31",
                 "is_published": True,
                 "sort_order": 1,
@@ -225,29 +226,137 @@ class TestBoutiqueSettingsAndValidation(unittest.TestCase):
         reviews_data = json.loads(res.json()["boutique_reviews_json"])
         self.assertEqual(len(reviews_data), 1)
         self.assertEqual(reviews_data[0]["author_name"], "Pooja Sharma")
+        self.assertTrue(reviews_data[0]["is_published"])
+        self.assertTrue(reviews_data[0]["is_verified"])
 
-    def test_06_updates_persist_and_reflect_in_public_settings(self):
-        """6. Store setting updates persist to database and reflect in public GET /settings."""
+    def test_06_unverified_and_low_rated_reviews_cannot_be_published(self):
+        """6. Unverified reviews and low-rated reviews (< 4) are strictly excluded from publication."""
         headers = {"Authorization": f"Bearer {self.owner_token}"}
-        update_payload = {
-            "boutique_name": "Royal Libas by Tanya Atelier",
-            "boutique_landmark": "Opposite Hotel Ambrosia, Sipri",
-            "boutique_opening_hours": "Tuesday – Sunday: 11:00 AM – 8:00 PM",
-            "boutique_weekly_holiday": "Monday",
-            "boutique_special_notice": "Festive season extended hours until 9:00 PM.",
-        }
-        res_put = self.client.put("/admin/settings", json=update_payload, headers=headers)
-        self.assertEqual(res_put.status_code, 200)
 
-        # Verify public endpoint
+        test_reviews = [
+            {
+                "id": "unverified_rev",
+                "author_name": "Unverified User",
+                "rating": 5,
+                "review_text": "Great service but unverified.",
+                "source": "google",
+                "is_verified": False,  # Not verified
+                "is_published": True,  # Attempting to publish
+            },
+            {
+                "id": "low_rated_rev",
+                "author_name": "Critique User",
+                "rating": 3,  # Below 4 stars
+                "review_text": "Average experience.",
+                "source": "google",
+                "is_verified": True,
+                "is_published": True,  # Attempting to publish
+            },
+            {
+                "id": "non_google_rev",
+                "author_name": "Justdial User",
+                "rating": 5,
+                "review_text": "Found on Justdial.",
+                "source": "justdial",  # Not Google
+                "is_verified": True,
+                "is_published": True,  # Attempting to publish
+            },
+            {
+                "id": "valid_positive_rev",
+                "author_name": "Authentic Patron",
+                "rating": 4,
+                "review_text": "Delighted with the handloom craftsmanship.",
+                "source": "google",
+                "is_verified": True,
+                "is_published": True,  # Eligible
+            },
+        ]
+
+        res = self.client.put(
+            "/admin/settings",
+            json={"boutique_reviews_json": json.dumps(test_reviews)},
+            headers=headers,
+        )
+        self.assertEqual(res.status_code, 200)
+        parsed = json.loads(res.json()["boutique_reviews_json"])
+
+        # Check that only the eligible verified 4-star Google review is published
+        rev_map = {r["id"]: r for r in parsed}
+        self.assertFalse(rev_map["unverified_rev"]["is_published"])
+        self.assertFalse(rev_map["low_rated_rev"]["is_published"])
+        self.assertFalse(rev_map["non_google_rev"]["is_published"])
+        self.assertTrue(rev_map["valid_positive_rev"]["is_published"])
+        self.assertEqual(rev_map["valid_positive_rev"]["rating"], 4.0)
+
+    def test_07_clearing_optional_settings_persists_as_none(self):
+        """7. Explicit clearing with null or empty string persists and does not restore default placeholders."""
+        headers = {"Authorization": f"Bearer {self.owner_token}"}
+
+        clear_payload = {
+            "boutique_phone": "",
+            "boutique_whatsapp": "",
+            "boutique_opening_hours": "",
+            "boutique_weekly_holiday": "",
+            "boutique_special_notice": "",
+            "boutique_embed_url": "",
+            "boutique_main_image": "",
+            "boutique_gallery_json": "[]",
+            "boutique_reviews_json": "[]",
+            "boutique_reviews_visible": False,
+        }
+
+        res = self.client.put("/admin/settings", json=clear_payload, headers=headers)
+        self.assertEqual(res.status_code, 200)
+
+        # Verify DB directly
+        db = self.TestingSessionLocal()
+        setting = db.query(StoreSetting).first()
+        self.assertIsNone(setting.boutique_phone)
+        self.assertIsNone(setting.boutique_whatsapp)
+        self.assertIsNone(setting.boutique_opening_hours)
+        self.assertIsNone(setting.boutique_weekly_holiday)
+        self.assertIsNone(setting.boutique_special_notice)
+        self.assertIsNone(setting.boutique_embed_url)
+        self.assertIsNone(setting.boutique_main_image)
+        self.assertEqual(setting.boutique_gallery_json, "[]")
+        self.assertEqual(setting.boutique_reviews_json, "[]")
+        self.assertFalse(setting.boutique_reviews_visible)
+        db.close()
+
+        # Verify public GET /settings returns null/empty rather than placeholder strings
         res_pub = self.client.get("/settings")
         self.assertEqual(res_pub.status_code, 200)
         pub_data = res_pub.json()
-        self.assertEqual(pub_data["boutique_name"], "Royal Libas by Tanya Atelier")
-        self.assertEqual(pub_data["boutique_landmark"], "Opposite Hotel Ambrosia, Sipri")
-        self.assertEqual(pub_data["boutique_opening_hours"], "Tuesday – Sunday: 11:00 AM – 8:00 PM")
-        self.assertEqual(pub_data["boutique_weekly_holiday"], "Monday")
-        self.assertEqual(pub_data["boutique_special_notice"], "Festive season extended hours until 9:00 PM.")
+        self.assertIsNone(pub_data["boutique_phone"])
+        self.assertIsNone(pub_data["boutique_whatsapp"])
+        self.assertIsNone(pub_data["boutique_opening_hours"])
+        self.assertIsNone(pub_data["boutique_weekly_holiday"])
+        self.assertIsNone(pub_data["boutique_embed_url"])
+        self.assertIsNone(pub_data["boutique_main_image"])
+        self.assertEqual(pub_data["boutique_gallery_json"], "[]")
+        self.assertEqual(pub_data["boutique_reviews_json"], "[]")
+        self.assertFalse(pub_data["boutique_reviews_visible"])
+
+    def test_08_contact_inquiry_submission(self):
+        """8. Contact inquiry endpoint accepts valid submissions and validates input."""
+        # Valid submission
+        inquiry_data = {
+            "name": "Shreya Bundela",
+            "email": "shreya@example.com",
+            "message": "Inquiry regarding bespoke bridal stitching and visiting the atelier next week.",
+        }
+        res = self.client.post("/contact", json=inquiry_data)
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.json()["status"], "success")
+
+        # Invalid email rejected
+        bad_inquiry = {
+            "name": "Shreya",
+            "email": "notanemail",
+            "message": "Valid inquiry message text.",
+        }
+        res_bad = self.client.post("/contact", json=bad_inquiry)
+        self.assertEqual(res_bad.status_code, 422)
 
 
 if __name__ == "__main__":

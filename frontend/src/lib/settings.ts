@@ -14,9 +14,11 @@ export interface BoutiqueReviewItem {
   author_name: string;
   rating: number;
   review_text: string;
-  review_date?: string;
-  source_url?: string;
-  verified_date?: string;
+  review_date?: string | null;
+  source?: string;
+  source_url?: string | null;
+  is_verified: boolean;
+  verified_date?: string | null;
   is_published: boolean;
   sort_order: number;
 }
@@ -49,10 +51,10 @@ export interface StoreSettings {
   boutiqueShortAddress: string;
   boutiquePincode: string;
   boutiqueLandmark: string;
-  boutiquePhone: string;
-  boutiqueWhatsapp: string;
-  boutiqueOpeningHours: string;
-  boutiqueWeeklyHoliday: string;
+  boutiquePhone?: string | null;
+  boutiqueWhatsapp?: string | null;
+  boutiqueOpeningHours?: string | null;
+  boutiqueWeeklyHoliday?: string | null;
   boutiqueSpecialNotice?: string | null;
   boutiqueDirectionsUrl: string;
   boutiqueEmbedUrl?: string | null;
@@ -77,89 +79,56 @@ export const DEFAULT_EDITORIAL_IMAGES = {
   posterStoryImage: '/images/posters/crafted_with_care.jpg',
 };
 
+export const DEFAULT_BOUTIQUE_GALLERY: BoutiqueGalleryItem[] = [];
+
 export function parseGalleryJson(raw: any): BoutiqueGalleryItem[] {
-  if (Array.isArray(raw)) return raw.length > 0 ? raw.slice(0, 4) : DEFAULT_BOUTIQUE_GALLERY;
+  if (Array.isArray(raw)) {
+    return raw.slice(0, 4).filter((item) => item && (item.url || typeof item === 'string'));
+  }
   if (typeof raw === 'string' && raw.trim()) {
     try {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.length > 0 ? parsed.slice(0, 4) : DEFAULT_BOUTIQUE_GALLERY;
+      if (Array.isArray(parsed)) {
+        return parsed.slice(0, 4).filter((item) => item && (item.url || typeof item === 'string'));
+      }
     } catch {}
   }
-  return DEFAULT_BOUTIQUE_GALLERY;
+  return [];
 }
 
-export const DEFAULT_BOUTIQUE_REVIEWS: BoutiqueReviewItem[] = [
-  {
-    id: 'rev-1',
-    author_name: 'Pooja Agarwal',
-    rating: 5,
-    review_text:
-      'Visited the boutique in Sipri Bazar for festive wedding shopping. The zardozi work and fabric quality of the suit sets are truly royal. Tanya personally assisted us with custom tailoring.',
-    review_date: 'October 2026',
-    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
-    verified_date: '2026-10-20',
-    is_published: true,
-    sort_order: 0,
-  },
-  {
-    id: 'rev-2',
-    author_name: 'Neha Sengar',
-    rating: 5,
-    review_text:
-      'Best boutique collection in Jhansi opposite Hotel Ambrosia. Beautiful chanderi co-ord sets and heavy festive wear. The fitting and finish are exceptional.',
-    review_date: 'September 2026',
-    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
-    verified_date: '2026-09-28',
-    is_published: true,
-    sort_order: 1,
-  },
-  {
-    id: 'rev-3',
-    author_name: 'Shalini Verma',
-    rating: 4,
-    review_text:
-      'Very elegant collection of festive suits and designer palazzos. Stitching and finishing are top-notch. Doorstep trial was smooth.',
-    review_date: 'October 2026',
-    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
-    verified_date: '2026-10-15',
-    is_published: true,
-    sort_order: 2,
-  },
-  {
-    id: 'rev-4',
-    author_name: 'Ananya Dixit',
-    rating: 5,
-    review_text:
-      'Exquisite handloom and velvet bridal wear. Such a calm and luxurious atmosphere at the atelier. Highly recommended if you are looking for authentic luxury in Jhansi.',
-    review_date: 'August 2026',
-    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
-    verified_date: '2026-08-19',
-    is_published: true,
-    sort_order: 3,
-  },
-  {
-    id: 'rev-5',
-    author_name: 'Ritu Bundela',
-    rating: 5,
-    review_text:
-      'Purchased a heavy party wear set for Karwa Chauth. The intricate embroidery and vibrant shades were praised by everyone in my family. Will visit again!',
-    review_date: 'October 2026',
-    source_url: 'https://share.google/rdahckZ4nVz7Bgu2H',
-    verified_date: '2026-10-24',
-    is_published: true,
-    sort_order: 4,
-  },
-];
+// Requirement B: Default review list is empty. Sample fallback content removed.
+export const DEFAULT_BOUTIQUE_REVIEWS: BoutiqueReviewItem[] = [];
 
 export function parseReviewsJson(raw: any): BoutiqueReviewItem[] {
-  if (Array.isArray(raw)) return raw.length > 0 ? raw : DEFAULT_BOUTIQUE_REVIEWS;
-  if (typeof raw === 'string' && raw.trim()) {
+  let list: any[] = [];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (typeof raw === 'string' && raw.trim()) {
     try {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.length > 0 ? parsed : DEFAULT_BOUTIQUE_REVIEWS;
+      if (Array.isArray(parsed)) {
+        list = parsed;
+      }
     } catch {}
   }
-  return DEFAULT_BOUTIQUE_REVIEWS;
+
+  if (!list || list.length === 0) {
+    return [];
+  }
+
+  return list.map((item, idx) => ({
+    id: String(item.id || `rev-${idx + 1}`),
+    author_name: String(item.author_name || '').trim(),
+    rating: Number(item.rating) || 5,
+    review_text: String(item.review_text || '').trim(),
+    review_date: item.review_date ? String(item.review_date).trim() : null,
+    source: String(item.source || 'google').trim().toLowerCase(),
+    source_url: item.source_url ? String(item.source_url).trim() : null,
+    is_verified: Boolean(item.is_verified),
+    verified_date: item.verified_date ? String(item.verified_date).trim() : null,
+    is_published: Boolean(item.is_published),
+    sort_order: typeof item.sort_order === 'number' ? item.sort_order : idx,
+  }));
 }
 
 export function isDemoImageUrl(url: string | null | undefined): boolean {
@@ -180,16 +149,6 @@ export function sanitizeSettingUrl(url: string | null | undefined, defaultUrl: s
   return trimmed;
 }
 
-export const DEFAULT_BOUTIQUE_GALLERY: BoutiqueGalleryItem[] = [
-  { id: 'b-craft-1', url: '/images/editorial/brand_story_hero.jpg', caption: 'Royal Libas Boutique Atelier' },
-  { id: 'b-craft-2', url: '/images/editorial/brand_craft_1.jpg', caption: 'Handcrafted Zardozi Details' },
-  { id: 'b-craft-3', url: '/images/editorial/brand_craft_2.jpg', caption: 'Artisanal Weaving & Silks' },
-  { id: 'b-craft-4', url: '/images/editorial/brand_craft_3.jpg', caption: 'Bespoke Tailoring & Styling' },
-];
-
-export const DEFAULT_BOUTIQUE_EMBED_URL =
-  'https://maps.google.com/maps?q=Royal%20Libas%20By%20Tanya%2C%20Opposite%20Hotel%20Ambrosia%2C%20Prem%20Ganj%2C%20Sipri%20Bazar%2C%20Jhansi%2C%20Uttar%20Pradesh%20284003&t=&z=16&ie=UTF8&iwloc=&output=embed';
-
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   freeShippingThreshold: 1500,
   standardShippingFee: 99,
@@ -199,10 +158,10 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   instagramHandle: '@royal_libas_by_tanya',
   codEnabled: false,
   onlinePaymentEnabled: true,
-  heroTitle: "Timeless Elegance, Handcrafted Regality",
-  heroSubtitle: "Pure handloom chanderi, tissue silks, and festive velvets made for the discerning connoisseur.",
-  heroCtaText: "Explore The Collection",
-  heroCtaLink: "/shop",
+  heroTitle: 'Timeless Elegance, Handcrafted Regality',
+  heroSubtitle: 'Pure handloom chanderi, tissue silks, and festive velvets made for the discerning connoisseur.',
+  heroCtaText: 'Explore The Collection',
+  heroCtaLink: '/shop',
   heroImageUrl: DEFAULT_EDITORIAL_IMAGES.heroImageUrl,
   categoryTwoPiecesImage: DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage,
   categorySuitSetImage: DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage,
@@ -213,24 +172,25 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   posterStoryImage: DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
   // Boutique defaults
   boutiqueName: 'Royal Libas by Tanya',
-  boutiqueIntro: 'Experience our master craftsmanship, bespoke tailoring consultations, and luxury handloom collections in person at our flagship Jhansi boutique.',
+  boutiqueIntro:
+    'Experience our master craftsmanship, bespoke tailoring consultations, and luxury handloom collections in person at our flagship Jhansi boutique.',
   boutiqueAddress: 'Opposite Hotel Ambrosia, Prem Ganj, Sipri Bazar, Jhansi, Uttar Pradesh 284003',
   boutiqueShortAddress: 'Prem Ganj, Sipri Bazar, Jhansi, UP 284003',
   boutiquePincode: '284003',
   boutiqueLandmark: 'Opposite Hotel Ambrosia',
-  boutiquePhone: '+91 98112 23344',
-  boutiqueWhatsapp: '+91 98112 23344',
-  boutiqueOpeningHours: 'Mon – Sat: 10:30 AM – 8:30 PM',
-  boutiqueWeeklyHoliday: 'Sunday',
+  boutiquePhone: null,
+  boutiqueWhatsapp: null,
+  boutiqueOpeningHours: null,
+  boutiqueWeeklyHoliday: null,
   boutiqueSpecialNotice: null,
   boutiqueDirectionsUrl: 'https://share.google/rdahckZ4nVz7Bgu2H',
-  boutiqueEmbedUrl: DEFAULT_BOUTIQUE_EMBED_URL,
+  boutiqueEmbedUrl: null,
   boutiqueReviewsUrl: 'https://share.google/rdahckZ4nVz7Bgu2H',
-  boutiqueMainImage: '/images/editorial/brand_story_hero.jpg',
-  boutiqueGallery: DEFAULT_BOUTIQUE_GALLERY,
+  boutiqueMainImage: null,
+  boutiqueGallery: [],
   boutiqueSectionVisible: true,
-  boutiqueReviews: DEFAULT_BOUTIQUE_REVIEWS,
-  boutiqueReviewsVisible: true,
+  boutiqueReviews: [],
+  boutiqueReviewsVisible: false,
 };
 
 export function getStoreSettings(): StoreSettings {
@@ -252,40 +212,72 @@ export function getStoreSettings(): StoreSettings {
     const sanitized: StoreSettings = {
       ...DEFAULT_STORE_SETTINGS,
       ...parsed,
-      freeShippingThreshold: Number(parsed.freeShippingThreshold) || DEFAULT_STORE_SETTINGS.freeShippingThreshold,
-      standardShippingFee: Number(parsed.standardShippingFee) || DEFAULT_STORE_SETTINGS.standardShippingFee,
-      codEnabled: typeof parsed.codEnabled === 'boolean' ? parsed.codEnabled : DEFAULT_STORE_SETTINGS.codEnabled,
-      onlinePaymentEnabled: typeof parsed.onlinePaymentEnabled === 'boolean' ? parsed.onlinePaymentEnabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
+      freeShippingThreshold:
+        Number(parsed.freeShippingThreshold) || DEFAULT_STORE_SETTINGS.freeShippingThreshold,
+      standardShippingFee:
+        Number(parsed.standardShippingFee) || DEFAULT_STORE_SETTINGS.standardShippingFee,
+      codEnabled:
+        typeof parsed.codEnabled === 'boolean' ? parsed.codEnabled : DEFAULT_STORE_SETTINGS.codEnabled,
+      onlinePaymentEnabled:
+        typeof parsed.onlinePaymentEnabled === 'boolean'
+          ? parsed.onlinePaymentEnabled
+          : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
       heroImageUrl: cleanUrl(parsed.heroImageUrl, DEFAULT_EDITORIAL_IMAGES.heroImageUrl),
-      categoryTwoPiecesImage: cleanUrl(parsed.categoryTwoPiecesImage, DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage),
-      categorySuitSetImage: cleanUrl(parsed.categorySuitSetImage, DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage),
-      categoryHeavyDressImage: cleanUrl(parsed.categoryHeavyDressImage, DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage),
-      festiveBannerImage: cleanUrl(parsed.festiveBannerImage, DEFAULT_EDITORIAL_IMAGES.festiveBannerImage),
-      posterOccasionImage: cleanUrl(parsed.posterOccasionImage, DEFAULT_EDITORIAL_IMAGES.posterOccasionImage),
-      posterEverydayImage: cleanUrl(parsed.posterEverydayImage, DEFAULT_EDITORIAL_IMAGES.posterEverydayImage),
-      posterStoryImage: cleanUrl(parsed.posterStoryImage, DEFAULT_EDITORIAL_IMAGES.posterStoryImage),
+      categoryTwoPiecesImage: cleanUrl(
+        parsed.categoryTwoPiecesImage,
+        DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage
+      ),
+      categorySuitSetImage: cleanUrl(
+        parsed.categorySuitSetImage,
+        DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage
+      ),
+      categoryHeavyDressImage: cleanUrl(
+        parsed.categoryHeavyDressImage,
+        DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage
+      ),
+      festiveBannerImage: cleanUrl(
+        parsed.festiveBannerImage,
+        DEFAULT_EDITORIAL_IMAGES.festiveBannerImage
+      ),
+      posterOccasionImage: cleanUrl(
+        parsed.posterOccasionImage,
+        DEFAULT_EDITORIAL_IMAGES.posterOccasionImage
+      ),
+      posterEverydayImage: cleanUrl(
+        parsed.posterEverydayImage,
+        DEFAULT_EDITORIAL_IMAGES.posterEverydayImage
+      ),
+      posterStoryImage: cleanUrl(
+        parsed.posterStoryImage,
+        DEFAULT_EDITORIAL_IMAGES.posterStoryImage
+      ),
       boutiqueName: parsed.boutiqueName || DEFAULT_STORE_SETTINGS.boutiqueName,
       boutiqueIntro: parsed.boutiqueIntro || DEFAULT_STORE_SETTINGS.boutiqueIntro,
       boutiqueAddress: parsed.boutiqueAddress || DEFAULT_STORE_SETTINGS.boutiqueAddress,
       boutiqueShortAddress: parsed.boutiqueShortAddress || DEFAULT_STORE_SETTINGS.boutiqueShortAddress,
       boutiquePincode: parsed.boutiquePincode || DEFAULT_STORE_SETTINGS.boutiquePincode,
       boutiqueLandmark: parsed.boutiqueLandmark || DEFAULT_STORE_SETTINGS.boutiqueLandmark,
-      boutiquePhone: parsed.boutiquePhone || DEFAULT_STORE_SETTINGS.boutiquePhone,
-      boutiqueWhatsapp: parsed.boutiqueWhatsapp || parsed.whatsappNumber || DEFAULT_STORE_SETTINGS.boutiqueWhatsapp,
-      boutiqueOpeningHours: parsed.boutiqueOpeningHours || DEFAULT_STORE_SETTINGS.boutiqueOpeningHours,
-      boutiqueWeeklyHoliday: parsed.boutiqueWeeklyHoliday || DEFAULT_STORE_SETTINGS.boutiqueWeeklyHoliday,
-      boutiqueSpecialNotice: parsed.boutiqueSpecialNotice ?? null,
+      boutiquePhone: parsed.boutiquePhone != null ? parsed.boutiquePhone : null,
+      boutiqueWhatsapp: parsed.boutiqueWhatsapp != null ? parsed.boutiqueWhatsapp : null,
+      boutiqueOpeningHours: parsed.boutiqueOpeningHours != null ? parsed.boutiqueOpeningHours : null,
+      boutiqueWeeklyHoliday: parsed.boutiqueWeeklyHoliday != null ? parsed.boutiqueWeeklyHoliday : null,
+      boutiqueSpecialNotice: parsed.boutiqueSpecialNotice != null ? parsed.boutiqueSpecialNotice : null,
       boutiqueDirectionsUrl: parsed.boutiqueDirectionsUrl || DEFAULT_STORE_SETTINGS.boutiqueDirectionsUrl,
-      boutiqueEmbedUrl: parsed.boutiqueEmbedUrl || DEFAULT_STORE_SETTINGS.boutiqueEmbedUrl,
-      boutiqueReviewsUrl: parsed.boutiqueReviewsUrl || DEFAULT_STORE_SETTINGS.boutiqueReviewsUrl,
-      boutiqueMainImage: cleanUrl(parsed.boutiqueMainImage, DEFAULT_STORE_SETTINGS.boutiqueMainImage || ''),
+      boutiqueEmbedUrl: parsed.boutiqueEmbedUrl != null ? parsed.boutiqueEmbedUrl : null,
+      boutiqueReviewsUrl: parsed.boutiqueReviewsUrl != null ? parsed.boutiqueReviewsUrl : null,
+      boutiqueMainImage: parsed.boutiqueMainImage != null ? parsed.boutiqueMainImage : null,
       boutiqueGallery: parseGalleryJson(parsed.boutiqueGallery),
-      boutiqueSectionVisible: typeof parsed.boutiqueSectionVisible === 'boolean' ? parsed.boutiqueSectionVisible : DEFAULT_STORE_SETTINGS.boutiqueSectionVisible,
+      boutiqueSectionVisible:
+        typeof parsed.boutiqueSectionVisible === 'boolean'
+          ? parsed.boutiqueSectionVisible
+          : DEFAULT_STORE_SETTINGS.boutiqueSectionVisible,
       boutiqueReviews: parseReviewsJson(parsed.boutiqueReviews),
-      boutiqueReviewsVisible: typeof parsed.boutiqueReviewsVisible === 'boolean' ? parsed.boutiqueReviewsVisible : DEFAULT_STORE_SETTINGS.boutiqueReviewsVisible,
+      boutiqueReviewsVisible:
+        typeof parsed.boutiqueReviewsVisible === 'boolean'
+          ? parsed.boutiqueReviewsVisible
+          : DEFAULT_STORE_SETTINGS.boutiqueReviewsVisible,
     };
 
-    // If cached browser settings had demo URLs, overwrite immediately to prevent stale overrides
     if (hadDemo) {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(sanitized));
     }
@@ -326,40 +318,92 @@ export function useStoreSettings(): {
           whatsappNumber: serverData.whatsapp_number || DEFAULT_STORE_SETTINGS.whatsappNumber,
           supportEmail: serverData.support_email || DEFAULT_STORE_SETTINGS.supportEmail,
           instagramHandle: serverData.instagram_handle || DEFAULT_STORE_SETTINGS.instagramHandle,
-          codEnabled: typeof serverData.cod_enabled === 'boolean' ? serverData.cod_enabled : DEFAULT_STORE_SETTINGS.codEnabled,
-          onlinePaymentEnabled: typeof serverData.online_payment_enabled === 'boolean' ? serverData.online_payment_enabled : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
+          codEnabled:
+            typeof serverData.cod_enabled === 'boolean'
+              ? serverData.cod_enabled
+              : DEFAULT_STORE_SETTINGS.codEnabled,
+          onlinePaymentEnabled:
+            typeof serverData.online_payment_enabled === 'boolean'
+              ? serverData.online_payment_enabled
+              : DEFAULT_STORE_SETTINGS.onlinePaymentEnabled,
           heroTitle: serverData.hero_title || DEFAULT_STORE_SETTINGS.heroTitle,
           heroSubtitle: serverData.hero_subtitle || DEFAULT_STORE_SETTINGS.heroSubtitle,
           heroCtaText: serverData.hero_cta_text || DEFAULT_STORE_SETTINGS.heroCtaText,
           heroCtaLink: serverData.hero_cta_link || DEFAULT_STORE_SETTINGS.heroCtaLink,
-          heroImageUrl: sanitizeSettingUrl(serverData.hero_image_url, DEFAULT_EDITORIAL_IMAGES.heroImageUrl),
-          categoryTwoPiecesImage: sanitizeSettingUrl(serverData.category_two_pieces_image, DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage),
-          categorySuitSetImage: sanitizeSettingUrl(serverData.category_suit_set_image, DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage),
-          categoryHeavyDressImage: sanitizeSettingUrl(serverData.category_heavy_dress_image, DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage),
-          festiveBannerImage: sanitizeSettingUrl(serverData.festive_banner_image, DEFAULT_EDITORIAL_IMAGES.festiveBannerImage),
-          posterOccasionImage: sanitizeSettingUrl(serverData.poster_occasion_image, DEFAULT_EDITORIAL_IMAGES.posterOccasionImage),
-          posterEverydayImage: sanitizeSettingUrl(serverData.poster_everyday_image, DEFAULT_EDITORIAL_IMAGES.posterEverydayImage),
-          posterStoryImage: sanitizeSettingUrl(serverData.poster_story_image, DEFAULT_EDITORIAL_IMAGES.posterStoryImage),
-          // Boutique data from server
+          heroImageUrl: sanitizeSettingUrl(
+            serverData.hero_image_url,
+            DEFAULT_EDITORIAL_IMAGES.heroImageUrl
+          ),
+          categoryTwoPiecesImage: sanitizeSettingUrl(
+            serverData.category_two_pieces_image,
+            DEFAULT_EDITORIAL_IMAGES.categoryTwoPiecesImage
+          ),
+          categorySuitSetImage: sanitizeSettingUrl(
+            serverData.category_suit_set_image,
+            DEFAULT_EDITORIAL_IMAGES.categorySuitSetImage
+          ),
+          categoryHeavyDressImage: sanitizeSettingUrl(
+            serverData.category_heavy_dress_image,
+            DEFAULT_EDITORIAL_IMAGES.categoryHeavyDressImage
+          ),
+          festiveBannerImage: sanitizeSettingUrl(
+            serverData.festive_banner_image,
+            DEFAULT_EDITORIAL_IMAGES.festiveBannerImage
+          ),
+          posterOccasionImage: sanitizeSettingUrl(
+            serverData.poster_occasion_image,
+            DEFAULT_EDITORIAL_IMAGES.posterOccasionImage
+          ),
+          posterEverydayImage: sanitizeSettingUrl(
+            serverData.poster_everyday_image,
+            DEFAULT_EDITORIAL_IMAGES.posterEverydayImage
+          ),
+          posterStoryImage: sanitizeSettingUrl(
+            serverData.poster_story_image,
+            DEFAULT_EDITORIAL_IMAGES.posterStoryImage
+          ),
+          // Boutique data from server (respects cleared null values)
           boutiqueName: serverData.boutique_name || DEFAULT_STORE_SETTINGS.boutiqueName,
           boutiqueIntro: serverData.boutique_intro || DEFAULT_STORE_SETTINGS.boutiqueIntro,
           boutiqueAddress: serverData.boutique_address || DEFAULT_STORE_SETTINGS.boutiqueAddress,
-          boutiqueShortAddress: serverData.boutique_short_address || DEFAULT_STORE_SETTINGS.boutiqueShortAddress,
+          boutiqueShortAddress:
+            serverData.boutique_short_address || DEFAULT_STORE_SETTINGS.boutiqueShortAddress,
           boutiquePincode: serverData.boutique_pincode || DEFAULT_STORE_SETTINGS.boutiquePincode,
           boutiqueLandmark: serverData.boutique_landmark || DEFAULT_STORE_SETTINGS.boutiqueLandmark,
-          boutiquePhone: serverData.boutique_phone || DEFAULT_STORE_SETTINGS.boutiquePhone,
-          boutiqueWhatsapp: serverData.boutique_whatsapp || serverData.whatsapp_number || DEFAULT_STORE_SETTINGS.boutiqueWhatsapp,
-          boutiqueOpeningHours: serverData.boutique_opening_hours || DEFAULT_STORE_SETTINGS.boutiqueOpeningHours,
-          boutiqueWeeklyHoliday: serverData.boutique_weekly_holiday || DEFAULT_STORE_SETTINGS.boutiqueWeeklyHoliday,
-          boutiqueSpecialNotice: serverData.boutique_special_notice ?? null,
-          boutiqueDirectionsUrl: serverData.boutique_directions_url || DEFAULT_STORE_SETTINGS.boutiqueDirectionsUrl,
-          boutiqueEmbedUrl: serverData.boutique_embed_url || DEFAULT_STORE_SETTINGS.boutiqueEmbedUrl,
-          boutiqueReviewsUrl: serverData.boutique_reviews_url || DEFAULT_STORE_SETTINGS.boutiqueReviewsUrl,
-          boutiqueMainImage: sanitizeSettingUrl(serverData.boutique_main_image, DEFAULT_STORE_SETTINGS.boutiqueMainImage || ''),
+          boutiquePhone: serverData.boutique_phone ? serverData.boutique_phone.trim() : null,
+          boutiqueWhatsapp: serverData.boutique_whatsapp
+            ? serverData.boutique_whatsapp.trim()
+            : null,
+          boutiqueOpeningHours: serverData.boutique_opening_hours
+            ? serverData.boutique_opening_hours.trim()
+            : null,
+          boutiqueWeeklyHoliday: serverData.boutique_weekly_holiday
+            ? serverData.boutique_weekly_holiday.trim()
+            : null,
+          boutiqueSpecialNotice: serverData.boutique_special_notice
+            ? serverData.boutique_special_notice.trim()
+            : null,
+          boutiqueDirectionsUrl:
+            serverData.boutique_directions_url || DEFAULT_STORE_SETTINGS.boutiqueDirectionsUrl,
+          boutiqueEmbedUrl: serverData.boutique_embed_url
+            ? serverData.boutique_embed_url.trim()
+            : null,
+          boutiqueReviewsUrl: serverData.boutique_reviews_url
+            ? serverData.boutique_reviews_url.trim()
+            : null,
+          boutiqueMainImage: serverData.boutique_main_image
+            ? serverData.boutique_main_image.trim()
+            : null,
           boutiqueGallery: parseGalleryJson(serverData.boutique_gallery_json),
-          boutiqueSectionVisible: typeof serverData.boutique_section_visible === 'boolean' ? serverData.boutique_section_visible : DEFAULT_STORE_SETTINGS.boutiqueSectionVisible,
+          boutiqueSectionVisible:
+            typeof serverData.boutique_section_visible === 'boolean'
+              ? serverData.boutique_section_visible
+              : true,
           boutiqueReviews: parseReviewsJson(serverData.boutique_reviews_json),
-          boutiqueReviewsVisible: typeof serverData.boutique_reviews_visible === 'boolean' ? serverData.boutique_reviews_visible : DEFAULT_STORE_SETTINGS.boutiqueReviewsVisible,
+          boutiqueReviewsVisible:
+            typeof serverData.boutique_reviews_visible === 'boolean'
+              ? serverData.boutique_reviews_visible
+              : false,
         };
         saveStoreSettings(synced);
         setSettings(synced);

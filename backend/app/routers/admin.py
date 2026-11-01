@@ -4317,45 +4317,51 @@ def admin_update_settings(
         setting.online_payment_enabled = payload.online_payment_enabled
         payment_settings_changed = True
 
-    # Boutique Location & Visiting Hours
-    if payload.boutique_name is not None:
-        setting.boutique_name = payload.boutique_name.strip()
-    if payload.boutique_intro is not None:
-        setting.boutique_intro = payload.boutique_intro.strip()
-    if payload.boutique_address is not None:
-        setting.boutique_address = payload.boutique_address.strip()
-    if payload.boutique_short_address is not None:
-        setting.boutique_short_address = payload.boutique_short_address.strip()
-    if payload.boutique_pincode is not None:
-        setting.boutique_pincode = payload.boutique_pincode.strip()
-    if payload.boutique_landmark is not None:
-        setting.boutique_landmark = payload.boutique_landmark.strip()
-    if payload.boutique_phone is not None:
-        setting.boutique_phone = payload.boutique_phone.strip()
-    if payload.boutique_whatsapp is not None:
-        setting.boutique_whatsapp = payload.boutique_whatsapp.strip()
-    if payload.boutique_opening_hours is not None:
-        setting.boutique_opening_hours = payload.boutique_opening_hours.strip()
-    if payload.boutique_weekly_holiday is not None:
-        setting.boutique_weekly_holiday = payload.boutique_weekly_holiday.strip()
-    if payload.boutique_special_notice is not None:
-        setting.boutique_special_notice = payload.boutique_special_notice.strip() if payload.boutique_special_notice else None
-    if payload.boutique_directions_url is not None:
-        setting.boutique_directions_url = payload.boutique_directions_url.strip() if payload.boutique_directions_url else None
-    if payload.boutique_embed_url is not None:
-        setting.boutique_embed_url = payload.boutique_embed_url.strip() if payload.boutique_embed_url else None
-    if payload.boutique_reviews_url is not None:
-        setting.boutique_reviews_url = payload.boutique_reviews_url.strip() if payload.boutique_reviews_url else None
-    if payload.boutique_main_image is not None:
-        setting.boutique_main_image = payload.boutique_main_image.strip() if payload.boutique_main_image else None
-    if payload.boutique_gallery_json is not None:
-        setting.boutique_gallery_json = payload.boutique_gallery_json
-    if payload.boutique_section_visible is not None:
-        setting.boutique_section_visible = payload.boutique_section_visible
-    if payload.boutique_reviews_json is not None:
-        setting.boutique_reviews_json = payload.boutique_reviews_json
-    if payload.boutique_reviews_visible is not None:
-        setting.boutique_reviews_visible = payload.boutique_reviews_visible
+    def _clean_opt_str(val: Optional[str]) -> Optional[str]:
+        if val is None:
+            return None
+        cleaned = str(val).strip()
+        return cleaned if cleaned else None
+
+    # Boutique Location & Visiting Hours (supports explicit clearing via null or empty string)
+    if "boutique_name" in payload.model_fields_set:
+        setting.boutique_name = _clean_opt_str(payload.boutique_name)
+    if "boutique_intro" in payload.model_fields_set:
+        setting.boutique_intro = _clean_opt_str(payload.boutique_intro)
+    if "boutique_address" in payload.model_fields_set:
+        setting.boutique_address = _clean_opt_str(payload.boutique_address)
+    if "boutique_short_address" in payload.model_fields_set:
+        setting.boutique_short_address = _clean_opt_str(payload.boutique_short_address)
+    if "boutique_pincode" in payload.model_fields_set:
+        setting.boutique_pincode = _clean_opt_str(payload.boutique_pincode)
+    if "boutique_landmark" in payload.model_fields_set:
+        setting.boutique_landmark = _clean_opt_str(payload.boutique_landmark)
+    if "boutique_phone" in payload.model_fields_set:
+        setting.boutique_phone = _clean_opt_str(payload.boutique_phone)
+    if "boutique_whatsapp" in payload.model_fields_set:
+        setting.boutique_whatsapp = _clean_opt_str(payload.boutique_whatsapp)
+    if "boutique_opening_hours" in payload.model_fields_set:
+        setting.boutique_opening_hours = _clean_opt_str(payload.boutique_opening_hours)
+    if "boutique_weekly_holiday" in payload.model_fields_set:
+        setting.boutique_weekly_holiday = _clean_opt_str(payload.boutique_weekly_holiday)
+    if "boutique_special_notice" in payload.model_fields_set:
+        setting.boutique_special_notice = _clean_opt_str(payload.boutique_special_notice)
+    if "boutique_directions_url" in payload.model_fields_set:
+        setting.boutique_directions_url = _clean_opt_str(payload.boutique_directions_url)
+    if "boutique_embed_url" in payload.model_fields_set:
+        setting.boutique_embed_url = _clean_opt_str(payload.boutique_embed_url)
+    if "boutique_reviews_url" in payload.model_fields_set:
+        setting.boutique_reviews_url = _clean_opt_str(payload.boutique_reviews_url)
+    if "boutique_main_image" in payload.model_fields_set:
+        setting.boutique_main_image = _clean_opt_str(payload.boutique_main_image)
+    if "boutique_gallery_json" in payload.model_fields_set:
+        setting.boutique_gallery_json = payload.boutique_gallery_json if payload.boutique_gallery_json else "[]"
+    if "boutique_section_visible" in payload.model_fields_set:
+        setting.boutique_section_visible = bool(payload.boutique_section_visible)
+    if "boutique_reviews_json" in payload.model_fields_set:
+        setting.boutique_reviews_json = payload.boutique_reviews_json if payload.boutique_reviews_json else "[]"
+    if "boutique_reviews_visible" in payload.model_fields_set:
+        setting.boutique_reviews_visible = bool(payload.boutique_reviews_visible)
 
     db.commit()
     db.refresh(setting)

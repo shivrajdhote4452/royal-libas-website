@@ -56,10 +56,10 @@ export const AdminSettings: React.FC = () => {
   const [boutiqueShortAddress, setBoutiqueShortAddress] = useState(settings.boutiqueShortAddress);
   const [boutiquePincode, setBoutiquePincode] = useState(settings.boutiquePincode);
   const [boutiqueLandmark, setBoutiqueLandmark] = useState(settings.boutiqueLandmark);
-  const [boutiquePhone, setBoutiquePhone] = useState(settings.boutiquePhone);
-  const [boutiqueWhatsapp, setBoutiqueWhatsapp] = useState(settings.boutiqueWhatsapp);
-  const [boutiqueOpeningHours, setBoutiqueOpeningHours] = useState(settings.boutiqueOpeningHours);
-  const [boutiqueWeeklyHoliday, setBoutiqueWeeklyHoliday] = useState(settings.boutiqueWeeklyHoliday);
+  const [boutiquePhone, setBoutiquePhone] = useState(settings.boutiquePhone || '');
+  const [boutiqueWhatsapp, setBoutiqueWhatsapp] = useState(settings.boutiqueWhatsapp || '');
+  const [boutiqueOpeningHours, setBoutiqueOpeningHours] = useState(settings.boutiqueOpeningHours || '');
+  const [boutiqueWeeklyHoliday, setBoutiqueWeeklyHoliday] = useState(settings.boutiqueWeeklyHoliday || '');
   const [boutiqueSpecialNotice, setBoutiqueSpecialNotice] = useState(settings.boutiqueSpecialNotice || '');
   const [boutiqueDirectionsUrl, setBoutiqueDirectionsUrl] = useState(settings.boutiqueDirectionsUrl);
   const [boutiqueEmbedUrl, setBoutiqueEmbedUrl] = useState(settings.boutiqueEmbedUrl || '');
@@ -87,9 +87,11 @@ export const AdminSettings: React.FC = () => {
     rating: 5,
     review_text: '',
     review_date: '',
+    source: 'google',
     source_url: '',
-    verified_date: '',
-    is_published: true,
+    is_verified: false,
+    verified_date: null,
+    is_published: false,
     sort_order: 0,
   });
 
@@ -130,10 +132,10 @@ export const AdminSettings: React.FC = () => {
     setBoutiqueShortAddress(settings.boutiqueShortAddress);
     setBoutiquePincode(settings.boutiquePincode);
     setBoutiqueLandmark(settings.boutiqueLandmark);
-    setBoutiquePhone(settings.boutiquePhone);
-    setBoutiqueWhatsapp(settings.boutiqueWhatsapp);
-    setBoutiqueOpeningHours(settings.boutiqueOpeningHours);
-    setBoutiqueWeeklyHoliday(settings.boutiqueWeeklyHoliday);
+    setBoutiquePhone(settings.boutiquePhone || '');
+    setBoutiqueWhatsapp(settings.boutiqueWhatsapp || '');
+    setBoutiqueOpeningHours(settings.boutiqueOpeningHours || '');
+    setBoutiqueWeeklyHoliday(settings.boutiqueWeeklyHoliday || '');
     setBoutiqueSpecialNotice(settings.boutiqueSpecialNotice || '');
     setBoutiqueDirectionsUrl(settings.boutiqueDirectionsUrl);
     setBoutiqueEmbedUrl(settings.boutiqueEmbedUrl || '');
@@ -254,6 +256,21 @@ export const AdminSettings: React.FC = () => {
   };
 
   const handleToggleReviewPublished = (index: number) => {
+    const rev = boutiqueReviews[index];
+    if (!rev.is_published) {
+      if (!rev.is_verified) {
+        alert('Review cannot be published: It must be explicitly verified first.');
+        return;
+      }
+      if (Number(rev.rating) < 4) {
+        alert('Review cannot be published: Only 4-star and 5-star positive reviews are eligible for this section.');
+        return;
+      }
+      if (rev.source && rev.source !== 'google') {
+        alert('Review cannot be published: Only genuine Google reviews are eligible for this section.');
+        return;
+      }
+    }
     const updated = [...boutiqueReviews];
     updated[index] = { ...updated[index], is_published: !updated[index].is_published };
     setBoutiqueReviews(updated);
@@ -267,9 +284,11 @@ export const AdminSettings: React.FC = () => {
       rating: 5,
       review_text: '',
       review_date: '',
+      source: 'google',
       source_url: '',
-      verified_date: new Date().toISOString().split('T')[0],
-      is_published: true,
+      is_verified: false,
+      verified_date: null,
+      is_published: false,
       sort_order: boutiqueReviews.length,
     });
     setIsReviewModalOpen(true);
@@ -287,21 +306,40 @@ export const AdminSettings: React.FC = () => {
       return;
     }
 
+    const ratingNum = Number(reviewForm.rating) || 5;
+    const isGoogle = !reviewForm.source || reviewForm.source === 'google';
+    let published = Boolean(reviewForm.is_published);
+    if (published && (!reviewForm.is_verified || ratingNum < 4 || !isGoogle)) {
+      published = false;
+    }
+
+    const sanitizedReview: BoutiqueReviewItem = {
+      ...reviewForm,
+      author_name: reviewForm.author_name.trim(),
+      rating: ratingNum,
+      review_text: reviewForm.review_text.trim(),
+      review_date: reviewForm.review_date ? reviewForm.review_date.trim() : null,
+      source: reviewForm.source || 'google',
+      source_url: reviewForm.source_url ? reviewForm.source_url.trim() : null,
+      is_verified: Boolean(reviewForm.is_verified),
+      verified_date: reviewForm.is_verified
+        ? reviewForm.verified_date || new Date().toISOString().split('T')[0]
+        : null,
+      is_published: published,
+    };
+
     if (editingReviewIndex !== null) {
       const updated = [...boutiqueReviews];
       updated[editingReviewIndex] = {
-        ...reviewForm,
-        author_name: reviewForm.author_name.trim(),
-        review_text: reviewForm.review_text.trim(),
+        ...sanitizedReview,
+        sort_order: updated[editingReviewIndex].sort_order ?? editingReviewIndex,
       };
       setBoutiqueReviews(updated);
     } else {
       setBoutiqueReviews([
         ...boutiqueReviews,
         {
-          ...reviewForm,
-          author_name: reviewForm.author_name.trim(),
-          review_text: reviewForm.review_text.trim(),
+          ...sanitizedReview,
           sort_order: boutiqueReviews.length,
         },
       ]);
@@ -333,17 +371,17 @@ export const AdminSettings: React.FC = () => {
           instagram_handle: instagramHandle.trim(),
           cod_enabled: codEnabled,
           online_payment_enabled: onlinePaymentEnabled,
-          // Boutique Location & Information
-          boutique_name: boutiqueName.trim(),
-          boutique_intro: boutiqueIntro.trim(),
-          boutique_address: boutiqueAddress.trim(),
-          boutique_short_address: boutiqueShortAddress.trim(),
-          boutique_pincode: boutiquePincode.trim(),
-          boutique_landmark: boutiqueLandmark.trim(),
-          boutique_phone: boutiquePhone.trim(),
-          boutique_whatsapp: boutiqueWhatsapp.trim(),
-          boutique_opening_hours: boutiqueOpeningHours.trim(),
-          boutique_weekly_holiday: boutiqueWeeklyHoliday.trim(),
+          // Boutique Location & Information (preserves explicit clearing)
+          boutique_name: boutiqueName.trim() || null,
+          boutique_intro: boutiqueIntro.trim() || null,
+          boutique_address: boutiqueAddress.trim() || null,
+          boutique_short_address: boutiqueShortAddress.trim() || null,
+          boutique_pincode: boutiquePincode.trim() || null,
+          boutique_landmark: boutiqueLandmark.trim() || null,
+          boutique_phone: boutiquePhone.trim() || null,
+          boutique_whatsapp: boutiqueWhatsapp.trim() || null,
+          boutique_opening_hours: boutiqueOpeningHours.trim() || null,
+          boutique_weekly_holiday: boutiqueWeeklyHoliday.trim() || null,
           boutique_special_notice: boutiqueSpecialNotice.trim() || null,
           boutique_directions_url: boutiqueDirectionsUrl.trim() || null,
           boutique_embed_url: boutiqueEmbedUrl.trim() || null,
@@ -365,22 +403,22 @@ export const AdminSettings: React.FC = () => {
         instagramHandle: instagramHandle.trim(),
         codEnabled,
         onlinePaymentEnabled,
-        // Boutique Location & Information
-        boutiqueName: boutiqueName.trim(),
-        boutiqueIntro: boutiqueIntro.trim(),
-        boutiqueAddress: boutiqueAddress.trim(),
-        boutiqueShortAddress: boutiqueShortAddress.trim(),
-        boutiquePincode: boutiquePincode.trim(),
-        boutiqueLandmark: boutiqueLandmark.trim(),
-        boutiquePhone: boutiquePhone.trim(),
-        boutiqueWhatsapp: boutiqueWhatsapp.trim(),
-        boutiqueOpeningHours: boutiqueOpeningHours.trim(),
-        boutiqueWeeklyHoliday: boutiqueWeeklyHoliday.trim(),
+        // Boutique Location & Information (empty values stay null)
+        boutiqueName: boutiqueName.trim() || 'Royal Libas by Tanya',
+        boutiqueIntro: boutiqueIntro.trim() || '',
+        boutiqueAddress: boutiqueAddress.trim() || '',
+        boutiqueShortAddress: boutiqueShortAddress.trim() || '',
+        boutiquePincode: boutiquePincode.trim() || '',
+        boutiqueLandmark: boutiqueLandmark.trim() || '',
+        boutiquePhone: boutiquePhone.trim() || null,
+        boutiqueWhatsapp: boutiqueWhatsapp.trim() || null,
+        boutiqueOpeningHours: boutiqueOpeningHours.trim() || null,
+        boutiqueWeeklyHoliday: boutiqueWeeklyHoliday.trim() || null,
         boutiqueSpecialNotice: boutiqueSpecialNotice.trim() || null,
         boutiqueDirectionsUrl: boutiqueDirectionsUrl.trim() || 'https://share.google/rdahckZ4nVz7Bgu2H',
         boutiqueEmbedUrl: boutiqueEmbedUrl.trim() || null,
         boutiqueReviewsUrl: boutiqueReviewsUrl.trim() || null,
-        boutiqueMainImage: boutiqueMainImage.trim() || '/images/editorial/brand_story_hero.jpg',
+        boutiqueMainImage: boutiqueMainImage.trim() || null,
         boutiqueGallery,
         boutiqueSectionVisible,
         boutiqueReviews,
@@ -1427,6 +1465,18 @@ export const AdminSettings: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="block font-semibold text-gray-700 mb-1">Source *</label>
+                  <select
+                    value={reviewForm.source || 'google'}
+                    onChange={(e) => setReviewForm({ ...reviewForm, source: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224] bg-white"
+                  >
+                    <option value="google">Google Maps / Review</option>
+                    <option value="direct">Direct Feedback (Not for Google section)</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="block font-semibold text-gray-700 mb-1">Source URL (Google Link)</label>
                   <input
                     type="text"
@@ -1436,29 +1486,70 @@ export const AdminSettings: React.FC = () => {
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
                   />
                 </div>
-
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Verification Date</label>
-                  <input
-                    type="date"
-                    value={reviewForm.verified_date || ''}
-                    onChange={(e) => setReviewForm({ ...reviewForm, verified_date: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-[#5E1224]"
-                  />
-                </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="rev_publish"
-                  checked={reviewForm.is_published}
-                  onChange={(e) => setReviewForm({ ...reviewForm, is_published: e.target.checked })}
-                  className="w-4 h-4 text-[#5E1224] rounded border-gray-300"
-                />
-                <label htmlFor="rev_publish" className="font-semibold text-gray-700 cursor-pointer">
-                  Mark as Published (Visible on storefront if section is enabled)
-                </label>
+              {/* Explicit Verification Toggle */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="rev_verified"
+                    checked={reviewForm.is_verified}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setReviewForm({
+                        ...reviewForm,
+                        is_verified: checked,
+                        verified_date: checked ? (reviewForm.verified_date || new Date().toISOString().split('T')[0]) : null,
+                        is_published: checked ? reviewForm.is_published : false,
+                      });
+                    }}
+                    className="w-4 h-4 text-[#5E1224] rounded border-gray-300"
+                  />
+                  <label htmlFor="rev_verified" className="font-semibold text-gray-800 cursor-pointer text-xs">
+                    Explicitly Verify as Genuine Google Review
+                  </label>
+                </div>
+                {reviewForm.is_verified && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Verification Date</label>
+                    <input
+                      type="date"
+                      value={reviewForm.verified_date || ''}
+                      onChange={(e) => setReviewForm({ ...reviewForm, verified_date: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded border border-gray-300 text-xs focus:outline-none focus:border-[#5E1224]"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Publication Toggle (Only enabled if verified && rating >= 4 && source === 'google') */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="rev_publish"
+                    disabled={!reviewForm.is_verified || Number(reviewForm.rating) < 4 || reviewForm.source !== 'google'}
+                    checked={reviewForm.is_published}
+                    onChange={(e) => setReviewForm({ ...reviewForm, is_published: e.target.checked })}
+                    className="w-4 h-4 text-[#5E1224] rounded border-gray-300 disabled:opacity-40"
+                  />
+                  <label
+                    htmlFor="rev_publish"
+                    className={`font-semibold cursor-pointer text-xs ${
+                      !reviewForm.is_verified || Number(reviewForm.rating) < 4 || reviewForm.source !== 'google'
+                        ? 'text-gray-400'
+                        : 'text-gray-700'
+                    }`}
+                  >
+                    Mark as Published (Visible on storefront if section is enabled)
+                  </label>
+                </div>
+                {(!reviewForm.is_verified || Number(reviewForm.rating) < 4 || reviewForm.source !== 'google') && (
+                  <p className="text-[10.5px] text-amber-700 pl-6">
+                    Requirement: Only verified Google reviews with actual 4 or 5 stars can be published in the storefront section.
+                  </p>
+                )}
               </div>
 
               <div className="pt-3 flex justify-end gap-2 border-t border-gray-100">

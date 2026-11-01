@@ -739,15 +739,15 @@ class StoreSettingResponse(BaseModel):
     boutique_short_address: Optional[str] = "Prem Ganj, Sipri Bazar, Jhansi, UP 284003"
     boutique_pincode: Optional[str] = "284003"
     boutique_landmark: Optional[str] = "Opposite Hotel Ambrosia"
-    boutique_phone: Optional[str] = "+91 98112 23344"
-    boutique_whatsapp: Optional[str] = "+91 98112 23344"
-    boutique_opening_hours: Optional[str] = "Mon – Sat: 10:30 AM – 8:30 PM"
-    boutique_weekly_holiday: Optional[str] = "Sunday"
+    boutique_phone: Optional[str] = None
+    boutique_whatsapp: Optional[str] = None
+    boutique_opening_hours: Optional[str] = None
+    boutique_weekly_holiday: Optional[str] = None
     boutique_special_notice: Optional[str] = None
     boutique_directions_url: Optional[str] = "https://share.google/rdahckZ4nVz7Bgu2H"
     boutique_embed_url: Optional[str] = None
     boutique_reviews_url: Optional[str] = "https://share.google/rdahckZ4nVz7Bgu2H"
-    boutique_main_image: Optional[str] = "/images/editorial/brand_story_hero.jpg"
+    boutique_main_image: Optional[str] = None
     boutique_gallery_json: Optional[str] = "[]"
     boutique_section_visible: bool = True
     boutique_reviews_json: Optional[str] = "[]"
@@ -893,13 +893,17 @@ class StoreSettingUpdate(BaseModel):
                 raise ValueError("Boutique gallery must be a JSON array")
             if len(data) > 4:
                 raise ValueError("Boutique gallery allows a maximum of 4 photos")
+            cleaned = []
             for item in data:
                 url = item.get("url") if isinstance(item, dict) else str(item)
                 if not url or not isinstance(url, str):
                     raise ValueError("Each gallery item must include a valid URL string")
+                url = url.strip()
                 if not (url.startswith("http://") or url.startswith("https://") or url.startswith("/")):
                     raise ValueError(f"Unsafe gallery URL protocol: {url}")
-            return json.dumps(data)
+                caption = str(item.get("caption") or "").strip() if isinstance(item, dict) else ""
+                cleaned.append({"url": url, "caption": caption})
+            return json.dumps(cleaned)
         except json.JSONDecodeError:
             raise ValueError("Invalid JSON string for boutique gallery")
 
@@ -914,17 +918,45 @@ class StoreSettingUpdate(BaseModel):
                 raise ValueError("Boutique reviews must be a JSON array")
             if len(data) > 20:
                 raise ValueError("Maximum 20 reviews allowed in boutique reviews")
+            cleaned = []
             for item in data:
                 if not isinstance(item, dict):
                     raise ValueError("Each review item must be a JSON object")
-                if not item.get("author_name") or not str(item.get("author_name")).strip():
+                author = str(item.get("author_name") or "").strip()
+                if not author:
                     raise ValueError("Each review must specify an author_name")
                 rating = item.get("rating")
                 if rating is None or not (1 <= float(rating) <= 5):
                     raise ValueError("Review rating must be between 1 and 5")
-                if not item.get("review_text") or not str(item.get("review_text")).strip():
+                rating = float(rating)
+                text = str(item.get("review_text") or "").strip()
+                if not text:
                     raise ValueError("Each review must include review_text")
-            return json.dumps(data)
+
+                source = str(item.get("source") or "google").strip().lower()
+                is_verified = bool(item.get("is_verified", False))
+                verified_date = str(item.get("verified_date") or "").strip() if is_verified else None
+                is_published = bool(item.get("is_published", False))
+
+                # Requirement B: Display only published, explicitly verified Google reviews with actual ratings of 4 or 5.
+                # Exclude 1-3 star and unverified records from being published.
+                if is_published and (not is_verified or rating < 4 or source != "google"):
+                    is_published = False
+
+                cleaned.append({
+                    "id": str(item.get("id") or f"rev-{len(cleaned)+1}"),
+                    "author_name": author,
+                    "rating": rating,
+                    "review_text": text,
+                    "review_date": str(item.get("review_date") or "").strip() or None,
+                    "source": source,
+                    "source_url": str(item.get("source_url") or "").strip() or None,
+                    "is_verified": is_verified,
+                    "verified_date": verified_date,
+                    "is_published": is_published,
+                    "sort_order": int(item.get("sort_order", len(cleaned))),
+                })
+            return json.dumps(cleaned)
         except json.JSONDecodeError:
             raise ValueError("Invalid JSON string for boutique reviews")
 
