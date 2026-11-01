@@ -112,7 +112,7 @@ export const AdminSettings: React.FC = () => {
         .then((data) => {
           if (data?.role) setCurrentUserRole(data.role);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, []);
 
@@ -526,17 +526,15 @@ export const AdminSettings: React.FC = () => {
                 type="button"
                 disabled={isRoleUnauthorized}
                 onClick={() => setBoutiqueSectionVisible(!boutiqueSectionVisible)}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  boutiqueSectionVisible ? 'bg-emerald-600' : 'bg-gray-300'
-                } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${boutiqueSectionVisible ? 'bg-emerald-600' : 'bg-gray-300'
+                  } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
                 role="switch"
                 aria-checked={boutiqueSectionVisible}
                 aria-label="Toggle Boutique Section on Homepage"
               >
                 <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    boutiqueSectionVisible ? 'translate-x-5' : 'translate-x-0'
-                  }`}
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${boutiqueSectionVisible ? 'translate-x-5' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>
@@ -850,9 +848,8 @@ export const AdminSettings: React.FC = () => {
                 </button>
 
                 <label
-                  className={`px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center gap-1.5 ${
-                    boutiqueGallery.length >= 4 ? 'opacity-40 pointer-events-none' : ''
-                  }`}
+                  className={`px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center gap-1.5 ${boutiqueGallery.length >= 4 ? 'opacity-40 pointer-events-none' : ''
+                    }`}
                 >
                   <Upload className="w-3.5 h-3.5 text-gray-500" />
                   <span>Upload</span>
@@ -968,17 +965,15 @@ export const AdminSettings: React.FC = () => {
                 type="button"
                 disabled={isRoleUnauthorized}
                 onClick={() => setBoutiqueReviewsVisible(!boutiqueReviewsVisible)}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  boutiqueReviewsVisible ? 'bg-emerald-600' : 'bg-gray-300'
-                } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${boutiqueReviewsVisible ? 'bg-emerald-600' : 'bg-gray-300'
+                  } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
                 role="switch"
                 aria-checked={boutiqueReviewsVisible}
                 aria-label="Toggle Reviews on Homepage"
               >
                 <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    boutiqueReviewsVisible ? 'translate-x-5' : 'translate-x-0'
-                  }`}
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${boutiqueReviewsVisible ? 'translate-x-5' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>
@@ -1022,9 +1017,8 @@ export const AdminSettings: React.FC = () => {
                       {Array.from({ length: 5 }).map((_, i) => (
                         <Star
                           key={i}
-                          className={`w-3.5 h-3.5 ${
-                            i < Math.round(rev.rating) ? 'fill-[#B58A3C] text-[#B58A3C]' : 'text-gray-300'
-                          }`}
+                          className={`w-3.5 h-3.5 ${i < Math.round(rev.rating) ? 'fill-[#B58A3C] text-[#B58A3C]' : 'text-gray-300'
+                            }`}
                         />
                       ))}
                     </div>
@@ -1151,9 +1145,8 @@ export const AdminSettings: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* COD Toggle */}
             <div
-              className={`p-4 rounded-xl border transition-all ${
-                codEnabled ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 bg-gray-50/50'
-              }`}
+              className={`p-4 rounded-xl border transition-all ${codEnabled ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 bg-gray-50/50'
+                }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1164,26 +1157,23 @@ export const AdminSettings: React.FC = () => {
                   type="button"
                   disabled={isRoleUnauthorized}
                   onClick={() => setCodEnabled(!codEnabled)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#5E1224] ${
-                    codEnabled ? 'bg-emerald-600' : 'bg-gray-300'
-                  } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#5E1224] ${codEnabled ? 'bg-emerald-600' : 'bg-gray-300'
+                    } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
                   role="switch"
                   aria-checked={codEnabled}
                   aria-label="Toggle Cash on Delivery"
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      codEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${codEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
                   />
                 </button>
               </div>
 
               <div className="mt-2.5 flex items-center gap-2">
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                    codEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'
-                  }`}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${codEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'
+                    }`}
                 >
                   {codEnabled ? 'Active in Checkout' : 'Disabled / Hidden'}
                 </span>
@@ -1193,9 +1183,8 @@ export const AdminSettings: React.FC = () => {
 
             {/* Cashfree Online Payments Toggle */}
             <div
-              className={`p-4 rounded-xl border transition-all ${
-                onlinePaymentEnabled ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 bg-gray-50/50'
-              }`}
+              className={`p-4 rounded-xl border transition-all ${onlinePaymentEnabled ? 'border-emerald-300 bg-emerald-50/30' : 'border-gray-200 bg-gray-50/50'
+                }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1206,26 +1195,23 @@ export const AdminSettings: React.FC = () => {
                   type="button"
                   disabled={isRoleUnauthorized}
                   onClick={() => setOnlinePaymentEnabled(!onlinePaymentEnabled)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#5E1224] ${
-                    onlinePaymentEnabled ? 'bg-emerald-600' : 'bg-gray-300'
-                  } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#5E1224] ${onlinePaymentEnabled ? 'bg-emerald-600' : 'bg-gray-300'
+                    } ${isRoleUnauthorized ? 'opacity-50 cursor-not-allowed' : ''}`}
                   role="switch"
                   aria-checked={onlinePaymentEnabled}
                   aria-label="Toggle Cashfree Online Payments"
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      onlinePaymentEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${onlinePaymentEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
                   />
                 </button>
               </div>
 
               <div className="mt-2.5 flex items-center gap-2">
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                    onlinePaymentEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'
-                  }`}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${onlinePaymentEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'
+                    }`}
                 >
                   {onlinePaymentEnabled ? 'Active in Checkout' : 'Disabled / Hidden'}
                 </span>
@@ -1591,9 +1577,8 @@ export const AdminSettings: React.FC = () => {
                       />
                       <label
                         htmlFor="rev_publish"
-                        className={`font-semibold cursor-pointer text-xs ${
-                          !isEligible ? 'text-gray-400' : 'text-gray-700'
-                        }`}
+                        className={`font-semibold cursor-pointer text-xs ${!isEligible ? 'text-gray-400' : 'text-gray-700'
+                          }`}
                       >
                         Mark as Published (Visible on storefront if section is enabled)
                       </label>
