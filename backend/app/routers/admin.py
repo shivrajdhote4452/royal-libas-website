@@ -4543,6 +4543,7 @@ def admin_get_settings(
         boutique_section_visible=bool(setting.boutique_section_visible),
         boutique_reviews_json=setting.boutique_reviews_json or "[]",
         boutique_reviews_visible=bool(setting.boutique_reviews_visible),
+        curated_moments_json=setting.curated_moments_json or "[]",
     )
 
 
@@ -4658,6 +4659,8 @@ def admin_update_settings(
         setting.boutique_reviews_json = payload.boutique_reviews_json if payload.boutique_reviews_json else "[]"
     if "boutique_reviews_visible" in payload.model_fields_set:
         setting.boutique_reviews_visible = bool(payload.boutique_reviews_visible)
+    if "curated_moments_json" in payload.model_fields_set:
+        setting.curated_moments_json = payload.curated_moments_json if payload.curated_moments_json else "[]"
 
     db.commit()
     db.refresh(setting)
@@ -4718,6 +4721,7 @@ def admin_update_settings(
         boutique_section_visible=bool(setting.boutique_section_visible),
         boutique_reviews_json=setting.boutique_reviews_json or "[]",
         boutique_reviews_visible=bool(setting.boutique_reviews_visible),
+        curated_moments_json=setting.curated_moments_json or "[]",
     )
 
 

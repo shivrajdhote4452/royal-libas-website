@@ -173,6 +173,7 @@ def run_migrations(engine: Engine) -> None:
                 ("boutique_section_visible", "BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE"),
                 ("boutique_reviews_json", "TEXT DEFAULT '[]'", "TEXT DEFAULT '[]'"),
                 ("boutique_reviews_visible", "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE"),
+                ("curated_moments_json", "TEXT DEFAULT '[]'", "TEXT DEFAULT '[]'"),
             ]
 
             for col_name, sqlite_type, pg_type in setting_cols:

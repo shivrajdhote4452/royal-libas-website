@@ -431,6 +431,7 @@ class StoreSetting(Base):
     boutique_section_visible = Column(Boolean, default=True, nullable=False)
     boutique_reviews_json = Column(Text, default="[]", nullable=True)
     boutique_reviews_visible = Column(Boolean, default=False, nullable=False)
+    curated_moments_json = Column(Text, default="[]", nullable=True)
 
     updated_at = Column(
         DateTime(timezone=True),

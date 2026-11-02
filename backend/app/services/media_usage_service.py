@@ -3,6 +3,7 @@ Single source of truth for identifying all product and editorial references
 to media assets across Royal Libas by Tanya.
 """
 import re
+import json
 from typing import List, Tuple, Dict, Any, Optional
 from urllib.parse import urlparse
 from sqlalchemy.orm import Session
@@ -133,5 +134,18 @@ def get_asset_usage_references(asset: MediaAsset, db: Session) -> Tuple[List[Dic
             val = getattr(setting, field_name, None)
             if val and match_asset_to_url(val, asset):
                 editorial_usages.append(label)
+
+        if getattr(setting, "curated_moments_json", None):
+            try:
+                cards = json.loads(setting.curated_moments_json)
+                if isinstance(cards, list):
+                    for c in cards:
+                        if isinstance(c, dict):
+                            card_img = c.get("image_url")
+                            card_asset_id = c.get("media_asset_id")
+                            if (card_asset_id and card_asset_id == asset.id) or (card_img and match_asset_to_url(card_img, asset)):
+                                editorial_usages.append(f"Curated Moments: {c.get('title', 'Card')}")
+            except Exception:
+                pass
 
     return product_usages, editorial_usages

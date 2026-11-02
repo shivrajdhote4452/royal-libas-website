@@ -14,10 +14,15 @@ import {
 import {
   fetchAdminStoreSettings,
   updateAdminStoreSettings,
-  adminListMedia,
   adminUploadMedia,
 } from '../../lib/api';
 import type { MediaAsset } from '../../types/product';
+import {
+  CuratedMomentCard,
+  DEFAULT_CURATED_MOMENTS,
+  parseCuratedMomentsJson,
+} from '../../lib/settings';
+import { MediaLibraryPickerModal } from '../../components/admin/MediaLibraryPickerModal';
 
 interface ImageFieldProps {
   label: string;
@@ -201,11 +206,19 @@ export const AdminHomepage: React.FC = () => {
   const [posterEverydayImage, setPosterEverydayImage] = useState('');
   const [posterStoryImage, setPosterStoryImage] = useState('');
 
-  // Media Library Modal State
-  const [showMediaModal, setShowMediaModal] = useState(false);
-  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
-  const [loadingMedia, setLoadingMedia] = useState(false);
+  // Section 4: Curated Moments State
+  const [curatedMoments, setCuratedMoments] = useState<CuratedMomentCard[]>(DEFAULT_CURATED_MOMENTS);
+
+  // Universal Media Library Picker Modal State (with full Folder Browsing support)
+  const [showMediaPickerModal, setShowMediaPickerModal] = useState(false);
   const [targetFieldSetter, setTargetFieldSetter] = useState<((val: string) => void) | null>(null);
+  const [activePickerCardId, setActivePickerCardId] = useState<string | null>(null);
+
+  const isInternalRouteValid = (link: string): boolean => {
+    if (!link || !link.startsWith('/') || link.startsWith('//') || link.includes(' ')) return false;
+    if (/^(javascript:|data:|vbscript:|file:|http:|https:)/i.test(link)) return false;
+    return true;
+  };
 
   const loadSettings = async () => {
     setLoading(true);
@@ -232,6 +245,9 @@ export const AdminHomepage: React.FC = () => {
       setPosterOccasionImage(sanitizeIncoming(data.poster_occasion_image));
       setPosterEverydayImage(sanitizeIncoming(data.poster_everyday_image));
       setPosterStoryImage(sanitizeIncoming(data.poster_story_image));
+
+      // Curated moments cards
+      setCuratedMoments(parseCuratedMomentsJson(data.curated_moments_json));
     } catch (err: any) {
       setNotification({ type: 'error', message: err.message || 'Failed to load homepage settings' });
     } finally {
@@ -243,26 +259,74 @@ export const AdminHomepage: React.FC = () => {
     loadSettings();
   }, [token]);
 
-  const handleOpenMediaModal = async (setter: (val: string) => void) => {
+  // Open media picker for general single fields (Hero, category, posters)
+  const handleOpenMediaModal = (setter: (val: string) => void) => {
     setTargetFieldSetter(() => setter);
-    setShowMediaModal(true);
-    setLoadingMedia(true);
-    try {
-      const assets = await adminListMedia(token);
-      setMediaAssets(assets);
-    } catch (err: any) {
-      setNotification({ type: 'error', message: err.message || 'Failed to load media assets' });
-    } finally {
-      setLoadingMedia(false);
-    }
+    setActivePickerCardId(null);
+    setShowMediaPickerModal(true);
   };
 
-  const handleSelectMedia = (asset: MediaAsset) => {
-    if (targetFieldSetter) {
-      targetFieldSetter(asset.secure_url || asset.url);
-    }
-    setShowMediaModal(false);
+  // Open media picker for a specific Curated Moments card
+  const openPickerForCard = (cardId: string) => {
+    setActivePickerCardId(cardId);
     setTargetFieldSetter(null);
+    setShowMediaPickerModal(true);
+  };
+
+  // Callback when an asset is chosen in MediaLibraryPickerModal
+  const handleModalSelect = (selectedAssets: MediaAsset[]) => {
+    if (selectedAssets.length > 0) {
+      const asset = selectedAssets[0];
+      const selectedUrl = asset.secure_url || asset.url;
+      if (activePickerCardId) {
+        updateCard(activePickerCardId, {
+          imageUrl: selectedUrl,
+          mediaAssetId: asset.id,
+        });
+      } else if (targetFieldSetter) {
+        targetFieldSetter(selectedUrl);
+      }
+    }
+    setShowMediaPickerModal(false);
+    setActivePickerCardId(null);
+    setTargetFieldSetter(null);
+  };
+
+  // Curated moments update & clear helpers
+  const updateCard = (cardId: string, updates: Partial<CuratedMomentCard>) => {
+    setCuratedMoments((prev) =>
+      prev.map((card) => (card.id === cardId ? { ...card, ...updates } : card))
+    );
+  };
+
+  const clearCardImage = (cardId: string) => {
+    // Clears the selection so it falls back to the luxury placeholder without deleting assets from Cloudinary/DB
+    updateCard(cardId, { imageUrl: null, mediaAssetId: null });
+  };
+
+  const handleDirectUploadForCard = async (cardId: string, file: File) => {
+    setUploadingField(`card-${cardId}`);
+    setNotification(null);
+    try {
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('Image exceeds 10MB limit.');
+      }
+      const uploaded = await adminUploadMedia(token, file, 'royal_libas/cms');
+      if (uploaded && (uploaded.secure_url || uploaded.url)) {
+        updateCard(cardId, {
+          imageUrl: uploaded.secure_url || uploaded.url,
+          mediaAssetId: uploaded.id,
+        });
+        setNotification({
+          type: 'success',
+          message: `Uploaded ${file.name} to Cloudinary successfully!`,
+        });
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Failed to upload image' });
+    } finally {
+      setUploadingField(null);
+    }
   };
 
   const handleDirectUpload = async (file: File, setter: (val: string) => void) => {
@@ -288,6 +352,24 @@ export const AdminHomepage: React.FC = () => {
     e.preventDefault();
     setSaving(true);
     setNotification(null);
+
+    // Validate Curated Moments cards before network submission
+    for (const card of curatedMoments) {
+      if (!card.title.trim()) {
+        setNotification({ type: 'error', message: `Card #${card.displayOrder} must have a title.` });
+        setSaving(false);
+        return;
+      }
+      if (!isInternalRouteValid(card.link)) {
+        setNotification({
+          type: 'error',
+          message: `Invalid link for "${card.title}". Destination route must start with '/' (e.g. /shop?category=TWO+PIECES).`,
+        });
+        setSaving(false);
+        return;
+      }
+    }
+
     try {
       await updateAdminStoreSettings(token, {
         announcement_enabled: announcementEnabled,
@@ -304,6 +386,7 @@ export const AdminHomepage: React.FC = () => {
         poster_occasion_image: posterOccasionImage.trim() || null,
         poster_everyday_image: posterEverydayImage.trim() || null,
         poster_story_image: posterStoryImage.trim() || null,
+        curated_moments_json: JSON.stringify(curatedMoments),
       });
       setNotification({ type: 'success', message: 'Homepage & brand imagery successfully saved and published!' });
       window.dispatchEvent(new Event('royal_libas_settings_updated'));
@@ -324,7 +407,7 @@ export const AdminHomepage: React.FC = () => {
             Homepage &amp; Brand Media Manager
           </h1>
           <p className="text-xs text-gray-600 mt-1">
-            Upload and assign real client photography for the hero campaign, category cards, banners, and editorial posters.
+            Upload and assign real client photography for the hero campaign, category cards, banners, editorial posters, and curated moment edits.
           </p>
         </div>
 
@@ -566,10 +649,225 @@ export const AdminHomepage: React.FC = () => {
           </div>
         </div>
 
+        {/* ========================================================
+            SECTION 4: CURATED FOR EVERY MOMENT ("DRESS FOR THE MOMENT")
+            ======================================================== */}
+        <div className="bg-white border border-[#E8DFD0] rounded-xl p-6 shadow-sm space-y-6">
+          <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="font-serif text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-[#B58A3C]" />
+                4. Curated for Every Moment (&quot;Dress for the Moment&quot;)
+              </h2>
+              <p className="text-xs text-gray-500">
+                Editorial 3-card collection section placed between Everyday Edit and Festive Collection on the storefront.
+              </p>
+            </div>
+            <span className="text-[11px] font-medium text-[#5E1224] bg-[#FCF8F0] px-2.5 py-1 rounded border border-[#E5D9C5] self-start sm:self-auto">
+              3 Interactive Occasion Cards
+            </span>
+          </div>
+
+          <div className="space-y-6">
+            {curatedMoments.map((card, idx) => {
+              const linkValid = isInternalRouteValid(card.link);
+              return (
+                <div
+                  key={card.id}
+                  className="bg-[#FCF8F0]/40 border border-[#E5D9C5] rounded-xl p-4 sm:p-5 shadow-sm space-y-4"
+                >
+                  {/* Card Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8DFD0] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-[#5E1224] text-white text-[11px] font-bold flex items-center justify-center">
+                        {card.displayOrder || idx + 1}
+                      </span>
+                      <h3 className="font-serif font-bold text-gray-900 text-sm">
+                        Card #{card.displayOrder || idx + 1}: {card.title || 'Untitled Card'}
+                      </h3>
+                    </div>
+                    {card.imageUrl ? (
+                      <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 self-start sm:self-auto">
+                        Custom Photo Selected ✓
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 self-start sm:self-auto">
+                        Tasteful Luxury Placeholder Active
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-5 items-start">
+                    {/* Preview Box */}
+                    <div className="w-32 sm:w-36 h-44 sm:h-48 bg-[#201014] border border-[#B58A3C]/30 rounded-lg overflow-hidden shrink-0 flex items-center justify-center relative shadow-inner group">
+                      {card.imageUrl ? (
+                        <>
+                          <img
+                            src={card.imageUrl}
+                            alt={card.title}
+                            className="w-full h-full object-cover object-top"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end justify-center p-2">
+                            <span className="text-[10px] font-medium text-[#D4AF67] text-center line-clamp-1">
+                              {card.title}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => clearCardImage(card.id)}
+                            className="absolute top-1.5 right-1.5 p-1 bg-black/70 hover:bg-red-700 text-white rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                            title="Clear image selection"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <div className="p-3 text-center space-y-1">
+                          <span className="text-[#D4AF67] text-xl block">✤</span>
+                          <span className="font-serif text-xs font-bold text-[#FCF8F0] block">RL</span>
+                          <span className="text-[9px] uppercase tracking-wider text-[#D4AF67]/80 block">
+                            Placeholder Active
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Inputs & Actions */}
+                    <div className="flex-1 w-full space-y-3.5">
+                      {/* Media Picker / Upload Buttons */}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openPickerForCard(card.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E1224] hover:bg-[#430C19] text-white rounded text-xs font-semibold shadow-sm transition-colors"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-[#D4AF67]" />
+                          <span>Choose from Media Library</span>
+                        </button>
+
+                        <label className={`cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#E5D9C5] hover:bg-[#FCF8F0] text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors ${
+                          uploadingField === `card-${card.id}` ? 'opacity-60 cursor-not-allowed' : ''
+                        }`}>
+                          <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
+                          <span>{uploadingField === `card-${card.id}` ? 'Uploading...' : 'Upload New Photo'}</span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                            disabled={uploadingField === `card-${card.id}`}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleDirectUploadForCard(card.id, file);
+                                e.target.value = '';
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {card.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={() => clearCardImage(card.id)}
+                            className="px-2.5 py-1.5 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                          >
+                            Clear Photo Selection
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Card Title & Display Order */}
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div className="sm:col-span-3">
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                            Card Title (Front-end Serif Label)
+                          </label>
+                          <input
+                            type="text"
+                            value={card.title}
+                            onChange={(e) => updateCard(card.id, { title: e.target.value })}
+                            placeholder="e.g. EVERYDAY ELEGANCE"
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                            Display Order
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={6}
+                            value={card.displayOrder}
+                            onChange={(e) => updateCard(card.id, { displayOrder: parseInt(e.target.value) || 1 })}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Destination Link */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-semibold text-gray-700">
+                            Destination Link (Internal Relative Path)
+                          </label>
+                          <span className="text-[10px] text-gray-500">
+                            Quick Presets:
+                          </span>
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {[
+                            { label: 'Two Pieces', link: '/shop?category=TWO+PIECES' },
+                            { label: 'Suit Set', link: '/shop?category=SUIT+SET' },
+                            { label: 'Heavy Dress', link: '/shop?category=HEAVY+DRESS' },
+                            { label: 'Festive Edit', link: '/shop?collection=festive-edit' },
+                            { label: 'All Shop', link: '/shop' },
+                          ].map((preset) => (
+                            <button
+                              key={preset.link}
+                              type="button"
+                              onClick={() => updateCard(card.id, { link: preset.link })}
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                card.link === preset.link
+                                  ? 'bg-[#5E1224] text-white'
+                                  : 'bg-white border border-[#E5D9C5] text-gray-700 hover:bg-[#FCF8F0]'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <input
+                          type="text"
+                          value={card.link}
+                          onChange={(e) => updateCard(card.id, { link: e.target.value.trim() })}
+                          placeholder="/shop?category=..."
+                          className={`w-full px-3 py-1.5 border rounded text-xs font-mono focus:outline-none ${
+                            linkValid ? 'border-gray-300 focus:border-[#5E1224]' : 'border-rose-400 bg-rose-50 text-rose-900'
+                          }`}
+                        />
+                        {!linkValid && (
+                          <p className="text-[10px] text-rose-600 mt-0.5">
+                            Must be a valid relative internal path starting with &apos;/&apos; (e.g. /shop?category=TWO+PIECES). External or unsafe protocols are not allowed.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Save Bar */}
         <div className="sticky bottom-4 z-20 bg-white/95 backdrop-blur-md p-4 rounded-xl border border-[#B58A3C]/40 shadow-xl flex items-center justify-between">
           <p className="text-xs text-gray-600">
-            Changes to homepage imagery and copy take effect immediately on save.
+            Changes to homepage imagery, occasion cards, and copy take effect immediately on save.
           </p>
           <button
             type="submit"
@@ -583,88 +881,22 @@ export const AdminHomepage: React.FC = () => {
       </form>
 
       {/* ========================================================
-          MEDIA LIBRARY SELECTION MODAL
+          MEDIA LIBRARY PICKER MODAL (With Folder Navigation)
           ======================================================== */}
-      {showMediaModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-[#E8DFD0] shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-serif text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-[#B58A3C]" />
-                  Select Photo from Cloudinary Media Library
-                </h3>
-                <p className="text-xs text-gray-500">
-                  Click on any asset to select it for this section.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMediaModal(false);
-                  setTargetFieldSetter(null);
-                }}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto flex-1 min-h-[300px]">
-              {loadingMedia ? (
-                <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                  <RefreshCw className="w-6 h-6 animate-spin text-[#5E1224] mb-2" />
-                  <p className="text-xs">Loading Cloudinary media assets...</p>
-                </div>
-              ) : mediaAssets.length === 0 ? (
-                <div className="text-center py-16 text-gray-500 space-y-2">
-                  <ImageIcon className="w-10 h-10 mx-auto text-gray-300" />
-                  <p className="text-xs font-medium">No assets found in Media Library.</p>
-                  <p className="text-[11px] text-gray-400">
-                    Use the &quot;Upload New Photo&quot; button to upload directly from your device.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                  {mediaAssets
-                    .filter((a) => a.resource_type === 'image' || !a.resource_type)
-                    .map((asset) => (
-                      <button
-                        key={asset.id}
-                        type="button"
-                        onClick={() => handleSelectMedia(asset)}
-                        className="group relative aspect-[4/5] rounded-lg overflow-hidden border-2 border-transparent hover:border-[#5E1224] focus:border-[#5E1224] focus:outline-none transition-all shadow-sm hover:shadow"
-                      >
-                        <img
-                          src={asset.secure_url || asset.url}
-                          alt={asset.filename}
-                          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform"
-                          loading="lazy"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold">
-                          Select
-                        </div>
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
-
-            <div className="p-3 bg-gray-50 border-t border-gray-100 flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMediaModal(false);
-                  setTargetFieldSetter(null);
-                }}
-                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-100"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MediaLibraryPickerModal
+        isOpen={showMediaPickerModal}
+        onClose={() => {
+          setShowMediaPickerModal(false);
+          setActivePickerCardId(null);
+          setTargetFieldSetter(null);
+        }}
+        onSelect={handleModalSelect}
+        title={
+          activePickerCardId
+            ? `Select Photo for Card: ${curatedMoments.find((c) => c.id === activePickerCardId)?.title || 'Curated Moment'}`
+            : 'Select Photo from Media Library'
+        }
+      />
     </div>
   );
 };

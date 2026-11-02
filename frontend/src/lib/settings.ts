@@ -24,6 +24,17 @@ export interface BoutiqueReviewItem {
   sort_order: number;
 }
 
+export interface CuratedMomentCard {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+  mediaAssetId?: number | null;
+  link: string;
+  linkText?: string;
+  displayOrder: number;
+}
+
 export interface StoreSettings {
   freeShippingThreshold: number;
   standardShippingFee: number;
@@ -45,6 +56,8 @@ export interface StoreSettings {
   posterOccasionImage?: string | null;
   posterEverydayImage?: string | null;
   posterStoryImage?: string | null;
+  // Curated for Every Moment ("Dress for the Moment")
+  curatedMoments: CuratedMomentCard[];
   // Boutique Location, Visiting Hours & Reviews
   boutiqueName: string;
   boutiqueIntro: string;
@@ -133,6 +146,89 @@ export function parseReviewsJson(raw: any): BoutiqueReviewItem[] {
   }));
 }
 
+export const DEFAULT_CURATED_MOMENTS: CuratedMomentCard[] = [
+  {
+    id: 'everyday-elegance',
+    title: 'EVERYDAY ELEGANCE',
+    subtitle: 'From everyday grace to effortless sophistication',
+    imageUrl: null,
+    mediaAssetId: null,
+    link: '/shop?category=TWO+PIECES',
+    linkText: 'EXPLORE COLLECTION',
+    displayOrder: 1,
+  },
+  {
+    id: 'festive-celebrations',
+    title: 'FESTIVE CELEBRATIONS',
+    subtitle: 'For celebrations that become part of your story',
+    imageUrl: null,
+    mediaAssetId: null,
+    link: '/shop?category=SUIT+SET',
+    linkText: 'EXPLORE COLLECTION',
+    displayOrder: 2,
+  },
+  {
+    id: 'wedding-guest',
+    title: 'WEDDING GUEST',
+    subtitle: 'Opulent couture for memorable ceremonies',
+    imageUrl: null,
+    mediaAssetId: null,
+    link: '/shop?category=HEAVY+DRESS',
+    linkText: 'EXPLORE COLLECTION',
+    displayOrder: 3,
+  },
+];
+
+export function parseCuratedMomentsJson(raw: any): CuratedMomentCard[] {
+  let list: any[] = [];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        list = parsed;
+      }
+    } catch {}
+  }
+
+  if (!list || list.length === 0) {
+    return DEFAULT_CURATED_MOMENTS;
+  }
+
+  const mapped = list.map((item, idx) => {
+    const rawLink = String(item.link || '').trim();
+    const safeLink = rawLink.startsWith('/') && !rawLink.startsWith('//') ? rawLink : '/shop';
+    const rawImg = item.image_url ?? item.imageUrl;
+    const cleanImg =
+      rawImg && typeof rawImg === 'string' && rawImg.trim() && !isDemoImageUrl(rawImg)
+        ? rawImg.trim()
+        : null;
+    return {
+      id: String(item.id || `moment-${idx + 1}`),
+      title: String(item.title || DEFAULT_CURATED_MOMENTS[idx]?.title || `MOMENT ${idx + 1}`).trim(),
+      subtitle: item.subtitle ? String(item.subtitle).trim() : null,
+      imageUrl: cleanImg,
+      mediaAssetId:
+        item.media_asset_id != null
+          ? Number(item.media_asset_id)
+          : item.mediaAssetId != null
+          ? Number(item.mediaAssetId)
+          : null,
+      link: safeLink,
+      linkText: String(item.link_text || item.linkText || 'EXPLORE COLLECTION').trim(),
+      displayOrder:
+        typeof item.display_order === 'number'
+          ? item.display_order
+          : typeof item.displayOrder === 'number'
+          ? item.displayOrder
+          : idx + 1,
+    };
+  });
+
+  return mapped.sort((a, b) => a.displayOrder - b.displayOrder);
+}
+
 export function isDemoImageUrl(url: string | null | undefined): boolean {
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
@@ -172,6 +268,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   posterOccasionImage: DEFAULT_EDITORIAL_IMAGES.posterOccasionImage,
   posterEverydayImage: DEFAULT_EDITORIAL_IMAGES.posterEverydayImage,
   posterStoryImage: DEFAULT_EDITORIAL_IMAGES.posterStoryImage,
+  // Curated for Every Moment defaults
+  curatedMoments: DEFAULT_CURATED_MOMENTS,
   // Boutique defaults
   boutiqueName: 'Royal Libas by Tanya',
   boutiqueIntro:
@@ -278,6 +376,7 @@ export function getStoreSettings(): StoreSettings {
         typeof parsed.boutiqueReviewsVisible === 'boolean'
           ? parsed.boutiqueReviewsVisible
           : DEFAULT_STORE_SETTINGS.boutiqueReviewsVisible,
+      curatedMoments: parseCuratedMomentsJson(parsed.curatedMoments),
     };
 
     if (hadDemo) {
@@ -406,6 +505,7 @@ export function useStoreSettings(): {
             typeof serverData.boutique_reviews_visible === 'boolean'
               ? serverData.boutique_reviews_visible
               : false,
+          curatedMoments: parseCuratedMomentsJson(serverData.curated_moments_json),
         };
         saveStoreSettings(synced);
         setSettings(synced);

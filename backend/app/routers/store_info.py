@@ -65,6 +65,7 @@ def get_store_settings(db: Session = Depends(get_db)):
         boutique_section_visible=bool(setting.boutique_section_visible),
         boutique_reviews_json=setting.boutique_reviews_json or "[]",
         boutique_reviews_visible=bool(setting.boutique_reviews_visible),
+        curated_moments_json=setting.curated_moments_json or "[]",
     )
 
 
