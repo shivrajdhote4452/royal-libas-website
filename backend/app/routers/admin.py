@@ -2540,13 +2540,6 @@ def admin_delete_media_folder(
     if not folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found.")
 
-    subfolder_count = db.query(MediaFolder).filter(MediaFolder.parent_path == folder.path).count()
-    if subfolder_count > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Folder '{folder.name}' cannot be deleted because it contains {subfolder_count} subfolder(s). Delete or move them first.",
-        )
-
     escaped_p = escape_like(folder.path)
     asset_count = db.query(MediaAsset).filter(or_(MediaAsset.folder == folder.path, MediaAsset.folder.like(f"{escaped_p}/%", escape="\\"))).count()
     if asset_count > 0:
@@ -2554,6 +2547,14 @@ def admin_delete_media_folder(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Folder '{folder.name}' cannot be deleted because it contains {asset_count} asset(s). Move or delete the assets first.",
         )
+
+    # Delete any empty descendant subfolders first (deepest first)
+    descendants = db.query(MediaFolder).filter(MediaFolder.path.like(f"{escaped_p}/%", escape="\\")).all()
+    descendants.sort(key=lambda f: len(f.path), reverse=True)
+    for sub in descendants:
+        if is_cloudinary_configured():
+            delete_cloudinary_folder(sub.path)
+        db.delete(sub)
 
     # Delete remotely from Cloudinary before deleting local record
     if is_cloudinary_configured():

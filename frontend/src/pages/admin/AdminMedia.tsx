@@ -188,14 +188,14 @@ const FolderTreeNode: React.FC<FolderTreeNodeProps> = ({
           >
             <Edit2 className="w-3 h-3" />
           </button>
-          {folder.asset_count === 0 && folder.subfolder_count === 0 && (
+          {folder.asset_count === 0 && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete(folder);
               }}
-              title="Delete empty folder"
+              title={folder.subfolder_count > 0 ? "Delete empty folder and its subfolders" : "Delete empty folder"}
               className="p-1 text-stone-400 hover:text-red-700 hover:bg-red-50 rounded"
             >
               <Trash2 className="w-3 h-3" />
@@ -931,11 +931,14 @@ export const AdminMedia: React.FC = () => {
   };
 
   const handleDeleteFolder = async (folder: MediaFolder) => {
-    if (!confirm(`Are you sure you want to delete the empty folder '${folder.name}'?`)) return;
+    const confirmMsg = folder.subfolder_count > 0
+      ? `Are you sure you want to delete the empty folder '${folder.name}' and its empty subfolders?`
+      : `Are you sure you want to delete the empty folder '${folder.name}'?`;
+    if (!confirm(confirmMsg)) return;
     try {
       await adminDeleteMediaFolder(token, folder.id);
       setNotification({ type: 'success', message: `Folder '${folder.name}' deleted.` });
-      if (currentFolder === folder.path) {
+      if (currentFolder === folder.path || currentFolder?.startsWith(`${folder.path}/`)) {
         setCurrentFolder(folder.parent_path || null);
       }
       await fetchData();
