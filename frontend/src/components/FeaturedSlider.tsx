@@ -27,22 +27,41 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
   const total = validProducts.length;
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
 
   // Touch Swipe Gesture Tracking
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchDeltaX, setTouchDeltaX] = useState<number>(0);
   const sliderRef = useRef<HTMLDivElement>(null);
 
-  // Bounded navigation: smoothly transitions without wrapping so user can scroll out at ends
+  // Circular navigation: advances smoothly through all pieces
   const nextSlide = useCallback(() => {
     if (total === 0) return;
-    setCurrentIndex((prev) => Math.min(total - 1, prev + 1));
+    setCurrentIndex((prev) => (prev + 1) % total);
   }, [total]);
 
   const prevSlide = useCallback(() => {
     if (total === 0) return;
-    setCurrentIndex((prev) => Math.max(0, prev - 1));
-  }, []);
+    setCurrentIndex((prev) => (prev - 1 + total) % total);
+  }, [total]);
+
+  // Autoplay Effect: pauses on hover or touch/interaction, respects reduced motion
+  useEffect(() => {
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion || isHovered || isInteracting || total <= 1) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      nextSlide();
+    }, 4800);
+
+    return () => clearInterval(timer);
+  }, [isHovered, isInteracting, nextSlide, total]);
 
   // Desktop Mouse Wheel & Trackpad Navigation (Non-trapping, smooth card movement)
   useEffect(() => {
@@ -51,39 +70,52 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
 
     let wheelAccumulator = 0;
     let lastWheelTime = 0;
-    const COOLDOWN_MS = 380;
+    const COOLDOWN_MS = 400;
     const THRESHOLD = 30;
 
     const onWheel = (e: WheelEvent) => {
-      // Prioritize dominant scroll direction (deltaX on trackpad swipe; deltaY on standard mouse wheel)
       const absX = Math.abs(e.deltaX);
       const absY = Math.abs(e.deltaY);
-      const delta = absX > absY ? e.deltaX : e.deltaY;
 
-      if (Math.abs(delta) < 4) return;
+      // Dominant horizontal trackpad swipe
+      if (absX > absY) {
+        if (absX < 5) return;
+        e.preventDefault();
+        const now = performance.now();
+        if (now - lastWheelTime < COOLDOWN_MS) return;
 
-      // When at start (first card) and scrolling backward/up -> permit natural vertical page scroll up
-      if (currentIndex <= 0 && delta < 0) {
+        wheelAccumulator += e.deltaX;
+        if (wheelAccumulator >= THRESHOLD) {
+          nextSlide();
+          lastWheelTime = now;
+          wheelAccumulator = 0;
+        } else if (wheelAccumulator <= -THRESHOLD) {
+          prevSlide();
+          lastWheelTime = now;
+          wheelAccumulator = 0;
+        }
+        return;
+      }
+
+      // Vertical mouse wheel: controlled stepping with non-trapping boundaries
+      if (absY < 5) return;
+
+      // Allow natural vertical page scroll when at start or end of deliberate sequence
+      if (currentIndex === 0 && e.deltaY < 0) {
+        wheelAccumulator = 0;
+        return;
+      }
+      if (currentIndex === total - 1 && e.deltaY > 0) {
         wheelAccumulator = 0;
         return;
       }
 
-      // When at end (last card) and scrolling forward/down -> permit natural vertical page scroll down
-      if (currentIndex >= total - 1 && delta > 0) {
-        wheelAccumulator = 0;
-        return;
-      }
-
-      // Within slider bounds: intercept to smoothly move cards horizontally
+      // Within carousel bounds: intercept to smoothly move cards horizontally
       e.preventDefault();
-
       const now = performance.now();
-      if (now - lastWheelTime < COOLDOWN_MS) {
-        return;
-      }
+      if (now - lastWheelTime < COOLDOWN_MS) return;
 
-      wheelAccumulator += delta;
-
+      wheelAccumulator += e.deltaY;
       if (wheelAccumulator >= THRESHOLD) {
         nextSlide();
         lastWheelTime = now;
@@ -118,6 +150,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
 
   // Touch Swipe Handlers for Mobile
   const handleTouchStart = (e: React.TouchEvent) => {
+    setIsInteracting(true);
     setTouchStartX(e.touches[0].clientX);
     setTouchDeltaX(0);
   };
@@ -136,6 +169,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     }
     setTouchStartX(null);
     setTouchDeltaX(0);
+    setIsInteracting(false);
   };
 
   // Fallback: if fewer than 3 items, render clean responsive grid
@@ -173,9 +207,13 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     );
   }
 
-  // Linear offset from current active card (preserves natural start and end)
-  const getOffset = (idx: number) => {
-    return idx - currentIndex;
+  // Calculate shortest circular offset from currentIndex so all 3 cards are always visible
+  const getOffset = (index: number) => {
+    let offset = (index - currentIndex + total) % total;
+    if (offset > total / 2) {
+      offset -= total;
+    }
+    return offset;
   };
 
   // Dynamic 3D transform positioning for smooth card gliding across any screen width
@@ -191,43 +229,22 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
         transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 1.0 : 1.04})`,
         zIndex: 30,
         opacity: 1,
-        filter: 'none',
         pointerEvents: 'auto' as const,
       };
     }
-    if (offset === 1) {
+    if (offset === 1 || offset === -1) {
       return {
         transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 0.85 : 0.88})`,
         zIndex: 20,
         opacity: isMobile ? 0.45 : 0.65,
-        filter: 'blur(0.4px)',
         pointerEvents: 'auto' as const,
       };
     }
-    if (offset === -1) {
+    if (offset === 2 || offset === -2) {
       return {
-        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(${isMobile ? 0.85 : 0.88})`,
-        zIndex: 20,
-        opacity: isMobile ? 0.45 : 0.65,
-        filter: 'blur(0.4px)',
-        pointerEvents: 'auto' as const,
-      };
-    }
-    if (offset === 2) {
-      return {
-        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(0.75)`,
+        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(0.76)`,
         zIndex: 10,
         opacity: 0,
-        filter: 'blur(1px)',
-        pointerEvents: 'none' as const,
-      };
-    }
-    if (offset === -2) {
-      return {
-        transform: `translate3d(calc(-50% + ${translateX}px), -50%, 0) scale(0.75)`,
-        zIndex: 10,
-        opacity: 0,
-        filter: 'blur(1px)',
         pointerEvents: 'none' as const,
       };
     }
@@ -243,6 +260,8 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     <section
       ref={sliderRef}
       onKeyDown={handleKeyDown}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       tabIndex={0}
       role="region"
       aria-roledescription="carousel"
@@ -278,7 +297,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
         >
           {validProducts.map((product, idx) => {
             const offset = getOffset(idx);
-            // Render only cards in visible neighborhood (-2 to +2) for peak performance
+            // Render visible cards (-2 to +2) for smooth enter/exit animations
             if (Math.abs(offset) > 2) return null;
 
             const isCenter = offset === 0;
@@ -326,7 +345,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                   ...cardStyle,
                   transition: touchStartX !== null
                     ? 'none'
-                    : 'transform 480ms cubic-bezier(0.22, 1, 0.36, 1), opacity 480ms cubic-bezier(0.22, 1, 0.36, 1), filter 480ms ease-out',
+                    : 'transform 700ms cubic-bezier(0.25, 1, 0.5, 1), opacity 700ms cubic-bezier(0.25, 1, 0.5, 1)',
                   willChange: 'transform, opacity',
                 }}
               >
@@ -338,7 +357,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                     className={`w-full h-full object-cover object-top transition-transform duration-700 ease-out ${
                       isCenter ? 'group-hover:scale-[1.03]' : ''
                     }`}
-                    loading={isCenter ? 'eager' : 'lazy'}
+                    loading={isCenter || isLeft || isRight ? 'eager' : 'lazy'}
                   />
 
                   {/* Gradient Overlay: Deep gradient ensuring legible 2-line title and details */}
@@ -346,17 +365,24 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                     className={`absolute inset-0 transition-opacity ${
                       isCenter
                         ? 'bg-gradient-to-t from-black/95 via-black/45 to-transparent'
-                        : 'bg-black/35 group-hover:bg-black/20'
+                        : 'bg-black/30 group-hover:bg-black/20'
                     }`}
                   />
 
-                  {/* Wishlist Button (Only active on Center Card) */}
+                  {/* Badge: Category / Collection */}
+                  <div className="absolute top-4 left-4 z-20">
+                    <span className="px-2.5 py-1 text-[10px] sm:text-[11px] uppercase tracking-widest font-semibold bg-[#5E1224] text-[#FCF8F0] shadow-md">
+                      {product.badges?.[0] || 'New'}
+                    </span>
+                  </div>
+
+                  {/* Wishlist Button */}
                   {isCenter && (
                     <button
                       type="button"
                       onClick={(e) => {
-                        e.preventDefault();
                         e.stopPropagation();
+                        e.preventDefault();
                         toggleWishlist(product.id);
                       }}
                       className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-white/95 text-gray-800 hover:text-[#5E1224] flex items-center justify-center shadow-lg transition-transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#B58A3C]"
@@ -365,6 +391,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                           ? `Remove ${product.name} from wishlist`
                           : `Add ${product.name} to wishlist`
                       }
+                      title={isInWishlist(product.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                     >
                       <Heart
                         className={`w-4 h-4 transition-transform duration-200 ${
@@ -376,33 +403,27 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                     </button>
                   )}
 
-                  {/* Top Badge */}
-                  <div className="absolute top-4 left-4 z-20">
-                    <span
-                      className={`inline-block px-3 py-1 text-[10px] uppercase font-bold tracking-[0.2em] shadow-md ${
-                        isCenter
-                          ? 'bg-[#5E1224] text-[#FCF8F0] border border-[#B58A3C]/50'
-                          : 'bg-[#2B1B1E]/80 text-[#FCF8F0]'
-                      }`}
-                    >
-                      {product.badges?.[0] || 'HANDCRAFTED'}
-                    </span>
-                  </div>
-
-                  {/* Center Card Editorial Details */}
+                  {/* Center Card Content Overlay */}
                   {isCenter ? (
-                    <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6 text-left space-y-1.5 sm:space-y-2 z-20">
-                      <div className="flex items-center justify-between text-[#D4AF67] text-[10px] sm:text-xs font-semibold tracking-[0.18em] sm:tracking-[0.2em] uppercase">
-                        <span>{product.fabric || product.category || 'Pure Silk'}</span>
-                        <span className="font-mono text-white text-xs sm:text-sm font-bold">
-                          {formatPrice(product.min_price)}
+                    <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6 text-left space-y-2 z-20">
+                      {/* Category & Pricing */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#D4AF67] font-semibold font-ui">
+                          {product.category || 'Atelier Exclusive'}
                         </span>
+                        <div className="text-right">
+                          <span className="font-serif text-sm sm:text-base font-bold text-white tracking-wide">
+                            {formatPrice(product.min_price)}
+                          </span>
+                        </div>
                       </div>
 
+                      {/* Product Title */}
                       <h3 className="font-serif text-base sm:text-xl font-bold text-white group-hover:text-[#D4AF67] transition-colors leading-snug line-clamp-2 drop-shadow-md">
                         {product.name}
                       </h3>
 
+                      {/* Action Links & Availability */}
                       <div className="pt-1 sm:pt-2 flex items-center justify-between gap-2">
                         <Link
                           to={`/product/${product.slug}`}

@@ -127,6 +127,7 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
 
   // Bounded display index (from 0 to maxIndex)
   const [displayIndex, setDisplayIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
   const touchStartXRef = useRef<number | null>(null);
 
@@ -139,13 +140,30 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
 
   const handleNext = useCallback(() => {
     if (!isCarousel) return;
-    setDisplayIndex((prev) => Math.min(maxIndex, prev + 1));
+    setDisplayIndex((prev) => (prev >= maxIndex ? 0 : prev + 1));
   }, [isCarousel, maxIndex]);
 
   const handlePrev = useCallback(() => {
     if (!isCarousel) return;
-    setDisplayIndex((prev) => Math.max(0, prev - 1));
-  }, [isCarousel]);
+    setDisplayIndex((prev) => (prev <= 0 ? maxIndex : prev - 1));
+  }, [isCarousel, maxIndex]);
+
+  // Autoplay Effect for reviews: smooth continuous auto-sliding, pauses on hover
+  useEffect(() => {
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion || !isCarousel || isHovered) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      handleNext();
+    }, 5200);
+
+    return () => clearInterval(timer);
+  }, [isCarousel, isHovered, handleNext]);
 
   // Desktop Mouse Wheel & Trackpad Navigation (Non-trapping, smooth card movement)
   useEffect(() => {
@@ -154,39 +172,50 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
 
     let wheelAccumulator = 0;
     let lastWheelTime = 0;
-    const COOLDOWN_MS = 380;
+    const COOLDOWN_MS = 400;
     const THRESHOLD = 30;
 
     const onWheel = (e: WheelEvent) => {
-      // Prioritize dominant scroll direction (deltaX on trackpad swipe; deltaY on standard mouse wheel)
       const absX = Math.abs(e.deltaX);
       const absY = Math.abs(e.deltaY);
-      const delta = absX > absY ? e.deltaX : e.deltaY;
 
-      if (Math.abs(delta) < 4) return;
+      // Dominant horizontal trackpad swipe
+      if (absX > absY) {
+        if (absX < 5) return;
+        e.preventDefault();
+        const now = performance.now();
+        if (now - lastWheelTime < COOLDOWN_MS) return;
 
-      // When at start (card 0) and scrolling backward/up -> permit natural vertical page scroll up
-      if (displayIndex <= 0 && delta < 0) {
+        wheelAccumulator += e.deltaX;
+        if (wheelAccumulator >= THRESHOLD) {
+          handleNext();
+          lastWheelTime = now;
+          wheelAccumulator = 0;
+        } else if (wheelAccumulator <= -THRESHOLD) {
+          handlePrev();
+          lastWheelTime = now;
+          wheelAccumulator = 0;
+        }
+        return;
+      }
+
+      // Vertical mouse wheel: controlled stepping with non-trapping boundaries
+      if (absY < 5) return;
+
+      if (displayIndex <= 0 && e.deltaY < 0) {
+        wheelAccumulator = 0;
+        return;
+      }
+      if (displayIndex >= maxIndex && e.deltaY > 0) {
         wheelAccumulator = 0;
         return;
       }
 
-      // When at end (last card view) and scrolling forward/down -> permit natural vertical page scroll down
-      if (displayIndex >= maxIndex && delta > 0) {
-        wheelAccumulator = 0;
-        return;
-      }
-
-      // Within carousel bounds: intercept to smoothly move cards horizontally
       e.preventDefault();
-
       const now = performance.now();
-      if (now - lastWheelTime < COOLDOWN_MS) {
-        return;
-      }
+      if (now - lastWheelTime < COOLDOWN_MS) return;
 
-      wheelAccumulator += delta;
-
+      wheelAccumulator += e.deltaY;
       if (wheelAccumulator >= THRESHOLD) {
         handleNext();
         lastWheelTime = now;
@@ -240,11 +269,11 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
     setExpandedMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Pixel-accurate translation
+  // Pixel-accurate smooth translation
   const trackStyle = isCarousel
     ? {
         transform: `translateX(-${displayIndex * stepDistance}px)`,
-        transition: 'transform 500ms cubic-bezier(0.25, 1, 0.5, 1)',
+        transition: 'transform 700ms cubic-bezier(0.25, 1, 0.5, 1)',
       }
     : undefined;
 
@@ -257,6 +286,8 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
       aria-roledescription="carousel"
       aria-label="Customer Google Reviews"
       onKeyDown={handleKeyDown}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className="w-full bg-[#FAF5EC] border-b border-[#B58A3C]/25 py-14 sm:py-20 px-4 sm:px-6 lg:px-8 select-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
     >
       <div className="max-w-6xl mx-auto space-y-10">
