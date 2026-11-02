@@ -1,12 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import {
-  Star,
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight,
-  Pause,
-  Play,
-} from 'lucide-react';
+import { Star, ExternalLink } from 'lucide-react';
 import { StoreSettings, BoutiqueReviewItem, useStoreSettings } from '../lib/settings';
 
 function getInitials(name: string): string {
@@ -98,8 +91,10 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
   }, []);
 
   const isCarousel = reviews.length > itemsPerView;
+  const maxIndex = Math.max(0, reviews.length - itemsPerView);
 
   // Track and card measurement refs
+  const sectionRef = useRef<HTMLElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const [stepDistance, setStepDistance] = useState<number>(0);
 
@@ -123,7 +118,6 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
   useEffect(() => {
     measureStep();
     window.addEventListener('resize', measureStep);
-    // Double measurement after next render tick to account for font loading
     const timer = setTimeout(measureStep, 150);
     return () => {
       window.removeEventListener('resize', measureStep);
@@ -131,197 +125,139 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
     };
   }, [measureStep, reviews.length]);
 
-  // Infinite Carousel State
-  // displayIndex moves from 0 to reviews.length smoothly.
-  // When it hits reviews.length (the clone of card 0), transitionEnd snaps it back to 0 instantly.
+  // Bounded display index (from 0 to maxIndex)
   const [displayIndex, setDisplayIndex] = useState(0);
-  const [withTransition, setWithTransition] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isHovered, setIsHovered] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const [isTouched, setIsTouched] = useState(false);
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
-
   const touchStartXRef = useRef<number | null>(null);
-  const isNavigatingRef = useRef(false);
-  const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Check reduced motion preference
-  const prefersReducedMotion =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Reconcile position if review count or itemsPerView changes
   useEffect(() => {
-    if (displayIndex >= reviews.length) {
-      setWithTransition(false);
-      setDisplayIndex(0);
-      isNavigatingRef.current = false;
+    if (displayIndex > maxIndex) {
+      setDisplayIndex(maxIndex);
     }
-  }, [reviews.length, itemsPerView, displayIndex]);
+  }, [maxIndex, displayIndex]);
 
-  // Clean up animation timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
-    };
-  }, []);
-
-  // Seamless Next navigation with rapid-click and overshoot prevention
   const handleNext = useCallback(() => {
     if (!isCarousel) return;
+    setDisplayIndex((prev) => Math.min(maxIndex, prev + 1));
+  }, [isCarousel, maxIndex]);
 
-    if (prefersReducedMotion) {
-      setDisplayIndex((prev) => (prev + 1) % reviews.length);
-      return;
-    }
-
-    if (isNavigatingRef.current) return;
-
-    // Guard against advancing beyond the clone track
-    if (displayIndex >= reviews.length) {
-      setWithTransition(false);
-      setDisplayIndex(0);
-      return;
-    }
-
-    isNavigatingRef.current = true;
-    setWithTransition(true);
-    setDisplayIndex((prev) => prev + 1);
-
-    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
-    animTimeoutRef.current = setTimeout(() => {
-      isNavigatingRef.current = false;
-    }, 650);
-  }, [isCarousel, prefersReducedMotion, displayIndex, reviews.length]);
-
-  // Seamless Prev navigation with rapid-click and overshoot prevention
   const handlePrev = useCallback(() => {
     if (!isCarousel) return;
+    setDisplayIndex((prev) => Math.max(0, prev - 1));
+  }, [isCarousel]);
 
-    if (prefersReducedMotion) {
-      setDisplayIndex((prev) => (prev - 1 + reviews.length) % reviews.length);
-      return;
-    }
+  // Desktop Mouse Wheel & Trackpad Navigation (Non-trapping, smooth card movement)
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || !isCarousel) return;
 
-    if (isNavigatingRef.current) return;
+    let wheelAccumulator = 0;
+    let lastWheelTime = 0;
+    const COOLDOWN_MS = 380;
+    const THRESHOLD = 30;
 
-    isNavigatingRef.current = true;
-    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
-    animTimeoutRef.current = setTimeout(() => {
-      isNavigatingRef.current = false;
-    }, 650);
+    const onWheel = (e: WheelEvent) => {
+      // Prioritize dominant scroll direction (deltaX on trackpad swipe; deltaY on standard mouse wheel)
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      const delta = absX > absY ? e.deltaX : e.deltaY;
 
-    if (displayIndex === 0) {
-      // Instantly jump to clone position without transition, then animate back
-      setWithTransition(false);
-      setDisplayIndex(reviews.length);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setWithTransition(true);
-          setDisplayIndex(reviews.length - 1);
-        });
-      });
-    } else {
-      setWithTransition(true);
-      setDisplayIndex((prev) => Math.max(0, prev - 1));
-    }
-  }, [isCarousel, prefersReducedMotion, displayIndex, reviews.length]);
+      if (Math.abs(delta) < 4) return;
 
-  // On transition end, release navigation lock and snap seamlessly to 0 if at clone boundary
-  const handleTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
-    // Ensure transition-end handling ONLY responds to the intended track transform
-    if (e.target !== trackRef.current || e.propertyName !== 'transform') {
-      return;
-    }
+      // When at start (card 0) and scrolling backward/up -> permit natural vertical page scroll up
+      if (displayIndex <= 0 && delta < 0) {
+        wheelAccumulator = 0;
+        return;
+      }
 
-    if (animTimeoutRef.current) {
-      clearTimeout(animTimeoutRef.current);
-      animTimeoutRef.current = null;
-    }
-    isNavigatingRef.current = false;
+      // When at end (last card view) and scrolling forward/down -> permit natural vertical page scroll down
+      if (displayIndex >= maxIndex && delta > 0) {
+        wheelAccumulator = 0;
+        return;
+      }
 
-    if (displayIndex >= reviews.length) {
-      setWithTransition(false);
+      // Within carousel bounds: intercept to smoothly move cards horizontally
+      e.preventDefault();
+
+      const now = performance.now();
+      if (now - lastWheelTime < COOLDOWN_MS) {
+        return;
+      }
+
+      wheelAccumulator += delta;
+
+      if (wheelAccumulator >= THRESHOLD) {
+        handleNext();
+        lastWheelTime = now;
+        wheelAccumulator = 0;
+      } else if (wheelAccumulator <= -THRESHOLD) {
+        handlePrev();
+        lastWheelTime = now;
+        wheelAccumulator = 0;
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [isCarousel, displayIndex, maxIndex, handleNext, handlePrev]);
+
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isCarousel) return;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      handlePrev();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      handleNext();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
       setDisplayIndex(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setDisplayIndex(maxIndex);
     }
   };
-
-  // Auto-play timer
-  useEffect(() => {
-    if (!isCarousel) return;
-
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (!isPlaying || isHovered || isFocused || isTouched || prefersReducedMotion) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      handleNext();
-    }, 5500);
-
-    return () => clearInterval(interval);
-  }, [isCarousel, isPlaying, isHovered, isFocused, isTouched, handleNext]);
 
   // Touch Swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
-    setIsTouched(true);
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null) {
-      setIsTouched(false);
-      return;
-    }
+    if (touchStartXRef.current === null) return;
     const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
-    if (deltaX > 45) {
+    if (deltaX > 40) {
       handlePrev();
-    } else if (deltaX < -45) {
+    } else if (deltaX < -40) {
       handleNext();
     }
     touchStartXRef.current = null;
-    setIsTouched(false);
   };
 
   const toggleExpand = (id: string) => {
     setExpandedMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Clones for seamless infinite looping
-  const carouselCards = useMemo(() => {
-    if (!isCarousel) return reviews.map((r) => ({ review: r, isClone: false, key: r.id }));
-    const primary = reviews.map((r) => ({ review: r, isClone: false, key: `prim-${r.id}` }));
-    // Append duplicate clones to provide a seamless loop
-    const clones = reviews.map((r, idx) => ({
-      review: r,
-      isClone: true,
-      key: `clone-${r.id}-${idx}`,
-    }));
-    return [...primary, ...clones];
-  }, [isCarousel, reviews]);
-
   // Pixel-accurate translation
   const trackStyle = isCarousel
     ? {
         transform: `translateX(-${displayIndex * stepDistance}px)`,
-        transition: withTransition ? 'transform 600ms cubic-bezier(0.25, 1, 0.5, 1)' : 'none',
+        transition: 'transform 500ms cubic-bezier(0.25, 1, 0.5, 1)',
       }
     : undefined;
 
   return (
     <section
       id="reviews"
+      ref={sectionRef}
+      tabIndex={0}
+      role="region"
       aria-roledescription="carousel"
-      aria-label="What Our Customers Say"
-      className="w-full bg-[#FAF5EC] border-b border-[#B58A3C]/25 py-14 sm:py-20 px-4 sm:px-6 lg:px-8 select-none overflow-hidden"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onFocusCapture={() => setIsFocused(true)}
-      onBlurCapture={() => setIsFocused(false)}
+      aria-label="Customer Google Reviews"
+      onKeyDown={handleKeyDown}
+      className="w-full bg-[#FAF5EC] border-b border-[#B58A3C]/25 py-14 sm:py-20 px-4 sm:px-6 lg:px-8 select-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
     >
       <div className="max-w-6xl mx-auto space-y-10">
         {/* ========================================================
@@ -346,42 +282,7 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
         </div>
 
         {/* ========================================================
-            CONTROLS: Carousel manual navigation (when carousel is active)
-            ======================================================== */}
-        {isCarousel && (
-          <div className="flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={() => setIsPlaying((p) => !p)}
-              className="p-2 border border-[#B58A3C]/40 bg-white text-gray-700 hover:text-[#5E1224] hover:bg-[#FCF8F0] transition-colors focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-              aria-label={isPlaying ? 'Pause automatic review rotation' : 'Resume automatic review rotation'}
-              title={isPlaying ? 'Pause' : 'Play'}
-            >
-              {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePrev}
-              className="p-2 border border-[#B58A3C]/40 bg-white text-gray-700 hover:text-[#5E1224] hover:bg-[#FCF8F0] transition-colors focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-              aria-label="Previous review"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNext}
-              className="p-2 border border-[#B58A3C]/40 bg-white text-gray-700 hover:text-[#5E1224] hover:bg-[#FCF8F0] transition-colors focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-              aria-label="Next review"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* ========================================================
-            REVIEWS CONTAINER: Seamless loop or Clean static row
+            REVIEWS CONTAINER: Smooth bounded gliding row
             ======================================================== */}
         <div
           className="w-full overflow-hidden"
@@ -392,14 +293,13 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
             <div
               ref={trackRef}
               style={trackStyle}
-              onTransitionEnd={handleTransitionEnd}
               className="flex gap-4 sm:gap-6 will-change-transform"
             >
-              {carouselCards.map(({ review, isClone, key }) => (
+              {reviews.map((review) => (
                 <ReviewCard
-                  key={key}
+                  key={review.id}
                   review={review}
-                  isClone={isClone}
+                  isClone={false}
                   isExpanded={Boolean(expandedMap[review.id])}
                   onToggleExpand={() => toggleExpand(review.id)}
                 />

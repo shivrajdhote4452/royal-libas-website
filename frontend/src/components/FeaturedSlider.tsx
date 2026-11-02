@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pause, Play, Heart, Sparkles, ArrowRight } from 'lucide-react';
+import { Heart, Sparkles, ArrowRight } from 'lucide-react';
 import { Product } from '../types/product';
 import { formatPrice } from '../lib/api';
 import { useWishlist } from '../context/WishlistContext';
@@ -28,56 +28,96 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Robust Autoplay State Machine: Separate manual user pause from transient hover/touch
-  const [isManuallyPaused, setIsManuallyPaused] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  const [isInteracting, setIsInteracting] = useState(false);
-
   // Touch Swipe Gesture Tracking
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchDeltaX, setTouchDeltaX] = useState<number>(0);
   const sliderRef = useRef<HTMLDivElement>(null);
 
+  // Bounded navigation: smoothly transitions without wrapping so user can scroll out at ends
   const nextSlide = useCallback(() => {
     if (total === 0) return;
-    setCurrentIndex((prev) => (prev + 1) % total);
+    setCurrentIndex((prev) => Math.min(total - 1, prev + 1));
   }, [total]);
 
   const prevSlide = useCallback(() => {
     if (total === 0) return;
-    setCurrentIndex((prev) => (prev - 1 + total) % total);
-  }, [total]);
+    setCurrentIndex((prev) => Math.max(0, prev - 1));
+  }, []);
 
-  // Autoplay Effect: strictly respects manual pause, hover, interaction, and reduced motion
+  // Desktop Mouse Wheel & Trackpad Navigation (Non-trapping, smooth card movement)
   useEffect(() => {
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const el = sliderRef.current;
+    if (!el || total <= 1) return;
 
-    // NEVER autoplay if manually paused, hovered, interacting, or prefers reduced motion
-    if (prefersReducedMotion || isManuallyPaused || isHovered || isInteracting || total <= 1) {
-      return;
-    }
+    let wheelAccumulator = 0;
+    let lastWheelTime = 0;
+    const COOLDOWN_MS = 380;
+    const THRESHOLD = 30;
 
-    const timer = setInterval(() => {
-      nextSlide();
-    }, 5500);
+    const onWheel = (e: WheelEvent) => {
+      // Prioritize dominant scroll direction (deltaX on trackpad swipe; deltaY on standard mouse wheel)
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      const delta = absX > absY ? e.deltaX : e.deltaY;
 
-    return () => clearInterval(timer);
-  }, [isManuallyPaused, isHovered, isInteracting, nextSlide, total]);
+      if (Math.abs(delta) < 4) return;
+
+      // When at start (first card) and scrolling backward/up -> permit natural vertical page scroll up
+      if (currentIndex <= 0 && delta < 0) {
+        wheelAccumulator = 0;
+        return;
+      }
+
+      // When at end (last card) and scrolling forward/down -> permit natural vertical page scroll down
+      if (currentIndex >= total - 1 && delta > 0) {
+        wheelAccumulator = 0;
+        return;
+      }
+
+      // Within slider bounds: intercept to smoothly move cards horizontally
+      e.preventDefault();
+
+      const now = performance.now();
+      if (now - lastWheelTime < COOLDOWN_MS) {
+        return;
+      }
+
+      wheelAccumulator += delta;
+
+      if (wheelAccumulator >= THRESHOLD) {
+        nextSlide();
+        lastWheelTime = now;
+        wheelAccumulator = 0;
+      } else if (wheelAccumulator <= -THRESHOLD) {
+        prevSlide();
+        lastWheelTime = now;
+        wheelAccumulator = 0;
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [currentIndex, total, nextSlide, prevSlide]);
 
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') {
+      e.preventDefault();
       prevSlide();
     } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
       nextSlide();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setCurrentIndex(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setCurrentIndex(Math.max(0, total - 1));
     }
   };
 
   // Touch Swipe Handlers for Mobile
   const handleTouchStart = (e: React.TouchEvent) => {
-    setIsInteracting(true);
     setTouchStartX(e.touches[0].clientX);
     setTouchDeltaX(0);
   };
@@ -89,19 +129,13 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
   };
 
   const handleTouchEnd = () => {
-    if (touchDeltaX > 45) {
+    if (touchDeltaX > 40) {
       prevSlide();
-    } else if (touchDeltaX < -45) {
+    } else if (touchDeltaX < -40) {
       nextSlide();
     }
     setTouchStartX(null);
     setTouchDeltaX(0);
-    setIsInteracting(false);
-  };
-
-  // Toggle user-explicit pause/play
-  const togglePlayPause = () => {
-    setIsManuallyPaused((prev) => !prev);
   };
 
   // Fallback: if fewer than 3 items, render clean responsive grid
@@ -139,12 +173,9 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     );
   }
 
-  // Calculate shortest circular offset for each card
+  // Linear offset from current active card (preserves natural start and end)
   const getOffset = (idx: number) => {
-    let diff = idx - currentIndex;
-    while (diff > total / 2) diff -= total;
-    while (diff < -total / 2) diff += total;
-    return diff;
+    return idx - currentIndex;
   };
 
   // Dynamic 3D transform positioning for smooth card gliding across any screen width
@@ -208,15 +239,15 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     };
   };
 
-  const formattedCounter = `${String(currentIndex + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
-
   return (
     <section
       ref={sliderRef}
       onKeyDown={handleKeyDown}
       tabIndex={0}
-      aria-label="Featured royal silhouettes carousel"
-      className="py-14 sm:py-20 bg-[#FAF7F2] border-y border-[#E8DFD0] overflow-hidden select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C]"
+      role="region"
+      aria-roledescription="carousel"
+      aria-label="Iconic Atelier Silhouettes product collection"
+      className="py-14 sm:py-20 bg-[#FAF7F2] border-y border-[#E8DFD0] overflow-hidden select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
@@ -244,10 +275,6 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-          onFocus={() => setIsHovered(true)}
-          onBlur={() => setIsHovered(false)}
         >
           {validProducts.map((product, idx) => {
             const offset = getOffset(idx);
@@ -332,7 +359,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                         e.stopPropagation();
                         toggleWishlist(product.id);
                       }}
-                      className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-white/95 text-gray-800 hover:text-[#5E1224] flex items-center justify-center shadow-lg transition-transform hover:scale-110 active:scale-95"
+                      className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-white/95 text-gray-800 hover:text-[#5E1224] flex items-center justify-center shadow-lg transition-transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#B58A3C]"
                       aria-label={
                         isInWishlist(product.id)
                           ? `Remove ${product.name} from wishlist`
@@ -379,7 +406,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                       <div className="pt-1 sm:pt-2 flex items-center justify-between gap-2">
                         <Link
                           to={`/product/${product.slug}`}
-                          className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-semibold text-[#FCF8F0] hover:text-[#D4AF67] group-hover:underline tracking-wider uppercase font-ui shrink-0"
+                          className="inline-flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-semibold text-[#FCF8F0] hover:text-[#D4AF67] group-hover:underline tracking-wider uppercase font-ui shrink-0 focus:outline-none focus:underline"
                           aria-label={`Explore piece ${product.name}`}
                         >
                           <span>Explore Piece</span>
@@ -412,74 +439,9 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
             );
           })}
         </div>
-
-        {/* ========================================================
-            NAVIGATION CONTROLS & PAGINATION
-            ======================================================== */}
-        <div className="mt-8 sm:mt-10 flex items-center justify-center gap-6">
-          {/* Previous Button */}
-          <button
-            type="button"
-            onClick={prevSlide}
-            aria-label="Previous slide"
-            className="w-10 h-10 rounded-full border border-[#B58A3C] bg-white text-[#5E1224] hover:bg-[#5E1224] hover:text-white transition-all shadow-sm flex items-center justify-center hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#B58A3C]"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-
-          {/* Counter Display & Play/Pause */}
-          <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-full border border-[#E8DFD0] shadow-sm text-xs">
-            <span
-              data-testid="slider-counter"
-              className="font-mono font-bold text-[#5E1224] tracking-widest text-xs"
-            >
-              {formattedCounter}
-            </span>
-            <span className="w-3 h-[1px] bg-gray-300" />
-            <button
-              type="button"
-              data-testid="slider-play-pause-btn"
-              onClick={togglePlayPause}
-              className="text-gray-500 hover:text-[#5E1224] transition-colors p-1 focus:outline-none focus:ring-1 focus:ring-[#B58A3C] rounded"
-              aria-label={isManuallyPaused ? 'Play automatic carousel' : 'Pause automatic carousel'}
-              title={isManuallyPaused ? 'Play' : 'Pause'}
-            >
-              {isManuallyPaused ? (
-                <Play className="w-3.5 h-3.5 text-gray-700 hover:text-[#5E1224]" />
-              ) : (
-                <Pause className="w-3.5 h-3.5 text-gray-700 hover:text-[#5E1224]" />
-              )}
-            </button>
-          </div>
-
-          {/* Next Button */}
-          <button
-            type="button"
-            onClick={nextSlide}
-            aria-label="Next slide"
-            className="w-10 h-10 rounded-full border border-[#B58A3C] bg-white text-[#5E1224] hover:bg-[#5E1224] hover:text-white transition-all shadow-sm flex items-center justify-center hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#B58A3C]"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Dot Pagination */}
-        <div className="mt-4 flex items-center justify-center gap-2">
-          {validProducts.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentIndex(idx)}
-              aria-label={`Go to slide ${idx + 1}`}
-              className={`h-1.5 rounded-full transition-all duration-300 focus:outline-none ${
-                idx === currentIndex
-                  ? 'w-6 bg-[#5E1224]'
-                  : 'w-2 bg-[#D4AF67]/50 hover:bg-[#B58A3C]'
-              }`}
-            />
-          ))}
-        </div>
       </div>
     </section>
   );
 };
+
 export default FeaturedSlider;
