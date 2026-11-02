@@ -31,6 +31,8 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from sqlalchemy import create_engine, text, inspect
+from app.database import Base
+from app.models import Product, ProductVariant
 from app.migrations import run_migrations
 
 
@@ -124,50 +126,33 @@ class TestPostgresVariantMigration(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         if hasattr(cls, "engine"):
+            try:
+                # Ensure tables and migrations are fully restored for any subsequent test suites
+                Base.metadata.create_all(bind=cls.engine)
+                run_migrations(cls.engine)
+            except Exception:
+                pass
             cls.engine.dispose()
         if hasattr(cls, "cleanup_fn") and cls.cleanup_fn:
             cls.cleanup_fn()
 
     def setUp(self):
-        """Prepare fresh isolated tables in disposable PostgreSQL before each test."""
+        """Prepare fresh tables in disposable PostgreSQL before each test, ensuring is_active is stripped."""
+        # Ensure full model tables exist so all standard columns (description, fabric, care, etc.) are present
+        Base.metadata.create_all(bind=self.engine)
+
         with self.engine.begin() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS product_variants CASCADE;"))
-            conn.execute(text("DROP TABLE IF EXISTS products CASCADE;"))
+            # Clean existing test data from product_variants and products
+            conn.execute(text("DELETE FROM product_variants;"))
+            conn.execute(text("DELETE FROM products;"))
 
-            # Create products table
-            conn.execute(text("""
-                CREATE TABLE products (
-                    id SERIAL PRIMARY KEY,
-                    name VARCHAR(255) NOT NULL,
-                    slug VARCHAR(255) UNIQUE NOT NULL,
-                    category VARCHAR(100) NOT NULL,
-                    subcategory VARCHAR(100),
-                    status VARCHAR(50) DEFAULT 'DRAFT',
-                    is_active BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-            """))
+            # Strip the is_active column from product_variants to simulate pre-migration state
+            conn.execute(text("ALTER TABLE product_variants DROP COLUMN IF EXISTS is_active;"))
 
-            # Create product_variants table WITHOUT is_active column (pre-migration schema)
+            # Seed pre-migration products and variants without is_active
             conn.execute(text("""
-                CREATE TABLE product_variants (
-                    id SERIAL PRIMARY KEY,
-                    product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                    size VARCHAR(20) NOT NULL,
-                    colour VARCHAR(100),
-                    sku VARCHAR(100) UNIQUE NOT NULL,
-                    selling_price NUMERIC(10, 2) NOT NULL,
-                    stock INTEGER DEFAULT 0 NOT NULL,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-            """))
-
-            # Seed pre-migration products and variants
-            conn.execute(text("""
-                INSERT INTO products (id, name, slug, category, subcategory, status, is_active)
-                VALUES (1, 'Test Anarkali Set', 'test-anarkali-set', 'SUIT SET', 'Three Pieces', 'PUBLISHED', TRUE);
+                INSERT INTO products (id, name, slug, category, subcategory, status, is_bestseller, is_active)
+                VALUES (1, 'Test Anarkali Set', 'test-anarkali-set', 'SUIT SET', 'Three Pieces', 'PUBLISHED', FALSE, TRUE);
             """))
 
             conn.execute(text("""
@@ -287,6 +272,7 @@ class TestSQLiteVariantMigration(unittest.TestCase):
                     category VARCHAR(100) NOT NULL,
                     subcategory VARCHAR(100),
                     status VARCHAR(50) DEFAULT 'DRAFT',
+                    is_bestseller BOOLEAN DEFAULT 0,
                     is_active BOOLEAN DEFAULT 1
                 );
             """))
@@ -302,8 +288,8 @@ class TestSQLiteVariantMigration(unittest.TestCase):
                 );
             """))
             conn.execute(text("""
-                INSERT INTO products (id, name, slug, category, subcategory, status)
-                VALUES (1, 'SQLite Product', 'sqlite-product', 'SUIT SET', 'Party Wear', 'PUBLISHED');
+                INSERT INTO products (id, name, slug, category, subcategory, status, is_bestseller, is_active)
+                VALUES (1, 'SQLite Product', 'sqlite-product', 'SUIT SET', 'Party Wear', 'PUBLISHED', 0, 1);
             """))
             conn.execute(text("""
                 INSERT INTO product_variants (id, product_id, size, colour, sku, selling_price, stock)
