@@ -1,4 +1,7 @@
 from pathlib import Path
+import logging
+
+logger = logging.getLogger("royal_libas.admin")
 from datetime import datetime, date, time, timedelta, timezone
 from decimal import Decimal
 import os
@@ -977,10 +980,12 @@ def admin_ship_order_via_shiprocket(
             pickup_res = shiprocket.generate_pickup(order.shipment_id)
             order.pickup_status = pickup_res.get("pickup_status", "SCHEDULED")
             db.commit()
+            log_activity(db, current_admin, "PICKUP_SCHEDULED", "order", order.id, f"Pickup status: {order.pickup_status}")
         except Exception as pk_err:
             logger.warning(f"Initial pickup scheduling deferred for order {order.id}: {pk_err}")
             order.pickup_status = "SCHEDULE_FAILED"
             db.commit()
+            log_activity(db, current_admin, "PICKUP_SCHEDULE_FAILED", "order", order.id, f"Pickup scheduling failed: {pk_err}")
 
     # Step 4: Generate Label
     if not order.label_url:
@@ -989,8 +994,13 @@ def admin_ship_order_via_shiprocket(
             if label_res.get("label_url"):
                 order.label_url = label_res["label_url"]
                 db.commit()
-        except Exception:
-            pass
+                log_activity(db, current_admin, "LABEL_GENERATED", "order", order.id, f"Label URL: {order.label_url}")
+            else:
+                logger.warning(f"Label URL was not returned by Shiprocket for order {order.id}")
+                log_activity(db, current_admin, "LABEL_PENDING", "order", order.id, "Label URL not yet returned by Shiprocket")
+        except Exception as lbl_err:
+            logger.warning(f"Initial label generation deferred for order {order.id}: {lbl_err}")
+            log_activity(db, current_admin, "LABEL_GENERATION_FAILED", "order", order.id, f"Label generation deferred: {lbl_err}")
 
     # Step 5: Generate Manifest
     if not order.manifest_url:
@@ -999,8 +1009,13 @@ def admin_ship_order_via_shiprocket(
             if manifest_res.get("manifest_url"):
                 order.manifest_url = manifest_res["manifest_url"]
                 db.commit()
-        except Exception:
-            pass
+                log_activity(db, current_admin, "MANIFEST_GENERATED", "order", order.id, f"Manifest URL: {order.manifest_url}")
+            else:
+                logger.warning(f"Manifest URL was not returned by Shiprocket for order {order.id}")
+                log_activity(db, current_admin, "MANIFEST_PENDING", "order", order.id, "Manifest URL not yet returned by Shiprocket")
+        except Exception as man_err:
+            logger.warning(f"Initial manifest generation deferred for order {order.id}: {man_err}")
+            log_activity(db, current_admin, "MANIFEST_GENERATION_FAILED", "order", order.id, f"Manifest generation deferred: {man_err}")
 
     # Step 6: Generate Invoice (non-blocking)
     if order.shiprocket_order_id and not order.invoice_url:
@@ -1009,12 +1024,20 @@ def admin_ship_order_via_shiprocket(
             if inv_res.get("invoice_url"):
                 order.invoice_url = inv_res["invoice_url"]
                 db.commit()
+                log_activity(db, current_admin, "INVOICE_GENERATED", "order", order.id, f"Invoice URL: {order.invoice_url}")
         except Exception as inv_err:
             logger.warning(f"Initial invoice generation deferred for order {order.id}: {inv_err}")
+            log_activity(db, current_admin, "INVOICE_GENERATION_FAILED", "order", order.id, f"Invoice generation deferred: {inv_err}")
 
-    # Step 7: Mark order status as READY_FOR_PICKUP (not physically SHIPPED until courier pickup)
+    # Step 7: Accurate Order Status Transition:
+    # If pickup was successfully scheduled (or pending carrier queue), order is READY_FOR_PICKUP.
+    # If pickup scheduling failed, order remains PACKED (the box is packed, but pickup is not scheduled).
+    # NEVER mark SHIPPED here - physical shipping is confirmed only when courier tracking verifies pickup.
     if order.status not in ("SHIPPED", "DELIVERED", "CANCELLED"):
-        order.status = "READY_FOR_PICKUP"
+        if order.pickup_status and order.pickup_status not in ("SCHEDULE_FAILED", ""):
+            order.status = "READY_FOR_PICKUP"
+        else:
+            order.status = "PACKED"
     db.commit()
     db.refresh(order)
     log_activity(
@@ -1023,7 +1046,7 @@ def admin_ship_order_via_shiprocket(
         "SHIPMENT_CREATED",
         "order",
         order.id,
-        f"Shiprocket AWB: {order.awb_code}, Courier: {order.courier_name}, Status: {order.status}",
+        f"Shiprocket AWB: {order.awb_code}, Courier: {order.courier_name}, Pickup: {order.pickup_status}, Status: {order.status}",
     )
     return order
 
@@ -1227,13 +1250,18 @@ def admin_retry_order_pickup(
     try:
         pickup_res = shiprocket.generate_pickup(order.shipment_id)
         order.pickup_status = pickup_res.get("pickup_status", "SCHEDULED")
+        if order.status not in ("SHIPPED", "DELIVERED", "CANCELLED"):
+            order.status = "READY_FOR_PICKUP"
         db.commit()
         db.refresh(order)
-        log_activity(db, current_admin, "PICKUP_SCHEDULED", "order", order.id, f"Pickup status: {order.pickup_status}")
+        log_activity(db, current_admin, "PICKUP_SCHEDULED", "order", order.id, f"Pickup status: {order.pickup_status}, Status: {order.status}")
         return order
     except Exception as e:
         order.pickup_status = "SCHEDULE_FAILED"
+        if order.status not in ("SHIPPED", "DELIVERED", "CANCELLED"):
+            order.status = "PACKED"
         db.commit()
+        log_activity(db, current_admin, "PICKUP_SCHEDULE_FAILED", "order", order.id, f"Retry pickup failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Pickup scheduling failed: {str(e)}",

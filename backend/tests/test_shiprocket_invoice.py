@@ -54,6 +54,13 @@ from app.services import shiprocket
 class TestShiprocketInvoice(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Store original environment to restore cleanly on tearDownClass
+        cls._orig_db_url = os.environ.get("DATABASE_URL")
+
+        # Global mock of get_auth_token to prevent any network calls to Shiprocket auth login
+        cls._token_patcher = patch("app.services.shiprocket.get_auth_token", return_value="mock_jwt_shiprocket_token_9999")
+        cls._token_patcher.start()
+
         Base.metadata.create_all(bind=engine)
         cls.client = TestClient(app)
 
@@ -79,7 +86,10 @@ class TestShiprocketInvoice(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls._token_patcher.stop()
         engine.dispose()
+        if cls._orig_db_url:
+            os.environ["DATABASE_URL"] = cls._orig_db_url
         shutil.rmtree(TEMP_DIR, ignore_errors=True)
 
     def setUp(self):
@@ -393,6 +403,63 @@ class TestShiprocketInvoice(unittest.TestCase):
         self.assertEqual(db_order.status, "READY_FOR_PICKUP")
         self.assertEqual(db_order.pickup_status, "SCHEDULED")
         self.assertEqual(db_order.awb_code, "AWB-9999")
+
+    @patch("app.services.shiprocket.is_shiprocket_configured", return_value=True)
+    @patch("app.services.shiprocket.create_order")
+    @patch("app.services.shiprocket.assign_awb")
+    @patch("app.services.shiprocket.generate_pickup")
+    @patch("app.services.shiprocket.generate_label")
+    @patch("app.services.shiprocket.generate_manifest")
+    @patch("app.services.shiprocket.generate_invoice")
+    def test_shipment_booking_pickup_failed_leaves_order_packed_not_ready_for_pickup(
+        self, mock_inv, mock_man, mock_lab, mock_pick, mock_awb, mock_create, mock_conf
+    ):
+        """When courier pickup scheduling fails during booking, order remains PACKED (not READY_FOR_PICKUP)."""
+        order = self._create_sample_order()
+        mock_create.return_value = {"shiprocket_order_id": 998822, "shipment_id": "SH-7799"}
+        mock_awb.return_value = {"awb_code": "AWB-8888", "courier_name": "Delhivery Express"}
+        mock_pick.side_effect = Exception("Courier pickup slot full for today")
+        mock_lab.return_value = {"label_url": "https://shiprocket.co/label/8888.pdf"}
+        mock_man.return_value = {"manifest_url": "https://shiprocket.co/manifest/8888.pdf"}
+        mock_inv.return_value = {"invoice_url": "https://s3.amazonaws.com/inv.pdf", "is_invoice_created": True}
+
+        resp = self.client.post(
+            f"/admin/orders/{order.id}/fulfillment/ship",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+            json={"length": 25, "breadth": 20, "height": 5, "weight": 0.5},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        # Order MUST remain PACKED because pickup failed
+        self.assertEqual(data["status"], "PACKED")
+        self.assertNotEqual(data["status"], "READY_FOR_PICKUP")
+        self.assertEqual(data["pickup_status"], "SCHEDULE_FAILED")
+
+        # Verify DB integrity
+        self.db.expire_all()
+        db_order = self.db.query(Order).filter(Order.id == order.id).first()
+        self.assertEqual(db_order.status, "PACKED")
+        self.assertEqual(db_order.pickup_status, "SCHEDULE_FAILED")
+        self.assertEqual(db_order.awb_code, "AWB-8888")
+
+    @patch("app.services.shiprocket.is_shiprocket_configured", return_value=True)
+    @patch("app.services.shiprocket.generate_pickup")
+    def test_pickup_retry_failure_keeps_order_packed(self, mock_pickup, mock_conf):
+        """Failed pickup retry leaves order in PACKED state and raises HTTP 502."""
+        order = self._create_sample_order(status="PACKED", shipment_id="SH-6666", pickup_status="SCHEDULE_FAILED")
+        mock_pickup.side_effect = Exception("Pickup server timeout")
+
+        resp = self.client.post(
+            f"/admin/orders/{order.id}/fulfillment/pickup",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(resp.status_code, 502)
+        self.assertIn("Pickup scheduling failed", resp.json()["detail"])
+
+        self.db.expire_all()
+        db_order = self.db.query(Order).filter(Order.id == order.id).first()
+        self.assertEqual(db_order.status, "PACKED")
+        self.assertEqual(db_order.pickup_status, "SCHEDULE_FAILED")
 
     # -------------------------------------------------------------
     # 8. Tracking Refresh Transitions READY_FOR_PICKUP to SHIPPED

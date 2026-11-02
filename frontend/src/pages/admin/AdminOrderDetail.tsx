@@ -650,73 +650,133 @@ export const AdminOrderDetail: React.FC = () => {
               </div>
             </div>
 
-            {(order.shiprocket_order_id || order.label_url || order.manifest_url) && (
-              <div className="pt-2 border-t border-indigo-200/60 flex flex-wrap items-center gap-3">
-                {/* Shiprocket Invoice Download / Print Button */}
-                {order.shiprocket_order_id && (
-                  <button
-                    type="button"
-                    disabled={isGeneratingInvoice}
-                    onClick={handleDownloadInvoice}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E1224] hover:bg-[#430C19] text-white rounded text-xs font-semibold shadow-xs disabled:opacity-50 transition-colors"
-                    title="Download and print official Shiprocket tax invoice"
-                  >
-                    {isGeneratingInvoice ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#B58A3C]" />
+            {/* Consignment Documents Status & Actions */}
+            {(order.shiprocket_order_id || order.awb_code) && (
+              <div className="pt-3 border-t border-indigo-200/60 space-y-2">
+                <span className="text-[11px] font-bold text-indigo-950 uppercase tracking-wider block">
+                  Consignment Documents & Actions
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* 1. Tax Invoice */}
+                  <div className="p-2.5 bg-white rounded border border-indigo-100 flex flex-col justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-800 text-xs">Tax Invoice</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          order.invoice_url
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : order.shiprocket_order_id
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {order.invoice_url ? 'Available' : order.shiprocket_order_id ? 'Ready to Generate' : 'Ship First'}
+                      </span>
+                    </div>
+                    {order.shiprocket_order_id ? (
+                      <button
+                        type="button"
+                        disabled={isGeneratingInvoice}
+                        onClick={handleDownloadInvoice}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-[#5E1224] hover:bg-[#430C19] text-white rounded text-[11px] font-semibold shadow-2xs disabled:opacity-50 transition-colors"
+                        title="Download and print official Shiprocket tax invoice"
+                      >
+                        {isGeneratingInvoice ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-[#B58A3C]" />
+                        ) : (
+                          <Printer className="w-3 h-3 text-[#B58A3C]" />
+                        )}
+                        <span>{isGeneratingInvoice ? 'Fetching...' : order.invoice_url ? 'Print / Download Invoice' : 'Generate Invoice'}</span>
+                      </button>
                     ) : (
-                      <Printer className="w-3.5 h-3.5 text-[#B58A3C]" />
+                      <span className="text-[10px] text-gray-400 italic text-center py-1">Ship order first</span>
                     )}
-                    <span>{isGeneratingInvoice ? 'Fetching Invoice...' : (order.invoice_url ? 'Print / Download Invoice' : 'Generate & Print Invoice')}</span>
-                  </button>
-                )}
+                  </div>
 
-                {/* Shipping Label */}
-                {order.label_url ? (
-                  <a
-                    href={order.label_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-300 text-xs font-semibold text-[#5E1224] rounded hover:bg-indigo-50 transition-colors"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Shipping Label (PDF)</span>
-                  </a>
-                ) : order.awb_code ? (
-                  <button
-                    type="button"
-                    disabled={isRetryingLabel}
-                    onClick={handleRetryLabel}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-amber-300 text-xs font-semibold text-amber-800 rounded hover:bg-amber-50 disabled:opacity-50 transition-colors"
-                    title="Retry generating shipping label"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isRetryingLabel ? 'animate-spin' : ''}`} />
-                    <span>Generate Shipping Label</span>
-                  </button>
-                ) : null}
+                  {/* 2. Shipping Label */}
+                  <div className="p-2.5 bg-white rounded border border-indigo-100 flex flex-col justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-800 text-xs">Shipping Label</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          order.label_url
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : order.awb_code
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {order.label_url ? 'Available' : order.awb_code ? 'Pending / Retry' : 'Ship First'}
+                      </span>
+                    </div>
+                    {order.label_url ? (
+                      <a
+                        href={order.label_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-white border border-[#5E1224] text-xs font-semibold text-[#5E1224] rounded hover:bg-amber-50/50 transition-colors"
+                      >
+                        <FileText className="w-3 h-3 text-[#5E1224]" />
+                        <span>Download Label (PDF)</span>
+                      </a>
+                    ) : order.awb_code ? (
+                      <button
+                        type="button"
+                        disabled={isRetryingLabel}
+                        onClick={handleRetryLabel}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-300 text-amber-900 text-[11px] font-semibold rounded hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                        title="Retry generating shipping label"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRetryingLabel ? 'animate-spin' : ''}`} />
+                        <span>Generate Label</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 italic text-center py-1">Ship order first</span>
+                    )}
+                  </div>
 
-                {/* Manifest */}
-                {order.manifest_url ? (
-                  <a
-                    href={order.manifest_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-300 text-xs font-semibold text-indigo-900 rounded hover:bg-indigo-50 transition-colors"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Manifest (PDF)</span>
-                  </a>
-                ) : order.awb_code ? (
-                  <button
-                    type="button"
-                    disabled={isRetryingManifest}
-                    onClick={handleRetryManifest}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-300 text-xs font-semibold text-indigo-900 rounded hover:bg-indigo-50 disabled:opacity-50 transition-colors"
-                    title="Generate and print shipping manifest"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isRetryingManifest ? 'animate-spin' : ''}`} />
-                    <span>Generate Manifest</span>
-                  </button>
-                ) : null}
+                  {/* 3. Shipping Manifest */}
+                  <div className="p-2.5 bg-white rounded border border-indigo-100 flex flex-col justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-800 text-xs">Shipping Manifest</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          order.manifest_url
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : order.awb_code
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {order.manifest_url ? 'Available' : order.awb_code ? 'Not Generated' : 'Ship First'}
+                      </span>
+                    </div>
+                    {order.manifest_url ? (
+                      <a
+                        href={order.manifest_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-white border border-indigo-400 text-xs font-semibold text-indigo-950 rounded hover:bg-indigo-50 transition-colors"
+                      >
+                        <FileText className="w-3 h-3 text-indigo-700" />
+                        <span>Download Manifest (PDF)</span>
+                      </a>
+                    ) : order.awb_code ? (
+                      <button
+                        type="button"
+                        disabled={isRetryingManifest}
+                        onClick={handleRetryManifest}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 border border-indigo-300 text-indigo-950 text-[11px] font-semibold rounded hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                        title="Generate shipping manifest"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRetryingManifest ? 'animate-spin' : ''}`} />
+                        <span>Generate Manifest</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 italic text-center py-1">Ship order first</span>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

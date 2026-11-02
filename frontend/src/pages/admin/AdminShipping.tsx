@@ -473,20 +473,26 @@ export const AdminShipping: React.FC = () => {
                               href={s.label_url}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[10px] text-[#5E1224] font-medium hover:underline"
+                              className="inline-flex items-center gap-1 text-[10px] text-emerald-800 font-medium hover:underline"
+                              title="Download official Shiprocket shipping label PDF"
                             >
-                              <FileText className="w-3 h-3" /> Shipping Label
+                              <FileText className="w-3 h-3 text-emerald-700" /> Label (PDF)
                             </a>
+                          ) : s.awb_code ? (
+                            <span className="text-[10px] text-amber-700 italic" title="Shipping label pending generation">Label Pending</span>
                           ) : null}
                           {s.manifest_url ? (
                             <a
                               href={s.manifest_url}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[10px] text-[#5E1224] font-medium hover:underline"
+                              className="inline-flex items-center gap-1 text-[10px] text-emerald-800 font-medium hover:underline"
+                              title="Download official Shiprocket manifest PDF"
                             >
-                              <FileText className="w-3 h-3" /> Manifest
+                              <FileText className="w-3 h-3 text-emerald-700" /> Manifest (PDF)
                             </a>
+                          ) : s.awb_code ? (
+                            <span className="text-[10px] text-amber-700 italic" title="Shipping manifest pending generation">Manifest Pending</span>
                           ) : null}
                           {s.tracking_url ? (
                             <a
