@@ -69,9 +69,10 @@ export const CuratedMomentsSection: React.FC<CuratedMomentsSectionProps> = ({
             ======================================================== */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 mt-12 sm:mt-16">
           {displayCards.map((card, index) => {
-            const hasCustomImage = Boolean(card.imageUrl && !failedImages[card.id]);
+            const cardImg = card.imageUrl || (card as any).image_url;
+            const hasCustomImage = Boolean(cardImg && !failedImages[card.id]);
             const targetLink = card.link && card.link.startsWith('/') ? card.link : '/shop';
-            const linkLabel = card.linkText || 'EXPLORE COLLECTION';
+            const linkLabel = card.linkText || (card as any).link_text || 'EXPLORE COLLECTION';
 
             return (
               <Link
@@ -84,7 +85,7 @@ export const CuratedMomentsSection: React.FC<CuratedMomentsSectionProps> = ({
                 {hasCustomImage ? (
                   <>
                     <img
-                      src={card.imageUrl!}
+                      src={cardImg!}
                       alt={card.title}
                       loading="lazy"
                       onError={() => handleImageError(card.id)}
@@ -191,3 +192,4 @@ export const CuratedMomentsSection: React.FC<CuratedMomentsSectionProps> = ({
 };
 
 export default CuratedMomentsSection;
+

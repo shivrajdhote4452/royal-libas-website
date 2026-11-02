@@ -233,6 +233,117 @@ class TestCuratedMoments(unittest.TestCase):
         self.assertIsNotNone(still_existing_asset, "MediaAsset was unexpectedly deleted from DB!")
         db3.close()
 
+    def test_06_frontend_camelcase_payload_roundtrip_e2e(self):
+        """6. Frontend camelCase payload roundtrip (imageUrl, mediaAssetId, linkText, displayOrder)."""
+        db = self.TestingSessionLocal()
+        asset1 = MediaAsset(
+            filename="front_everyday.jpg",
+            public_id="front_everyday_pub",
+            secure_url="https://res.cloudinary.com/galbyoxi/image/upload/v1/front_everyday.jpg",
+            url="http://res.cloudinary.com/galbyoxi/image/upload/v1/front_everyday.jpg",
+            resource_type="image",
+            format="jpg",
+            mime_type="image/jpeg",
+        )
+        asset2 = MediaAsset(
+            filename="front_festive.jpg",
+            public_id="front_festive_pub",
+            secure_url="https://res.cloudinary.com/galbyoxi/image/upload/v1/front_festive.jpg",
+            url="http://res.cloudinary.com/galbyoxi/image/upload/v1/front_festive.jpg",
+            resource_type="image",
+            format="jpg",
+            mime_type="image/jpeg",
+        )
+        db.add_all([asset1, asset2])
+        db.commit()
+        db.refresh(asset1)
+        db.refresh(asset2)
+        asset1_id, asset2_id = asset1.id, asset2.id
+        db.close()
+
+        # Exact camelCase payload serialized by AdminHomepage.tsx
+        frontend_cards = [
+            {
+                "id": "everyday-elegance",
+                "title": "EVERYDAY ELEGANCE",
+                "subtitle": "Thoughtful luxury",
+                "imageUrl": "https://res.cloudinary.com/galbyoxi/image/upload/v1/front_everyday.jpg",
+                "mediaAssetId": asset1_id,
+                "link": "/shop?category=TWO+PIECES",
+                "linkText": "EXPLORE EDIT",
+                "displayOrder": 1,
+            },
+            {
+                "id": "festive-celebrations",
+                "title": "FESTIVE CELEBRATIONS",
+                "subtitle": "Celebrations that endure",
+                "imageUrl": "https://res.cloudinary.com/galbyoxi/image/upload/v1/front_festive.jpg",
+                "mediaAssetId": asset2_id,
+                "link": "/shop?category=SUIT+SET",
+                "linkText": "EXPLORE FESTIVE",
+                "displayOrder": 2,
+            },
+            {
+                "id": "wedding-guest",
+                "title": "WEDDING GUEST",
+                "subtitle": "Regal ensembles",
+                "imageUrl": None,
+                "mediaAssetId": None,
+                "link": "/shop?category=HEAVY+DRESS",
+                "linkText": "EXPLORE COUTURE",
+                "displayOrder": 3,
+            },
+        ]
+
+        # 1. Save from admin
+        put_res = self.client.put(
+            "/admin/settings",
+            json={"curated_moments_json": json.dumps(frontend_cards)},
+            headers={"Authorization": f"Bearer {self.owner_token}"},
+        )
+        self.assertEqual(put_res.status_code, 200)
+
+        # 2. Reload admin settings
+        admin_res = self.client.get(
+            "/admin/settings",
+            headers={"Authorization": f"Bearer {self.owner_token}"},
+        )
+        self.assertEqual(admin_res.status_code, 200)
+        admin_cards = json.loads(admin_res.json()["curated_moments_json"])
+        self.assertEqual(len(admin_cards), 3)
+
+        # Verify Card 1 preserves image, media reference, link, linkText, order
+        self.assertEqual(admin_cards[0]["imageUrl"], "https://res.cloudinary.com/galbyoxi/image/upload/v1/front_everyday.jpg")
+        self.assertEqual(admin_cards[0]["image_url"], "https://res.cloudinary.com/galbyoxi/image/upload/v1/front_everyday.jpg")
+        self.assertEqual(admin_cards[0]["mediaAssetId"], asset1_id)
+        self.assertEqual(admin_cards[0]["media_asset_id"], asset1_id)
+        self.assertEqual(admin_cards[0]["linkText"], "EXPLORE EDIT")
+        self.assertEqual(admin_cards[0]["displayOrder"], 1)
+
+        # Verify Card 2 preserves image, media reference
+        self.assertEqual(admin_cards[1]["imageUrl"], "https://res.cloudinary.com/galbyoxi/image/upload/v1/front_festive.jpg")
+        self.assertEqual(admin_cards[1]["mediaAssetId"], asset2_id)
+
+        # Verify Card 3 has null image (luxury placeholder mode)
+        self.assertIsNone(admin_cards[2]["imageUrl"])
+        self.assertIsNone(admin_cards[2]["image_url"])
+
+        # 3. Reload storefront settings
+        public_res = self.client.get("/settings")
+        self.assertEqual(public_res.status_code, 200)
+        public_cards = json.loads(public_res.json()["curated_moments_json"])
+        self.assertEqual(public_cards[0]["imageUrl"], "https://res.cloudinary.com/galbyoxi/image/upload/v1/front_everyday.jpg")
+
+        # 4. Verify media usage tracking detects the saved card references
+        db_usage = self.TestingSessionLocal()
+        a1 = db_usage.query(MediaAsset).filter_by(id=asset1_id).first()
+        _, usages = get_asset_usage_references(a1, db_usage)
+        self.assertTrue(
+            any("Curated Moments: EVERYDAY ELEGANCE" in u for u in usages),
+            f"Expected usage tracking for Card 1, got: {usages}",
+        )
+        db_usage.close()
+
 
 if __name__ == "__main__":
     unittest.main()

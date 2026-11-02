@@ -141,8 +141,8 @@ def get_asset_usage_references(asset: MediaAsset, db: Session) -> Tuple[List[Dic
                 if isinstance(cards, list):
                     for c in cards:
                         if isinstance(c, dict):
-                            card_img = c.get("image_url")
-                            card_asset_id = c.get("media_asset_id")
+                            card_img = c.get("image_url") or c.get("imageUrl")
+                            card_asset_id = c.get("media_asset_id") if "media_asset_id" in c else c.get("mediaAssetId")
                             if (card_asset_id and card_asset_id == asset.id) or (card_img and match_asset_to_url(card_img, asset)):
                                 editorial_usages.append(f"Curated Moments: {c.get('title', 'Card')}")
             except Exception:

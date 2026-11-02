@@ -386,7 +386,22 @@ export const AdminHomepage: React.FC = () => {
         poster_occasion_image: posterOccasionImage.trim() || null,
         poster_everyday_image: posterEverydayImage.trim() || null,
         poster_story_image: posterStoryImage.trim() || null,
-        curated_moments_json: JSON.stringify(curatedMoments),
+        curated_moments_json: JSON.stringify(
+          curatedMoments.map((c) => ({
+            id: c.id,
+            title: c.title.trim(),
+            subtitle: c.subtitle ? c.subtitle.trim() : null,
+            image_url: c.imageUrl ? c.imageUrl.trim() : null,
+            imageUrl: c.imageUrl ? c.imageUrl.trim() : null,
+            media_asset_id: c.mediaAssetId != null ? Number(c.mediaAssetId) : null,
+            mediaAssetId: c.mediaAssetId != null ? Number(c.mediaAssetId) : null,
+            link: c.link.trim(),
+            link_text: (c.linkText || 'EXPLORE COLLECTION').trim(),
+            linkText: (c.linkText || 'EXPLORE COLLECTION').trim(),
+            display_order: Number(c.displayOrder) || 1,
+            displayOrder: Number(c.displayOrder) || 1,
+          }))
+        ),
       });
       setNotification({ type: 'success', message: 'Homepage & brand imagery successfully saved and published!' });
       window.dispatchEvent(new Event('royal_libas_settings_updated'));

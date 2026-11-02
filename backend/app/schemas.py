@@ -1025,19 +1025,21 @@ class StoreSettingUpdate(BaseModel):
                 if subtitle and len(subtitle) > 255:
                     raise ValueError(f"Card #{idx + 1} subtitle cannot exceed 255 characters")
 
-                image_url = item.get("image_url")
-                if image_url is not None:
-                    image_url = str(image_url).strip()
-                    if image_url:
-                        if not (image_url.startswith("http://") or image_url.startswith("https://") or image_url.startswith("/")):
-                            raise ValueError(f"Unsafe card image URL: {image_url}")
-                    else:
-                        image_url = None
+                # Accept both snake_case and camelCase from frontend & API clients
+                raw_image_url = item.get("image_url") if "image_url" in item else item.get("imageUrl")
+                image_url = None
+                if raw_image_url is not None:
+                    raw_image_url = str(raw_image_url).strip()
+                    if raw_image_url:
+                        if not (raw_image_url.startswith("http://") or raw_image_url.startswith("https://") or raw_image_url.startswith("/")):
+                            raise ValueError(f"Unsafe card image URL: {raw_image_url}")
+                        image_url = raw_image_url
 
-                media_asset_id = item.get("media_asset_id")
-                if media_asset_id is not None:
+                raw_media_id = item.get("media_asset_id") if "media_asset_id" in item else item.get("mediaAssetId")
+                media_asset_id = None
+                if raw_media_id is not None:
                     try:
-                        media_asset_id = int(media_asset_id)
+                        media_asset_id = int(raw_media_id)
                     except (ValueError, TypeError):
                         media_asset_id = None
 
@@ -1049,13 +1051,14 @@ class StoreSettingUpdate(BaseModel):
                 if any(link.lower().startswith(bad) for bad in ("javascript:", "data:", "vbscript:", "file:")):
                     raise ValueError(f"Card #{idx + 1} destination link contains an unsafe protocol")
 
-                link_text = str(item.get("link_text") or "EXPLORE COLLECTION").strip()
+                raw_link_text = item.get("link_text") if "link_text" in item else item.get("linkText")
+                link_text = str(raw_link_text or "EXPLORE COLLECTION").strip()
                 if len(link_text) > 50:
                     link_text = link_text[:50]
 
-                display_order = item.get("display_order")
+                raw_display_order = item.get("display_order") if "display_order" in item else item.get("displayOrder")
                 try:
-                    display_order = int(display_order) if display_order is not None else (idx + 1)
+                    display_order = int(raw_display_order) if raw_display_order is not None else (idx + 1)
                 except (ValueError, TypeError):
                     display_order = idx + 1
 
@@ -1064,10 +1067,14 @@ class StoreSettingUpdate(BaseModel):
                     "title": title,
                     "subtitle": subtitle,
                     "image_url": image_url,
+                    "imageUrl": image_url,
                     "media_asset_id": media_asset_id,
+                    "mediaAssetId": media_asset_id,
                     "link": link,
                     "link_text": link_text,
+                    "linkText": link_text,
                     "display_order": display_order,
+                    "displayOrder": display_order,
                 })
             return json.dumps(cleaned)
         except json.JSONDecodeError:
