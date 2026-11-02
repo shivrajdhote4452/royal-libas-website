@@ -247,6 +247,7 @@ class Order(Base):
     awb_code = Column(String(100), nullable=True)
     label_url = Column(String(500), nullable=True)
     manifest_url = Column(String(500), nullable=True)
+    invoice_url = Column(String(500), nullable=True)
     pickup_status = Column(String(50), nullable=True)
     order_token = Column(String(64), unique=True, index=True, nullable=True)  # Secure unguessable access token
     reservation_expires_at = Column(DateTime(timezone=True), nullable=True)  # Prepaid reservation expiry

@@ -6,6 +6,9 @@ import {
   RefreshCw,
   ExternalLink,
   FileText,
+  Printer,
+  Loader2,
+  AlertCircle,
   CheckCircle,
   Clock,
   Package,
@@ -19,6 +22,7 @@ import {
   shipOrderViaFulfillment,
   refreshFulfillmentTracking,
   updateAdminOrderStatus,
+  generateOrderInvoice,
 } from '../../lib/api';
 
 interface ShipmentRecord {
@@ -38,6 +42,7 @@ interface ShipmentRecord {
   tracking_url?: string;
   label_url?: string;
   manifest_url?: string;
+  invoice_url?: string;
   created_at: string;
 }
 
@@ -54,6 +59,13 @@ export const AdminShipping: React.FC = () => {
 
   // Ship Modal State
   const [shippingModalOrder, setShippingModalOrder] = useState<ShipmentRecord | null>(null);
+  const [shiprocketModalOrder, setShiprocketModalOrder] = useState<ShipmentRecord | null>(null);
+  const [dispatchLength, setDispatchLength] = useState('25');
+  const [dispatchBreadth, setDispatchBreadth] = useState('20');
+  const [dispatchHeight, setDispatchHeight] = useState('5');
+  const [dispatchWeight, setDispatchWeight] = useState('0.5');
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [invoiceLoadingOrderId, setInvoiceLoadingOrderId] = useState<number | null>(null);
   const [manualCourier, setManualCourier] = useState('');
   const [manualAwb, setManualAwb] = useState('');
   const [manualTrackingUrl, setManualTrackingUrl] = useState('');
@@ -88,24 +100,54 @@ export const AdminShipping: React.FC = () => {
     fetchShipments();
   };
 
-  const handleShiprocketAutoCreate = async (order: ShipmentRecord) => {
-    if (!window.confirm(`Generate Shiprocket consignment & AWB for order #${order.order_code}?`)) {
+  const handleDownloadInvoice = async (order: ShipmentRecord) => {
+    if (!order.shiprocket_order_id) {
+      setError(`Order #${order.order_code} has not been booked via Shiprocket yet. Please ship first to generate the invoice.`);
       return;
     }
-    setSubmittingShipment(true);
-    setActionSuccess(null);
+    setInvoiceLoadingOrderId(order.order_id);
     setError(null);
+    setActionSuccess(null);
     try {
-      await shipOrderViaFulfillment(token, order.order_id, {
-        length: 30,
-        breadth: 20,
-        height: 10,
-        weight: 1.0,
-      });
-      setActionSuccess(`Shiprocket shipment generated successfully for #${order.order_code}!`);
+      const res = await generateOrderInvoice(token, order.order_id);
+      setActionSuccess(`Shiprocket invoice ready for #${order.order_code}. Opening PDF...`);
+      window.open(res.invoice_url, '_blank', 'noopener,noreferrer');
       await fetchShipments();
     } catch (err: any) {
-      setError(err.message || 'Failed to create Shiprocket consignment. Please check Shiprocket credentials.');
+      setError(err.message || 'Failed to generate or retrieve Shiprocket invoice.');
+    } finally {
+      setInvoiceLoadingOrderId(null);
+    }
+  };
+
+  const handleShiprocketDispatchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shiprocketModalOrder) return;
+
+    const l = parseFloat(dispatchLength);
+    const b = parseFloat(dispatchBreadth);
+    const h = parseFloat(dispatchHeight);
+    const w = parseFloat(dispatchWeight);
+
+    if (isNaN(l) || isNaN(b) || isNaN(h) || isNaN(w) || l <= 0 || b <= 0 || h <= 0 || w <= 0) {
+      setDispatchError("Please enter valid positive dimensions (cm) and weight (kg) for the packed parcel.");
+      return;
+    }
+
+    setSubmittingShipment(true);
+    setDispatchError(null);
+    try {
+      await shipOrderViaFulfillment(token, shiprocketModalOrder.order_id, {
+        length: l,
+        breadth: b,
+        height: h,
+        weight: w,
+      });
+      setActionSuccess(`Shiprocket consignment & AWB booked successfully for #${shiprocketModalOrder.order_code}!`);
+      setShiprocketModalOrder(null);
+      await fetchShipments();
+    } catch (err: any) {
+      setDispatchError(err.message || 'Failed to create Shiprocket consignment. Please check address & credentials.');
     } finally {
       setSubmittingShipment(false);
     }
@@ -396,6 +438,28 @@ export const AdminShipping: React.FC = () => {
                       {/* Documents */}
                       <td className="py-3 px-4">
                         <div className="flex flex-col gap-1 items-start">
+                          {/* Invoice PDF Action */}
+                          {s.shiprocket_order_id ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadInvoice(s)}
+                              disabled={invoiceLoadingOrderId === s.order_id}
+                              className="inline-flex items-center gap-1 text-[11px] text-[#5E1224] font-semibold hover:underline disabled:opacity-50"
+                              title="Download or Print Shiprocket Invoice PDF"
+                            >
+                              {invoiceLoadingOrderId === s.order_id ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-[#B58A3C]" />
+                              ) : (
+                                <Printer className="w-3 h-3 text-[#B58A3C]" />
+                              )}
+                              <span>Invoice PDF</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-gray-400 italic" title="Ship with Shiprocket first to generate invoice">
+                              Ship first for invoice
+                            </span>
+                          )}
+
                           {s.label_url ? (
                             <a
                               href={s.label_url}
@@ -426,9 +490,6 @@ export const AdminShipping: React.FC = () => {
                               <ExternalLink className="w-3 h-3" /> Carrier Track
                             </a>
                           ) : null}
-                          {!s.label_url && !s.manifest_url && !s.tracking_url && (
-                            <span className="text-gray-400 text-[10px]">-</span>
-                          )}
                         </div>
                       </td>
 
@@ -438,12 +499,15 @@ export const AdminShipping: React.FC = () => {
                           {!isShipped && s.status !== 'CANCELLED' && (
                             <>
                               <button
-                                onClick={() => handleShiprocketAutoCreate(s)}
+                                onClick={() => {
+                                  setShiprocketModalOrder(s);
+                                  setDispatchError(null);
+                                }}
                                 disabled={submittingShipment}
-                                className="px-2 py-1 bg-[#5E1224] text-white rounded text-[11px] font-semibold hover:bg-[#4A0E1C] transition-colors disabled:opacity-50"
-                                title="Auto-create Shiprocket consignment"
+                                className="px-2.5 py-1 bg-[#5E1224] text-white rounded text-[11px] font-semibold hover:bg-[#4A0E1C] transition-colors disabled:opacity-50 shadow-2xs"
+                                title="Open Shiprocket dispatch form with verified parcel details"
                               >
-                                Shiprocket
+                                Ship via Shiprocket
                               </button>
                               <button
                                 onClick={() => setShippingModalOrder(s)}
@@ -485,6 +549,132 @@ export const AdminShipping: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Shiprocket Parcel Dimensions & Dispatch Modal */}
+      {shiprocketModalOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E8DFD0] shadow-2xl animate-fadeIn">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-[#B58A3C]" />
+                <h3 className="text-sm font-bold text-gray-900 font-serif">
+                  Ship Order #{shiprocketModalOrder.order_code} via Shiprocket
+                </h3>
+              </div>
+              <button
+                onClick={() => setShiprocketModalOrder(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600 mt-2">
+              Deliver to: <span className="font-semibold text-gray-800">{shiprocketModalOrder.customer_name}</span> ({shiprocketModalOrder.delivery_city || 'City'}, {shiprocketModalOrder.delivery_pincode || 'Pincode'})
+            </p>
+
+            {dispatchError && (
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{dispatchError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleShiprocketDispatchSubmit} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Packed Parcel Weight (kg) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.05"
+                  required
+                  value={dispatchWeight}
+                  onChange={(e) => setDispatchWeight(e.target.value)}
+                  placeholder="e.g., 0.5"
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Parcel Dimensions (cm) <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <span className="text-[10px] text-gray-500 block mb-0.5">Length (cm)</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="1"
+                      required
+                      value={dispatchLength}
+                      onChange={(e) => setDispatchLength(e.target.value)}
+                      placeholder="L"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 block mb-0.5">Breadth (cm)</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="1"
+                      required
+                      value={dispatchBreadth}
+                      onChange={(e) => setDispatchBreadth(e.target.value)}
+                      placeholder="B"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-500 block mb-0.5">Height (cm)</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="1"
+                      required
+                      value={dispatchHeight}
+                      onChange={(e) => setDispatchHeight(e.target.value)}
+                      placeholder="H"
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShiprocketModalOrder(null)}
+                  disabled={submittingShipment}
+                  className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingShipment}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-300 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                >
+                  {submittingShipment ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Booking Consignment...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Truck className="w-3.5 h-3.5 text-[#B58A3C]" />
+                      <span>Confirm & Book Shipment</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Manual Shipping Dispatch Modal */}
       {shippingModalOrder && (

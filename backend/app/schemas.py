@@ -481,6 +481,7 @@ class OrderResponse(BaseModel):
     awb_code: Optional[str] = None
     label_url: Optional[str] = None
     manifest_url: Optional[str] = None
+    invoice_url: Optional[str] = None
     pickup_status: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -1640,7 +1641,15 @@ class ShipmentRecordResponse(BaseModel):
     tracking_url: Optional[str] = None
     label_url: Optional[str] = None
     manifest_url: Optional[str] = None
+    invoice_url: Optional[str] = None
     created_at: datetime
+
+
+class InvoiceResponse(BaseModel):
+    order_id: int
+    order_code: str
+    shiprocket_order_id: str
+    invoice_url: str
 
 
 class ReportSummaryResponse(BaseModel):
