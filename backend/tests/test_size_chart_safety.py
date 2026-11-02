@@ -1,13 +1,31 @@
+import os
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+
+# Setup isolated disposable SQLite database BEFORE importing app modules
+_temp_dir = tempfile.mkdtemp(prefix="rl_sizechart_safety_isolated_")
+_isolated_db_path = os.path.join(_temp_dir, "isolated_safety_test.db")
+os.environ["DATABASE_URL"] = f"sqlite:///{_isolated_db_path}"
+
+# Guard: abort immediately if DATABASE_URL contains business/production keywords
+FORBIDDEN = ["postgres", "hostinger", "neon", "prod", "staging", "royal_libas.db"]
+for pattern in FORBIDDEN:
+    if pattern in os.environ["DATABASE_URL"].lower() and "isolated" not in os.environ["DATABASE_URL"].lower():
+        raise RuntimeError(f"CRITICAL SAFETY VIOLATION: Database URL contains forbidden pattern '{pattern}'.")
+
+backend_dir = Path(__file__).resolve().parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi import HTTPException
-
-import sys
-sys.path.insert(0, 'backend')
 
 from app.models import Base, SizeChart, Product, Admin
 from app.routers.admin import admin_list_size_charts, admin_delete_size_chart
+
 
 class TestSizeChartSafety(unittest.TestCase):
     def setUp(self):
@@ -78,6 +96,7 @@ class TestSizeChartSafety(unittest.TestCase):
         res = admin_delete_size_chart(id=2, db=self.db, current_admin=self.admin)
         self.assertEqual(res["status"], "success")
         self.assertIsNone(self.db.query(SizeChart).filter(SizeChart.id == 2).first())
+
 
 if __name__ == '__main__':
     unittest.main()
