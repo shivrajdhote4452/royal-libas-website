@@ -8,7 +8,7 @@ export const MobileBottomNav: React.FC = () => {
   const location = useLocation();
 
   // Hide mobile bottom nav on PDP and Checkout to prevent collision with sticky purchase bar
-  if (location.pathname.startsWith('/product/') || location.pathname.startsWith('/checkout')) {
+  if (location.pathname.startsWith('/product/') || location.pathname.startsWith('/checkout') || location.pathname.startsWith('/admin')) {
     return null;
   }
 
