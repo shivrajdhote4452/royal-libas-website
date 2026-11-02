@@ -47,6 +47,7 @@ class ProductVariantBase(BaseModel):
     mrp: Optional[Decimal] = None
     selling_price: Decimal
     stock: int
+    is_active: bool = True
 
     @field_validator("stock")
     @classmethod
@@ -67,6 +68,7 @@ class ProductVariantUpdate(BaseModel):
     mrp: Optional[Decimal] = None
     selling_price: Optional[Decimal] = None
     stock: Optional[int] = None
+    is_active: Optional[bool] = None
 
     @field_validator("stock")
     @classmethod
@@ -85,6 +87,7 @@ class ProductVariantResponse(BaseModel):
     mrp: Optional[Decimal] = None
     selling_price: Decimal
     stock: int
+    is_active: bool = True
     is_available: bool
 
     model_config = ConfigDict(from_attributes=True)

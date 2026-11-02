@@ -145,7 +145,10 @@ def derive_badges(product: Product, total_stock: int) -> List[str]:
 
 
 def build_variant_response(variant) -> ProductVariantResponse:
-    """Transform ProductVariant model into ProductVariantResponse with is_available."""
+    """Transform ProductVariant model into ProductVariantResponse with is_available and is_active."""
+    is_active = getattr(variant, "is_active", True)
+    if is_active is None:
+        is_active = True
     return ProductVariantResponse(
         id=variant.id,
         product_id=variant.product_id,
@@ -155,7 +158,8 @@ def build_variant_response(variant) -> ProductVariantResponse:
         mrp=variant.mrp,
         selling_price=variant.selling_price,
         stock=variant.stock,
-        is_available=(variant.stock > 0),
+        is_active=is_active,
+        is_available=bool(is_active and variant.stock > 0),
     )
 
 

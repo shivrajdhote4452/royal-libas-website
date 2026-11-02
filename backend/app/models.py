@@ -133,6 +133,7 @@ class ProductVariant(Base):
     mrp = Column(Numeric(10, 2), nullable=True)
     selling_price = Column(Numeric(10, 2), nullable=False)
     stock = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
 
     __table_args__ = (
         CheckConstraint("stock >= 0", name="check_variant_stock_non_negative"),

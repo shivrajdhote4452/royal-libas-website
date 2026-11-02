@@ -324,7 +324,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {/* Sizes available preview for desktop */}
           {product.variants && product.variants.length > 0 && (
             <div className="hidden sm:flex gap-1 no-motion">
-              {product.variants.slice(0, 4).map((v) => (
+              {product.variants.filter((v) => v.is_active).slice(0, 4).map((v) => (
                 <span
                   key={v.id}
                   className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-medium border ${

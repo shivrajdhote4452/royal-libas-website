@@ -32,7 +32,6 @@ import { AdminReturns } from './pages/admin/AdminReturns';
 import { AdminProducts } from './pages/admin/AdminProducts';
 import { AdminCollections } from './pages/admin/AdminCollections';
 import { AdminInventory } from './pages/admin/AdminInventory';
-import { AdminSizeCharts } from './pages/admin/AdminSizeCharts';
 import { AdminMedia } from './pages/admin/AdminMedia';
 import { AdminCustomers } from './pages/admin/AdminCustomers';
 import { AdminHomepage } from './pages/admin/AdminHomepage';
@@ -87,7 +86,7 @@ export const App: React.FC = () => {
             <Route path="products" element={<AdminProducts />} />
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="collections" element={<AdminCollections />} />
-            <Route path="size-charts" element={<AdminSizeCharts />} />
+            <Route path="size-charts" element={<Navigate to="/admin/products" replace />} />
             <Route path="media" element={<AdminMedia />} />
             <Route path="customers" element={<AdminCustomers />} />
             <Route path="homepage" element={<AdminHomepage />} />

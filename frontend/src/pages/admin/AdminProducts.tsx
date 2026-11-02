@@ -151,6 +151,42 @@ export const AdminProducts: React.FC = () => {
   const [editPrice, setEditPrice] = useState('');
   const [editMrp, setEditMrp] = useState('');
   const [editStock, setEditStock] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [togglingVariantId, setTogglingVariantId] = useState<number | null>(null);
+
+  // Toggle variant ON/OFF
+  const handleToggleVariantActive = async (v: ProductVariant) => {
+    if (!token || togglingVariantId === v.id) return;
+    const nextActive = !v.is_active;
+    setTogglingVariantId(v.id);
+    setActionError(null);
+    try {
+      await adminUpdateVariant(token, v.id, { is_active: nextActive });
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.variants.some((varItem) => varItem.id === v.id)) {
+            return {
+              ...p,
+              variants: p.variants.map((varItem) =>
+                varItem.id === v.id
+                  ? {
+                      ...varItem,
+                      is_active: nextActive,
+                      is_available: nextActive && varItem.stock > 0,
+                    }
+                  : varItem
+              ),
+            };
+          }
+          return p;
+        })
+      );
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to update size availability');
+    } finally {
+      setTogglingVariantId(null);
+    }
+  };
 
   // Image Gallery State for Existing Products
   const [photosMap, setPhotosMap] = useState<Record<number, ProductMediaItem[]>>({});
@@ -527,7 +563,9 @@ export const AdminProducts: React.FC = () => {
     setActionLoading(true);
     setActionError(null);
     try {
-      const payload: { selling_price?: number; mrp?: number | null; stock?: number } = {};
+      const payload: { selling_price?: number; mrp?: number | null; stock?: number; is_active?: boolean } = {
+        is_active: editIsActive,
+      };
 
       if (editPrice.trim() !== '') {
         const priceNum = parseFloat(editPrice);
@@ -960,18 +998,46 @@ export const AdminProducts: React.FC = () => {
                         return (
                           <div
                             key={v.id}
-                            className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/50"
+                            className={`p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                              !v.is_active ? 'bg-gray-50/80 border-l-4 border-l-gray-300' : 'hover:bg-gray-50/50'
+                            }`}
                           >
                             <div className="flex items-center gap-3">
-                              <span className="w-8 h-8 rounded bg-[#FCF8F0] border border-[#E8DFD0] flex items-center justify-center font-bold text-xs text-gray-800">
-                                {v.size}
-                              </span>
+                              <div className="relative">
+                                <span
+                                  className={`w-9 h-9 rounded flex items-center justify-center font-bold text-xs ${
+                                    !v.is_active
+                                      ? 'bg-gray-100 border border-gray-200 text-gray-400'
+                                      : 'bg-[#FCF8F0] border border-[#E8DFD0] text-gray-900'
+                                  }`}
+                                >
+                                  {v.size}
+                                </span>
+                                {!v.is_active && (
+                                  <span className="absolute -top-1.5 -right-1.5 px-1 py-0.2 bg-gray-500 text-white text-[8px] font-bold rounded">
+                                    OFF
+                                  </span>
+                                )}
+                              </div>
                               <div>
-                                <div className="font-semibold text-gray-900">
-                                  Price: {formatPrice(v.selling_price)}
+                                <div className="flex items-center gap-2">
+                                  <span className={`font-semibold ${!v.is_active ? 'text-gray-500' : 'text-gray-900'}`}>
+                                    Price: {formatPrice(v.selling_price)}
+                                  </span>
+                                  {v.colour && (
+                                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                                      {v.colour}
+                                    </span>
+                                  )}
+                                  {!v.is_active && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-200">
+                                      Disabled for Purchase
+                                    </span>
+                                  )}
                                 </div>
                                 <span className="text-[11px] text-gray-400">
                                   MRP: {v.mrp !== null && v.mrp !== undefined ? formatPrice(v.mrp) : '—'}
+                                  {v.sku && ` • SKU: ${v.sku}`}
                                 </span>
                               </div>
                             </div>
@@ -1012,6 +1078,16 @@ export const AdminProducts: React.FC = () => {
                                   />
                                 </div>
 
+                                <label className="flex items-center gap-1.5 text-[11px] text-gray-700 font-semibold cursor-pointer select-none px-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={editIsActive}
+                                    onChange={(e) => setEditIsActive(e.target.checked)}
+                                    className="rounded border-gray-300 text-[#5E1224] focus:ring-[#5E1224]"
+                                  />
+                                  <span>Active (ON)</span>
+                                </label>
+
                                 <button
                                   type="button"
                                   onClick={() => handleSaveVariantEdit(v.id)}
@@ -1029,7 +1105,47 @@ export const AdminProducts: React.FC = () => {
                                 </button>
                               </div>
                             ) : (
-                              <div className="flex items-center justify-between sm:justify-end gap-4">
+                              <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 w-full sm:w-auto">
+                                {/* Size Availability ON/OFF Switch */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-semibold text-gray-500">Status:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleVariantActive(v)}
+                                    disabled={togglingVariantId === v.id}
+                                    role="switch"
+                                    aria-checked={v.is_active}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:ring-offset-1 disabled:opacity-50 ${
+                                      v.is_active ? 'bg-emerald-600' : 'bg-gray-300'
+                                    }`}
+                                    title={
+                                      v.is_active
+                                        ? `Size ${v.size} is ON — Click to disable for customer purchase`
+                                        : `Size ${v.size} is OFF — Click to enable for customer purchase`
+                                    }
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                        v.is_active ? 'translate-x-5' : 'translate-x-0'
+                                      }`}
+                                    />
+                                  </button>
+                                  <span
+                                    className={`text-[11px] font-bold tracking-wider min-w-[28px] ${
+                                      v.is_active ? 'text-emerald-700' : 'text-gray-400'
+                                    }`}
+                                  >
+                                    {togglingVariantId === v.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />
+                                    ) : v.is_active ? (
+                                      'ON'
+                                    ) : (
+                                      'OFF'
+                                    )}
+                                  </span>
+                                </div>
+
                                 {/* Stock Counter with +/- */}
                                 <div className="flex items-center gap-2">
                                   <span className="text-[11px] text-gray-500">Stock:</span>
@@ -1072,6 +1188,7 @@ export const AdminProducts: React.FC = () => {
                                     setEditPrice(String(v.selling_price));
                                     setEditMrp(v.mrp !== null && v.mrp !== undefined ? String(v.mrp) : '');
                                     setEditStock(String(v.stock));
+                                    setEditIsActive(v.is_active);
                                   }}
                                   className="p-2 text-gray-500 hover:text-[#5E1224] rounded hover:bg-gray-100 min-w-[36px] min-h-[36px] flex items-center justify-center"
                                   title="Edit price or stock directly"

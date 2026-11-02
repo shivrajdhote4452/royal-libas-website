@@ -232,5 +232,16 @@ def run_migrations(engine: Engine) -> None:
                         {"name": col_name, "slug": col_slug, "desc": col_desc, "active": True if dialect_name == "postgresql" else 1}
                     )
 
+        # 6. ProductVariant table migrations for is_active
+        if "product_variants" in existing_tables:
+            existing_var_cols = {col["name"] for col in inspector.get_columns("product_variants")}
+            if "is_active" not in existing_var_cols:
+                logger.info("Adding column 'is_active' to product_variants table...")
+                if dialect_name == "postgresql":
+                    conn.execute(text("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;"))
+                else:
+                    conn.execute(text("ALTER TABLE product_variants ADD COLUMN is_active BOOLEAN DEFAULT 1;"))
+                conn.execute(text("UPDATE product_variants SET is_active = 1 WHERE is_active IS NULL;"))
+
     logger.info("Database schema migrations completed successfully.")
 

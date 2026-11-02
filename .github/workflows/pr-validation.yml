@@ -55,10 +55,12 @@ jobs:
           python -m unittest discover backend/tests -p "test_size_chart_safety.py"
           python -m unittest discover backend/tests -p "test_size_chart_cleanup_script.py"
           python -m unittest discover backend/tests -p "test_admin_upgrade.py"
+          python -m unittest discover backend/tests -p "test_variant_availability.py"
           python backend/tests/test_bulk_inventory_adjustment.py
           python backend/tests/test_postgres_concurrency.py
           python backend/tests/test_admin_upgrade.py
           python backend/tests/test_size_chart_cleanup_script.py
+          python backend/tests/test_variant_availability.py
 
   frontend-build:
     name: Frontend Build Check

@@ -7,6 +7,7 @@ export interface ProductVariant {
   mrp: number | null;
   selling_price: number;
   stock: number;
+  is_active: boolean;
   is_available: boolean;
 }
 
