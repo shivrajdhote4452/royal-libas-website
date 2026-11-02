@@ -199,22 +199,20 @@ export function parseCuratedMomentsJson(raw: any): CuratedMomentCard[] {
   const mapped = list.map((item, idx) => {
     const rawLink = String(item.link || '').trim();
     const safeLink = rawLink.startsWith('/') && !rawLink.startsWith('//') ? rawLink : '/shop';
-    const rawImg = item.image_url ?? item.imageUrl;
-    const cleanImg =
-      rawImg && typeof rawImg === 'string' && rawImg.trim() && !isDemoImageUrl(rawImg)
-        ? rawImg.trim()
-        : null;
+    const rawImg =
+      (typeof item.image_url === 'string' && item.image_url.trim()) ||
+      (typeof item.imageUrl === 'string' && item.imageUrl.trim()) ||
+      null;
+    const cleanImg = rawImg && !isDemoImageUrl(rawImg) ? rawImg : null;
+    const rawMediaId = item.media_asset_id ?? item.mediaAssetId;
+    const mediaAssetId =
+      rawMediaId != null && !isNaN(Number(rawMediaId)) ? Number(rawMediaId) : null;
     return {
       id: String(item.id || `moment-${idx + 1}`),
       title: String(item.title || DEFAULT_CURATED_MOMENTS[idx]?.title || `MOMENT ${idx + 1}`).trim(),
       subtitle: item.subtitle ? String(item.subtitle).trim() : null,
       imageUrl: cleanImg,
-      mediaAssetId:
-        item.media_asset_id != null
-          ? Number(item.media_asset_id)
-          : item.mediaAssetId != null
-          ? Number(item.mediaAssetId)
-          : null,
+      mediaAssetId,
       link: safeLink,
       linkText: String(item.link_text || item.linkText || 'EXPLORE COLLECTION').trim(),
       displayOrder:
@@ -376,7 +374,7 @@ export function getStoreSettings(): StoreSettings {
         typeof parsed.boutiqueReviewsVisible === 'boolean'
           ? parsed.boutiqueReviewsVisible
           : DEFAULT_STORE_SETTINGS.boutiqueReviewsVisible,
-      curatedMoments: parseCuratedMomentsJson(parsed.curatedMoments),
+      curatedMoments: parseCuratedMomentsJson(parsed.curatedMoments || parsed.curated_moments_json),
     };
 
     if (hadDemo) {

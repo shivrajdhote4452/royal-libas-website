@@ -4551,7 +4551,7 @@ def admin_get_settings(
 def admin_update_settings(
     payload: StoreSettingUpdate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Update persistent store settings and publish homepage editorial content."""
     setting = db.query(StoreSetting).first()

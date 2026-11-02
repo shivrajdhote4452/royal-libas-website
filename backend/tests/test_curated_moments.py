@@ -344,6 +344,43 @@ class TestCuratedMoments(unittest.TestCase):
         )
         db_usage.close()
 
+    def test_07_manager_role_can_update_curated_moments(self):
+        """Verifies that STORE_MANAGER and MANAGER roles can also update homepage settings."""
+        db = self.TestingSessionLocal()
+        manager = Admin(
+            email="curated_manager@royallibas.com",
+            password_hash=hash_password("ManagerPass123!"),
+            name="Store Manager",
+            role="STORE_MANAGER",
+            is_active=True,
+        )
+        db.add(manager)
+        db.commit()
+        db.refresh(manager)
+        db.close()
+
+        manager_token = create_access_token(
+            data={"sub": manager.email, "role": manager.role}
+        )
+        res = self.client.put(
+            "/admin/settings",
+            json={
+                "curated_moments_json": json.dumps([
+                    {
+                        "id": "everyday-elegance",
+                        "title": "UPDATED BY MANAGER",
+                        "link": "/shop?category=TWO+PIECES",
+                        "display_order": 1,
+                    }
+                ])
+            },
+            headers={"Authorization": f"Bearer {manager_token}"},
+        )
+        self.assertEqual(res.status_code, 200, f"Manager update failed: {res.text}")
+        data = res.json()
+        parsed = json.loads(data["curated_moments_json"])
+        self.assertEqual(parsed[0]["title"], "UPDATED BY MANAGER")
+
 
 if __name__ == "__main__":
     unittest.main()

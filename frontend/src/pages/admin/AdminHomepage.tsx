@@ -21,6 +21,7 @@ import {
   CuratedMomentCard,
   DEFAULT_CURATED_MOMENTS,
   parseCuratedMomentsJson,
+  saveStoreSettings,
 } from '../../lib/settings';
 import { MediaLibraryPickerModal } from '../../components/admin/MediaLibraryPickerModal';
 
@@ -165,8 +166,8 @@ const MediaFieldRow: React.FC<ImageFieldProps> = ({
               Or paste direct Cloudinary / image URL:
             </label>
             <input
-              type="url"
-              placeholder="https://res.cloudinary.com/..."
+              type="text"
+              placeholder="https://res.cloudinary.com/... or /images/..."
               value={value}
               onChange={(e) => onChange(e.target.value.trim())}
               className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs font-mono focus:outline-none focus:border-[#5E1224]"
@@ -348,8 +349,16 @@ export const AdminHomepage: React.FC = () => {
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    const currentToken = localStorage.getItem('royal_libas_admin_token') || token;
+    if (!currentToken) {
+      setNotification({ type: 'error', message: 'Authentication required. Please log in as an administrator.' });
+      return;
+    }
+
     setSaving(true);
     setNotification(null);
 
@@ -371,7 +380,7 @@ export const AdminHomepage: React.FC = () => {
     }
 
     try {
-      await updateAdminStoreSettings(token, {
+      const updated = await updateAdminStoreSettings(currentToken, {
         announcement_enabled: announcementEnabled,
         announcement_text: announcementText.trim(),
         hero_title: heroTitle.trim(),
@@ -403,6 +412,22 @@ export const AdminHomepage: React.FC = () => {
           }))
         ),
       });
+
+      // Synchronize component state and browser localStorage immediately
+      const serverMoments = parseCuratedMomentsJson(updated.curated_moments_json);
+      setCuratedMoments(serverMoments);
+      saveStoreSettings({
+        curatedMoments: serverMoments,
+        heroImageUrl: heroImageUrl.trim() || null,
+        categoryTwoPiecesImage: catTwoPiecesImage.trim() || null,
+        categorySuitSetImage: catSuitSetImage.trim() || null,
+        categoryHeavyDressImage: catHeavyDressImage.trim() || null,
+        festiveBannerImage: festiveBannerImage.trim() || null,
+        posterOccasionImage: posterOccasionImage.trim() || null,
+        posterEverydayImage: posterEverydayImage.trim() || null,
+        posterStoryImage: posterStoryImage.trim() || null,
+      });
+
       setNotification({ type: 'success', message: 'Homepage & brand imagery successfully saved and published!' });
       window.dispatchEvent(new Event('royal_libas_settings_updated'));
     } catch (err: any) {
@@ -437,6 +462,16 @@ export const AdminHomepage: React.FC = () => {
             View Storefront
           </a>
           <button
+            type="button"
+            onClick={() => handleSave()}
+            disabled={saving}
+            className="px-3.5 py-2 bg-[#5E1224] hover:bg-[#430C19] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5 text-[#D4AF67]" />
+            <span>{saving ? 'Publishing...' : 'Save & Publish'}</span>
+          </button>
+          <button
+            type="button"
             onClick={loadSettings}
             disabled={loading}
             className="p-2 bg-white border border-[#E5D9C5] rounded-lg text-gray-600 hover:bg-[#FCF8F0] transition-colors disabled:opacity-50"
@@ -469,7 +504,7 @@ export const AdminHomepage: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-8">
+      <form onSubmit={handleSave} noValidate className="space-y-8">
         {/* ========================================================
             SECTION 1: HERO CAMPAIGN BANNER
             ======================================================== */}
@@ -886,6 +921,7 @@ export const AdminHomepage: React.FC = () => {
           </p>
           <button
             type="submit"
+            onClick={() => handleSave()}
             disabled={saving}
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#5E1224] hover:bg-[#430C19] text-white text-xs font-semibold uppercase tracking-wider rounded-lg shadow-md transition-all disabled:opacity-50"
           >
