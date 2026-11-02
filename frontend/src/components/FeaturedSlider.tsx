@@ -33,7 +33,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
   // Touch Swipe Gesture Tracking
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchDeltaX, setTouchDeltaX] = useState<number>(0);
-  const sliderRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   // Circular navigation: advances smoothly through all pieces
   const nextSlide = useCallback(() => {
@@ -46,7 +46,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     setCurrentIndex((prev) => (prev - 1 + total) % total);
   }, [total]);
 
-  // Autoplay Effect: pauses on hover or touch/interaction, respects reduced motion
+  // Autoplay Effect: pauses on card hover or touch/interaction, respects reduced motion
   useEffect(() => {
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
@@ -63,9 +63,10 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     return () => clearInterval(timer);
   }, [isHovered, isInteracting, nextSlide, total]);
 
-  // Desktop Mouse Wheel & Trackpad Navigation (Non-trapping, smooth card movement)
+  // Desktop Mouse Wheel & Trackpad Navigation
+  // ONLY activates when cursor is directly over the photos / cards!
   useEffect(() => {
-    const el = sliderRef.current;
+    const el = stageRef.current;
     if (!el || total <= 1) return;
 
     let wheelAccumulator = 0;
@@ -74,6 +75,14 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     const THRESHOLD = 30;
 
     const onWheel = (e: WheelEvent) => {
+      // STRICT CHECK: Only intercept wheel if the cursor is directly on a product photo/card
+      const targetEl = e.target as HTMLElement | null;
+      const isOverCard = Boolean(targetEl?.closest('[data-testid^="slider-card-"]'));
+      if (!isOverCard) {
+        // Outside photos: allow normal vertical page scrolling
+        return;
+      }
+
       const absX = Math.abs(e.deltaX);
       const absY = Math.abs(e.deltaY);
 
@@ -97,7 +106,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
         return;
       }
 
-      // Vertical mouse wheel: controlled stepping with non-trapping boundaries
+      // Vertical mouse wheel over photo: controlled stepping with non-trapping boundaries
       if (absY < 5) return;
 
       // Allow natural vertical page scroll when at start or end of deliberate sequence
@@ -110,7 +119,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
         return;
       }
 
-      // Within carousel bounds: intercept to smoothly move cards horizontally
+      // Directly over card: smoothly step 1 card horizontally
       e.preventDefault();
       const now = performance.now();
       if (now - lastWheelTime < COOLDOWN_MS) return;
@@ -178,10 +187,10 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
     return (
       <section
         data-testid="featured-slider-fallback"
-        className="py-14 sm:py-20 bg-[#FAF7F2] border-y border-[#E8DFD0]"
+        className="py-10 sm:py-14 bg-[#FAF7F2] border-y border-[#E8DFD0]"
       >
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-10 space-y-2">
+          <div className="text-center mb-6 sm:mb-8 space-y-2">
             <div className="inline-flex items-center justify-center gap-2">
               <span className="w-8 h-[1px] bg-[#B58A3C]" />
               <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.28em] text-[#B58A3C] font-semibold flex items-center gap-1.5">
@@ -258,19 +267,16 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
 
   return (
     <section
-      ref={sliderRef}
       onKeyDown={handleKeyDown}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       tabIndex={0}
       role="region"
       aria-roledescription="carousel"
       aria-label="Iconic Atelier Silhouettes product collection"
-      className="py-14 sm:py-20 bg-[#FAF7F2] border-y border-[#E8DFD0] overflow-hidden select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
+      className="py-10 sm:py-14 bg-[#FAF7F2] border-y border-[#E8DFD0] overflow-hidden select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-14 space-y-2">
+        <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-8 space-y-2">
           <div className="inline-flex items-center justify-center gap-2">
             <span className="w-8 h-[1px] bg-[#B58A3C]" />
             <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.28em] text-[#B58A3C] font-semibold flex items-center gap-1.5">
@@ -287,9 +293,12 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
           </p>
         </div>
 
-        {/* Carousel Stage: Smooth 3D Track with Physically Moving Cards */}
+        {/* Carousel Stage: ONLY this area intercepts wheel when cursor is over the cards */}
         <div
+          ref={stageRef}
           data-testid="featured-slider-stage"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           className="relative min-h-[460px] sm:min-h-[520px] overflow-hidden flex items-center justify-center"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}

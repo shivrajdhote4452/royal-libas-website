@@ -94,7 +94,7 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
   const maxIndex = Math.max(0, reviews.length - itemsPerView);
 
   // Track and card measurement refs
-  const sectionRef = useRef<HTMLElement>(null);
+  const reviewsRowRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const [stepDistance, setStepDistance] = useState<number>(0);
 
@@ -148,7 +148,7 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
     setDisplayIndex((prev) => (prev <= 0 ? maxIndex : prev - 1));
   }, [isCarousel, maxIndex]);
 
-  // Autoplay Effect for reviews: smooth continuous auto-sliding, pauses on hover
+  // Autoplay Effect for reviews: smooth continuous auto-sliding, pauses on review hover
   useEffect(() => {
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
@@ -165,9 +165,9 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
     return () => clearInterval(timer);
   }, [isCarousel, isHovered, handleNext]);
 
-  // Desktop Mouse Wheel & Trackpad Navigation (Non-trapping, smooth card movement)
+  // Desktop Mouse Wheel: ONLY intercepts when cursor is directly over a review card!
   useEffect(() => {
-    const el = sectionRef.current;
+    const el = reviewsRowRef.current;
     if (!el || !isCarousel) return;
 
     let wheelAccumulator = 0;
@@ -176,6 +176,13 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
     const THRESHOLD = 30;
 
     const onWheel = (e: WheelEvent) => {
+      // STRICT CHECK: Only intercept wheel if cursor is over an actual review card
+      const targetEl = e.target as HTMLElement | null;
+      const isOverReviewCard = Boolean(targetEl?.closest('article'));
+      if (!isOverReviewCard) {
+        return; // Background/title: allow normal page scroll
+      }
+
       const absX = Math.abs(e.deltaX);
       const absY = Math.abs(e.deltaY);
 
@@ -280,21 +287,18 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
   return (
     <section
       id="reviews"
-      ref={sectionRef}
       tabIndex={0}
       role="region"
       aria-roledescription="carousel"
       aria-label="Customer Google Reviews"
       onKeyDown={handleKeyDown}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="w-full bg-[#FAF5EC] border-b border-[#B58A3C]/25 py-14 sm:py-20 px-4 sm:px-6 lg:px-8 select-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
+      className="w-full bg-[#FAF5EC] border-b border-[#B58A3C]/25 py-10 sm:py-14 px-4 sm:px-6 lg:px-8 select-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
     >
-      <div className="max-w-6xl mx-auto space-y-10">
+      <div className="max-w-6xl mx-auto space-y-8 sm:space-y-10">
         {/* ========================================================
             HEADER: Selected Positive Google Reviews
             ======================================================== */}
-        <div className="text-center max-w-2xl mx-auto space-y-3">
+        <div className="text-center max-w-2xl mx-auto space-y-2.5">
           <div className="inline-flex items-center gap-2">
             <span className="w-6 h-[1px] bg-[#B58A3C]" />
             <span className="text-[10px] sm:text-xs uppercase tracking-[0.28em] text-[#B58A3C] font-semibold">
@@ -313,9 +317,12 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
         </div>
 
         {/* ========================================================
-            REVIEWS CONTAINER: Smooth bounded gliding row
+            REVIEWS CONTAINER: Wheel triggers ONLY over review cards
             ======================================================== */}
         <div
+          ref={reviewsRowRef}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           className="w-full overflow-hidden"
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
@@ -354,7 +361,7 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
         {/* ========================================================
             FOOTER ACTION: Read All Reviews on Google Link
             ======================================================== */}
-        <div className="text-center pt-2">
+        <div className="text-center pt-1">
           <a
             href={googleListingUrl}
             target="_blank"
