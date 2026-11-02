@@ -51,6 +51,7 @@ jobs:
           TEST_POSTGRES_URL: postgresql+psycopg2://test_user:test_password@127.0.0.1:5432/royal_libas_test_db
         run: |
           python -m unittest discover backend/tests -p "test_bulk_inventory_adjustment.py"
+          python -m unittest discover backend/tests -p "test_curated_moments.py"
           python backend/tests/test_bulk_inventory_adjustment.py
           python backend/tests/test_postgres_concurrency.py
 

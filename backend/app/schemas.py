@@ -752,6 +752,7 @@ class StoreSettingResponse(BaseModel):
     boutique_section_visible: bool = True
     boutique_reviews_json: Optional[str] = "[]"
     boutique_reviews_visible: bool = False
+    curated_moments_json: Optional[str] = "[]"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -832,6 +833,7 @@ class StoreSettingUpdate(BaseModel):
     boutique_section_visible: Optional[bool] = None
     boutique_reviews_json: Optional[str] = None
     boutique_reviews_visible: Optional[bool] = None
+    curated_moments_json: Optional[str] = None
 
     @field_validator("boutique_embed_url")
     @classmethod
@@ -997,6 +999,86 @@ class StoreSettingUpdate(BaseModel):
             return json.dumps(cleaned)
         except json.JSONDecodeError:
             raise ValueError("Invalid JSON string for boutique reviews")
+
+    @field_validator("curated_moments_json")
+    @classmethod
+    def validate_curated_moments_json(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return "[]"
+        try:
+            data = json.loads(v)
+            if not isinstance(data, list):
+                raise ValueError("Curated moments must be a JSON array")
+            if len(data) > 6:
+                raise ValueError("Curated moments allows a maximum of 6 cards")
+            cleaned = []
+            for idx, item in enumerate(data):
+                if not isinstance(item, dict):
+                    raise ValueError(f"Curated moment card #{idx + 1} must be a JSON object")
+                cid = str(item.get("id") or f"card-{idx + 1}").strip()
+                title = str(item.get("title") or "").strip()
+                if not title:
+                    raise ValueError(f"Card #{idx + 1} must have a title")
+                if len(title) > 100:
+                    raise ValueError(f"Card #{idx + 1} title cannot exceed 100 characters")
+                subtitle = str(item.get("subtitle") or "").strip() or None
+                if subtitle and len(subtitle) > 255:
+                    raise ValueError(f"Card #{idx + 1} subtitle cannot exceed 255 characters")
+
+                # Accept both snake_case and camelCase from frontend & API clients
+                raw_image_url = item.get("image_url") if "image_url" in item else item.get("imageUrl")
+                image_url = None
+                if raw_image_url is not None:
+                    raw_image_url = str(raw_image_url).strip()
+                    if raw_image_url:
+                        if not (raw_image_url.startswith("http://") or raw_image_url.startswith("https://") or raw_image_url.startswith("/")):
+                            raise ValueError(f"Unsafe card image URL: {raw_image_url}")
+                        image_url = raw_image_url
+
+                raw_media_id = item.get("media_asset_id") if "media_asset_id" in item else item.get("mediaAssetId")
+                media_asset_id = None
+                if raw_media_id is not None:
+                    try:
+                        media_asset_id = int(raw_media_id)
+                    except (ValueError, TypeError):
+                        media_asset_id = None
+
+                link = str(item.get("link") or "/shop").strip()
+                if not link.startswith("/") or link.startswith("//") or any(ch.isspace() for ch in link):
+                    raise ValueError(
+                        f"Card #{idx + 1} destination link must be a valid internal route starting with '/' (e.g. '/shop?category=TWO+PIECES'), got '{link}'"
+                    )
+                if any(link.lower().startswith(bad) for bad in ("javascript:", "data:", "vbscript:", "file:")):
+                    raise ValueError(f"Card #{idx + 1} destination link contains an unsafe protocol")
+
+                raw_link_text = item.get("link_text") if "link_text" in item else item.get("linkText")
+                link_text = str(raw_link_text or "EXPLORE COLLECTION").strip()
+                if len(link_text) > 50:
+                    link_text = link_text[:50]
+
+                raw_display_order = item.get("display_order") if "display_order" in item else item.get("displayOrder")
+                try:
+                    display_order = int(raw_display_order) if raw_display_order is not None else (idx + 1)
+                except (ValueError, TypeError):
+                    display_order = idx + 1
+
+                cleaned.append({
+                    "id": cid,
+                    "title": title,
+                    "subtitle": subtitle,
+                    "image_url": image_url,
+                    "imageUrl": image_url,
+                    "media_asset_id": media_asset_id,
+                    "mediaAssetId": media_asset_id,
+                    "link": link,
+                    "link_text": link_text,
+                    "linkText": link_text,
+                    "display_order": display_order,
+                    "displayOrder": display_order,
+                })
+            return json.dumps(cleaned)
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON string for curated moments")
 
 
 class ContactInquiryCreate(BaseModel):

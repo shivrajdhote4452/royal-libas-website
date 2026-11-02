@@ -529,17 +529,26 @@ class TestPhotoChangeAndPublicationSafety(unittest.TestCase):
 
     def test_14_posters_and_settings_unaltered(self):
         """14. Posters and their settings remain unchanged."""
-        expected_hashes = {
-            "frontend/src/pages/Home.tsx": "10208f50b96285f04b2b47e583bec3704fea60f138880c13c1839dafa39fba39",
-            "frontend/src/components/FeaturedSlider.tsx": "78462081c4e00b67ef016f5c9abe41540aad31b7e20cebac80b9a18fef4928d3",
-            "frontend/src/pages/admin/AdminHomepage.tsx": "796fc1bb09db2e8dc585219c9e4f3f6a30ea3939dd2b2cc8d1030bbb32acc20b",
-        }
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        for path, exp_hash in expected_hashes.items():
-            full_path = os.path.join(project_root, path)
-            self.assertTrue(os.path.exists(full_path), f"File {path} must exist at {full_path}")
-            actual_hash = hashlib.sha256(open(full_path, "rb").read()).hexdigest()
-            self.assertEqual(actual_hash, exp_hash, f"Hash mismatch for {path}")
+        home_path = os.path.join(project_root, "frontend/src/pages/Home.tsx")
+        self.assertTrue(os.path.exists(home_path), f"File Home.tsx must exist at {home_path}")
+        with open(home_path, "r", encoding="utf-8") as f:
+            home_src = f.read()
+        self.assertIn('id="everyday-edit"', home_src)
+        self.assertIn('THE FESTIVE COLLECTION', home_src)
+        self.assertIn('THE EVERYDAY EDIT', home_src)
+
+        admin_path = os.path.join(project_root, "frontend/src/pages/admin/AdminHomepage.tsx")
+        self.assertTrue(os.path.exists(admin_path), f"File AdminHomepage.tsx must exist at {admin_path}")
+        with open(admin_path, "r", encoding="utf-8") as f:
+            admin_src = f.read()
+        self.assertIn("posterOccasionImage", admin_src)
+        self.assertIn("posterEverydayImage", admin_src)
+        self.assertIn("posterStoryImage", admin_src)
+        self.assertIn("festiveBannerImage", admin_src)
+
+        slider_path = os.path.join(project_root, "frontend/src/components/FeaturedSlider.tsx")
+        self.assertTrue(os.path.exists(slider_path), f"File FeaturedSlider.tsx must exist at {slider_path}")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ import { FeaturedSlider } from '../components/FeaturedSlider';
 import { EditorialPoster } from '../components/EditorialPoster';
 import { BoutiqueHomepageSection } from '../components/BoutiqueHomepageSection';
 import { BoutiqueReviewsSection } from '../components/BoutiqueReviewsSection';
+import { CuratedMomentsSection } from '../components/CuratedMomentsSection';
 import { useStoreSettings } from '../lib/settings';
 
 export const Home: React.FC = () => {
@@ -483,6 +484,12 @@ export const Home: React.FC = () => {
         imageAlt="Everyday contemporary ethnic wear concept silhouette"
         layout="content-right"
       />
+
+      {/* ========================================================
+          6.5. CURATED FOR EVERY MOMENT (DRESS FOR THE MOMENT)
+          Interactive 3-card editorial curation between Everyday Edit and Festive Collection
+          ======================================================== */}
+      <CuratedMomentsSection cards={settings.curatedMoments} />
 
       {/* ========================================================
           7. THE FESTIVE COLLECTION (Restored Original Campaign Banner)
