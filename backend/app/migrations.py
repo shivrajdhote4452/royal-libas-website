@@ -241,6 +241,11 @@ def run_migrations(engine: Engine) -> None:
                     conn.execute(text("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;"))
                 else:
                     conn.execute(text("ALTER TABLE product_variants ADD COLUMN is_active BOOLEAN DEFAULT 1;"))
+
+            # Ensure pre-existing variants with NULL is_active default to True/active
+            if dialect_name == "postgresql":
+                conn.execute(text("UPDATE product_variants SET is_active = TRUE WHERE is_active IS NULL;"))
+            else:
                 conn.execute(text("UPDATE product_variants SET is_active = 1 WHERE is_active IS NULL;"))
 
         # 7. Orders table migrations for invoice_url
