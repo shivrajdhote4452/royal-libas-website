@@ -27,6 +27,7 @@ interface SizeChart {
   name: string;
   category?: string;
   measurements: string; // JSON string or text
+  product_count?: number;
   created_at: string;
 }
 
@@ -144,6 +145,13 @@ export const AdminSizeCharts: React.FC = () => {
   };
 
   const handleDelete = async (chart: SizeChart) => {
+    if ((chart.product_count ?? 0) > 0) {
+      setNotification({
+        type: 'error',
+        message: `Cannot delete "${chart.name}": it is currently linked to ${chart.product_count} product(s). Please detach or reassign the products first.`,
+      });
+      return;
+    }
     if (!window.confirm(`Delete size chart "${chart.name}"?`)) return;
 
     try {
@@ -234,12 +242,23 @@ export const AdminSizeCharts: React.FC = () => {
                 <div>
                   <div className="flex items-start justify-between gap-2 pb-3 border-b border-gray-100">
                     <div>
-                      <h3 className="font-serif font-bold text-base text-gray-900">{c.name}</h3>
-                      {c.category && (
-                        <span className="text-[10px] uppercase tracking-wider text-[#B58A3C] font-semibold mt-0.5 block">
-                          Category: {c.category}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-serif font-bold text-base text-gray-900">{c.name}</h3>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-amber-50 text-amber-800 border border-amber-200" title="Boutique size measurements require final confirmation from client">
+                          Unverified Measurements
                         </span>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        {c.category && (
+                          <span className="text-[10px] uppercase tracking-wider text-[#B58A3C] font-semibold block">
+                            Category: {c.category}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-gray-300">&bull;</span>
+                        <span className={`text-[10px] font-medium ${(c.product_count ?? 0) > 0 ? 'text-emerald-700 font-semibold' : 'text-gray-500'}`}>
+                          {(c.product_count ?? 0) > 0 ? `Linked to ${c.product_count} product${c.product_count! > 1 ? 's' : ''}` : 'No products linked'}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -251,8 +270,13 @@ export const AdminSizeCharts: React.FC = () => {
                       </button>
                       <button
                         onClick={() => handleDelete(c)}
-                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded"
-                        title="Delete Size Chart"
+                        disabled={(c.product_count ?? 0) > 0}
+                        className={`p-1.5 rounded transition-colors ${
+                          (c.product_count ?? 0) > 0
+                            ? 'text-gray-300 cursor-not-allowed'
+                            : 'text-rose-500 hover:text-rose-700 hover:bg-rose-50'
+                        }`}
+                        title={(c.product_count ?? 0) > 0 ? `Cannot delete: linked to ${c.product_count} product(s)` : 'Delete Size Chart'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
