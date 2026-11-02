@@ -46,15 +46,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Run isolated bulk inventory and postgres tests
+      - name: Run isolated backend test suites
         env:
           TEST_POSTGRES_URL: postgresql+psycopg2://test_user:test_password@127.0.0.1:5432/royal_libas_test_db
         run: |
           python -m unittest discover backend/tests -p "test_bulk_inventory_adjustment.py"
           python -m unittest discover backend/tests -p "test_curated_moments.py"
           python -m unittest discover backend/tests -p "test_size_chart_safety.py"
+          python -m unittest discover backend/tests -p "test_size_chart_cleanup_script.py"
+          python -m unittest discover backend/tests -p "test_admin_upgrade.py"
           python backend/tests/test_bulk_inventory_adjustment.py
           python backend/tests/test_postgres_concurrency.py
+          python backend/tests/test_admin_upgrade.py
+          python backend/tests/test_size_chart_cleanup_script.py
 
   frontend-build:
     name: Frontend Build Check

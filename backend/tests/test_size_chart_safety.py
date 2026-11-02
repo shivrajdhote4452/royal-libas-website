@@ -1,4 +1,6 @@
+import atexit
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -8,6 +10,15 @@ from pathlib import Path
 _temp_dir = tempfile.mkdtemp(prefix="rl_sizechart_safety_isolated_")
 _isolated_db_path = os.path.join(_temp_dir, "isolated_safety_test.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_isolated_db_path}"
+
+def _cleanup_temp():
+    if os.path.exists(_temp_dir):
+        try:
+            shutil.rmtree(_temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+atexit.register(_cleanup_temp)
 
 # Guard: abort immediately if DATABASE_URL contains business/production keywords
 FORBIDDEN = ["postgres", "hostinger", "neon", "prod", "staging", "royal_libas.db"]

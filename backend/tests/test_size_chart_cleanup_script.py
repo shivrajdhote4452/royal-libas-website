@@ -10,8 +10,10 @@ Verifies:
 7. Local development database (royal_libas.db) and any production DB are strictly untouched.
 """
 
+import atexit
 import json
 import os
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -23,6 +25,15 @@ from pathlib import Path
 _temp_dir = tempfile.mkdtemp(prefix="rl_cleanup_test_isolated_")
 _isolated_db_path = os.path.join(_temp_dir, "isolated_cleanup_test.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_isolated_db_path}"
+
+def _cleanup_temp():
+    if os.path.exists(_temp_dir):
+        try:
+            shutil.rmtree(_temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+atexit.register(_cleanup_temp)
 
 # Guard: abort immediately if DATABASE_URL contains business/production keywords
 FORBIDDEN = ["postgres", "hostinger", "neon", "prod", "staging", "royal_libas.db"]
