@@ -4021,8 +4021,26 @@ def admin_list_size_charts(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """List all reusable size charts."""
-    return db.query(SizeChart).order_by(SizeChart.name.asc()).all()
+    """List all reusable size charts with product reference counts."""
+    charts = db.query(SizeChart).order_by(SizeChart.name.asc(), SizeChart.id.asc()).all()
+    counts = dict(
+        db.query(Product.size_chart_id, func.count(Product.id))
+        .filter(Product.size_chart_id.isnot(None))
+        .group_by(Product.size_chart_id)
+        .all()
+    )
+    return [
+        SizeChartResponse(
+            id=c.id,
+            name=c.name,
+            category=c.category,
+            measurements=c.measurements,
+            product_count=counts.get(c.id, 0),
+            created_at=c.created_at,
+            updated_at=c.updated_at,
+        )
+        for c in charts
+    ]
 
 
 @router.post("/size-charts", response_model=SizeChartResponse)
@@ -4041,7 +4059,15 @@ def admin_create_size_chart(
     db.commit()
     db.refresh(chart)
     log_activity(db, current_admin, "SIZE_CHART_CREATED", "size_chart", chart.id, chart.name)
-    return chart
+    return SizeChartResponse(
+        id=chart.id,
+        name=chart.name,
+        category=chart.category,
+        measurements=chart.measurements,
+        product_count=0,
+        created_at=chart.created_at,
+        updated_at=chart.updated_at,
+    )
 
 
 @router.put("/size-charts/{id}", response_model=SizeChartResponse)
@@ -4066,7 +4092,16 @@ def admin_update_size_chart(
     db.commit()
     db.refresh(chart)
     log_activity(db, current_admin, "SIZE_CHART_UPDATED", "size_chart", chart.id, chart.name)
-    return chart
+    linked_count = db.query(Product).filter(Product.size_chart_id == chart.id).count()
+    return SizeChartResponse(
+        id=chart.id,
+        name=chart.name,
+        category=chart.category,
+        measurements=chart.measurements,
+        product_count=linked_count,
+        created_at=chart.created_at,
+        updated_at=chart.updated_at,
+    )
 
 
 @router.delete("/size-charts/{id}")
@@ -4075,10 +4110,17 @@ def admin_delete_size_chart(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER")),
 ):
-    """Delete a size chart."""
+    """Delete a size chart safely, rejecting deletion if any products are linked."""
     chart = db.query(SizeChart).filter(SizeChart.id == id).first()
     if not chart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Size chart not found.")
+
+    linked_count = db.query(Product).filter(Product.size_chart_id == id).count()
+    if linked_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Size chart '{chart.name}' cannot be deleted because it is currently linked to {linked_count} product(s). Please detach or reassign the products first.",
+        )
 
     db.delete(chart)
     db.commit()

@@ -52,6 +52,7 @@ jobs:
         run: |
           python -m unittest discover backend/tests -p "test_bulk_inventory_adjustment.py"
           python -m unittest discover backend/tests -p "test_curated_moments.py"
+          python -m unittest discover backend/tests -p "test_size_chart_safety.py"
           python backend/tests/test_bulk_inventory_adjustment.py
           python backend/tests/test_postgres_concurrency.py
 

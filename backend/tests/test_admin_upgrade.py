@@ -267,19 +267,23 @@ def test_admin_size_charts():
     assert create_res.status_code == 200
     chart_id = create_res.json()["id"]
 
-    # List size charts
-    list_res = client.get("/admin/size-charts", headers=headers)
-    assert list_res.status_code == 200
-    assert any(c["id"] == chart_id for c in list_res.json())
+    try:
+        # List size charts
+        list_res = client.get("/admin/size-charts", headers=headers)
+        assert list_res.status_code == 200
+        assert any(c["id"] == chart_id for c in list_res.json())
 
-    # Update
-    update_res = client.put(
-        f"/admin/size-charts/{chart_id}",
-        json={"name": "Festive Velvet Anarkali Standard Chart"},
-        headers=headers,
-    )
-    assert update_res.status_code == 200
-    assert update_res.json()["name"] == "Festive Velvet Anarkali Standard Chart"
+        # Update
+        update_res = client.put(
+            f"/admin/size-charts/{chart_id}",
+            json={"name": "Festive Velvet Anarkali Standard Chart"},
+            headers=headers,
+        )
+        assert update_res.status_code == 200
+        assert update_res.json()["name"] == "Festive Velvet Anarkali Standard Chart"
+    finally:
+        # Always clean up test size chart to prevent polluting business/dev database
+        client.delete(f"/admin/size-charts/{chart_id}", headers=headers)
 
 
 def test_admin_staff_and_rbac():
@@ -306,17 +310,25 @@ def test_admin_staff_and_rbac():
     staff_token = login_res.json()["access_token"]
     staff_header = {"Authorization": f"Bearer {staff_token}"}
 
-    # Fulfillment staff can read orders
-    orders_res = client.get("/admin/orders", headers=staff_header)
-    assert orders_res.status_code == 200
+    try:
+        # Fulfillment staff can read orders
+        orders_res = client.get("/admin/orders", headers=staff_header)
+        assert orders_res.status_code == 200
 
-    # Fulfillment staff CANNOT modify store settings (Forbidden)
-    forbidden_res = client.put(
-        "/admin/settings",
-        json={"standard_shipping_fee": 150.0},
-        headers=staff_header,
-    )
-    assert forbidden_res.status_code == 403
+        # Fulfillment staff CANNOT modify store settings (Forbidden)
+        forbidden_res = client.put(
+            "/admin/settings",
+            json={"standard_shipping_fee": 150.0},
+            headers=staff_header,
+        )
+        assert forbidden_res.status_code == 403
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(Admin).filter(Admin.id == staff_id).delete()
+            db.commit()
+        finally:
+            db.close()
 
 
 def test_admin_activity_logs():
