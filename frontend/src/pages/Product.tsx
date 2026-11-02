@@ -76,8 +76,8 @@ export const ProductPage: React.FC = () => {
             navigate(`/product/${data.slug}`, { replace: true });
           }
           setError(null);
-          // Pre-select first available variant
-          const firstAvailable = data.variants.find((v) => v.stock > 0);
+          // Pre-select first available active variant
+          const firstAvailable = data.variants.find((v) => v.is_active && v.stock > 0);
           setSelectedVariant(firstAvailable || null);
           setActiveImageIndex(0);
 
@@ -203,15 +203,16 @@ export const ProductPage: React.FC = () => {
     }
   }
 
-  // Variant availability checks
+  // Variant availability checks (enforcing product-wise size active status)
   const variantsForSelectedColor = selectedColor
     ? product.variants.filter((v) => v.colour === selectedColor)
     : product.variants;
   const isColorSoldOut =
     variantsForSelectedColor.length > 0 &&
-    variantsForSelectedColor.every((v) => v.stock <= 0);
+    variantsForSelectedColor.every((v) => !v.is_active || v.stock <= 0);
   const isVariantValidAndAvailable = Boolean(
     selectedVariant &&
+    selectedVariant.is_active &&
     selectedVariant.stock > 0 &&
     (!selectedColor || selectedVariant.colour === selectedColor)
   );
@@ -222,15 +223,15 @@ export const ProductPage: React.FC = () => {
     const variantsForColor = product.variants.filter((v) => v.colour === c);
     // 1. Try to retain current size if available in the new color
     const sameSizeMatch = variantsForColor.find(
-      (v) => v.size === selectedVariant?.size && v.stock > 0
+      (v) => v.size === selectedVariant?.size && v.is_active && v.stock > 0
     );
     if (sameSizeMatch) {
       setSelectedVariant(sameSizeMatch);
       setQuantity((q) => Math.min(q, sameSizeMatch.stock > 0 ? sameSizeMatch.stock : 1));
       return;
     }
-    // 2. Otherwise pick first available size in this color
-    const firstInStock = variantsForColor.find((v) => v.stock > 0);
+    // 2. Otherwise pick first available active size in this color
+    const firstInStock = variantsForColor.find((v) => v.is_active && v.stock > 0);
     if (firstInStock) {
       setSelectedVariant(firstInStock);
       setQuantity((q) => Math.min(q, firstInStock.stock > 0 ? firstInStock.stock : 1));
@@ -241,7 +242,7 @@ export const ProductPage: React.FC = () => {
   };
 
   const handleSizeChange = (v: ProductVariant) => {
-    if (v.stock <= 0) return;
+    if (!v.is_active || v.stock <= 0) return;
     setSelectedVariant(v);
     setQuantity((q) => Math.min(q, v.stock > 0 ? v.stock : 1));
   };
@@ -709,16 +710,23 @@ export const ProductPage: React.FC = () => {
                   const variantsToDisplay = matchingVariants.length > 0 ? matchingVariants : product.variants;
 
                   return variantsToDisplay.map((v) => {
-                    const soldOut = v.stock <= 0;
+                    const isUnavailable = !v.is_active || v.stock <= 0;
                     const isSelected = selectedVariant?.id === v.id;
 
                     return (
                       <button
                         key={v.id}
                         type="button"
-                        disabled={soldOut}
+                        disabled={isUnavailable}
                         onClick={() => handleSizeChange(v)}
-                        className={`h-10 sm:h-11 rounded-none border text-center transition-all duration-200 ${soldOut
+                        title={
+                          !v.is_active
+                            ? `Size ${v.size} is currently unavailable`
+                            : v.stock <= 0
+                            ? `Size ${v.size} is sold out`
+                            : `Select size ${v.size}`
+                        }
+                        className={`h-10 sm:h-11 rounded-none border text-center transition-all duration-200 ${isUnavailable
                             ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
                             : isSelected
                               ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-md font-bold'

@@ -93,11 +93,16 @@ def validate_cart_lines(db: Session, items: List[CartItemValidateRequest]) -> Ca
         unit_price = Decimal(str(variant.selling_price))
         available_stock = variant.stock
         requested_qty = max(1, item.quantity)
-        has_sufficient_stock = available_stock >= requested_qty and available_stock > 0
+        variant_active = bool(getattr(variant, "is_active", True))
+        has_sufficient_stock = variant_active and available_stock >= requested_qty and available_stock > 0
 
         line_error: Optional[str] = None
         if not product.is_active or product.status != "PUBLISHED":
             line_error = f"{product.name} is currently unavailable."
+            unavailable_lines.append(line_error)
+            is_valid = False
+        elif not variant_active:
+            line_error = f"{product.name} (Size {variant.size}) is currently unavailable."
             unavailable_lines.append(line_error)
             is_valid = False
         elif available_stock <= 0:
@@ -183,6 +188,12 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"'{product.name}' is no longer available.",
+                )
+
+            if not getattr(variant, "is_active", True):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Size '{variant.size}' for '{product.name}' is currently unavailable for purchase.",
                 )
 
             if variant.stock < req_item.quantity:

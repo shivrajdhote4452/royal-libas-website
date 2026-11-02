@@ -13,6 +13,8 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
+  Printer,
+  FileText,
   X,
 } from 'lucide-react';
 import {
@@ -20,6 +22,7 @@ import {
   formatPrice,
   fetchFulfillmentConfig,
   refreshFulfillmentTracking,
+  generateOrderInvoice,
   adminUpdateOrderNotes,
 } from '../../lib/api';
 import { OrderResponse, FulfillmentConfig } from '../../types/order';
@@ -47,6 +50,8 @@ export const AdminOrders: React.FC = () => {
   const [fulfillmentConfig, setFulfillmentConfig] = useState<FulfillmentConfig | null>(null);
   const [activeFulfillOrder, setActiveFulfillOrder] = useState<OrderResponse | null>(null);
   const [refreshingOrderId, setRefreshingOrderId] = useState<number | null>(null);
+  const [invoiceLoadingOrderId, setInvoiceLoadingOrderId] = useState<number | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -110,6 +115,28 @@ export const AdminOrders: React.FC = () => {
     setSearchParams(status === 'ALL' ? {} : { status });
   };
 
+  const handleDownloadInvoice = async (order: OrderResponse) => {
+    if (!order.shiprocket_order_id) {
+      setActionError(`Order #${order.order_code} has not been shipped via Shiprocket yet.`);
+      return;
+    }
+    setInvoiceLoadingOrderId(order.id);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const res = await generateOrderInvoice(token, order.id);
+      setActionSuccess(`Shiprocket invoice ready for #${order.order_code}. Opening PDF...`);
+      window.open(res.invoice_url, '_blank', 'noopener,noreferrer');
+      setOrders((prev) =>
+        prev.map((ord) => (ord.id === order.id ? { ...ord, invoice_url: res.invoice_url } : ord))
+      );
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to generate Shiprocket invoice.');
+    } finally {
+      setInvoiceLoadingOrderId(null);
+    }
+  };
+
   const handleRefreshTracking = async (orderId: number) => {
     setRefreshingOrderId(orderId);
     setActionError(null);
@@ -166,6 +193,7 @@ export const AdminOrders: React.FC = () => {
     { id: 'PLACED', label: 'Placed (New)' },
     { id: 'CONFIRMED', label: 'Confirmed' },
     { id: 'PACKED', label: 'Packed' },
+    { id: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
     { id: 'SHIPPED', label: 'Shipped' },
     { id: 'DELIVERED', label: 'Delivered' },
     { id: 'CANCELLED', label: 'Cancelled' },
@@ -189,6 +217,15 @@ export const AdminOrders: React.FC = () => {
           <span>Refresh Queue</span>
         </button>
       </div>
+
+      {actionSuccess && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center justify-between">
+          <span>{actionSuccess}</span>
+          <button onClick={() => setActionSuccess(null)} className="text-emerald-600 hover:text-emerald-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {actionError && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-xs flex items-center justify-between">
@@ -385,6 +422,8 @@ export const AdminOrders: React.FC = () => {
                           ? 'bg-emerald-100 text-emerald-900'
                           : o.status === 'SHIPPED'
                           ? 'bg-blue-100 text-blue-900'
+                          : o.status === 'READY_FOR_PICKUP'
+                          ? 'bg-purple-100 text-purple-900'
                           : o.status === 'CANCELLED'
                           ? 'bg-red-100 text-red-900'
                           : 'bg-gray-100 text-gray-800'
@@ -503,7 +542,38 @@ export const AdminOrders: React.FC = () => {
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Shiprocket Invoice PDF */}
+                          {o.shiprocket_order_id && (
+                            <button
+                              type="button"
+                              disabled={invoiceLoadingOrderId === o.id}
+                              onClick={() => handleDownloadInvoice(o)}
+                              className="inline-flex items-center gap-1 text-[11px] bg-[#5E1224] text-white px-2.5 py-1 rounded shadow-sm hover:bg-[#430C19] font-medium disabled:opacity-50"
+                              title="Download and print Shiprocket tax invoice PDF"
+                            >
+                              {invoiceLoadingOrderId === o.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-[#B58A3C]" />
+                              ) : (
+                                <Printer className="w-3 h-3 text-[#B58A3C]" />
+                              )}
+                              <span>Invoice PDF</span>
+                            </button>
+                          )}
+
+                          {/* Shipping Label Link */}
+                          {o.label_url && (
+                            <a
+                              href={o.label_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] bg-white border border-indigo-300 text-[#5E1224] px-2.5 py-1 rounded shadow-sm hover:bg-indigo-50 font-medium"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>Shipping Label</span>
+                            </a>
+                          )}
+
                           {o.tracking_url && (
                             <a
                               href={o.tracking_url}

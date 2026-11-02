@@ -232,5 +232,31 @@ def run_migrations(engine: Engine) -> None:
                         {"name": col_name, "slug": col_slug, "desc": col_desc, "active": True if dialect_name == "postgresql" else 1}
                     )
 
+        # 6. ProductVariant table migrations for is_active
+        if "product_variants" in existing_tables:
+            existing_var_cols = {col["name"] for col in inspector.get_columns("product_variants")}
+            if "is_active" not in existing_var_cols:
+                logger.info("Adding column 'is_active' to product_variants table...")
+                if dialect_name == "postgresql":
+                    conn.execute(text("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;"))
+                else:
+                    conn.execute(text("ALTER TABLE product_variants ADD COLUMN is_active BOOLEAN DEFAULT 1;"))
+
+            # Ensure pre-existing variants with NULL is_active default to True/active
+            if dialect_name == "postgresql":
+                conn.execute(text("UPDATE product_variants SET is_active = TRUE WHERE is_active IS NULL;"))
+            else:
+                conn.execute(text("UPDATE product_variants SET is_active = 1 WHERE is_active IS NULL;"))
+
+        # 7. Orders table migrations for invoice_url
+        if "orders" in existing_tables:
+            existing_order_cols = {col["name"] for col in inspector.get_columns("orders")}
+            if "invoice_url" not in existing_order_cols:
+                logger.info("Adding column 'invoice_url' to orders table...")
+                if dialect_name == "postgresql":
+                    conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_url VARCHAR(500);"))
+                else:
+                    conn.execute(text("ALTER TABLE orders ADD COLUMN invoice_url VARCHAR(500);"))
+
     logger.info("Database schema migrations completed successfully.")
 

@@ -14,6 +14,7 @@ import {
   XCircle,
   RefreshCw,
   FileText,
+  Printer,
   CreditCard,
   Check,
   AlertTriangle,
@@ -24,6 +25,10 @@ import {
   formatPrice,
   fetchFulfillmentConfig,
   refreshFulfillmentTracking,
+  generateOrderInvoice,
+  retryOrderLabel,
+  retryOrderPickup,
+  retryOrderManifest,
   adminSyncPayment,
   adminCollectCOD,
   adminUpdateOrderNotes,
@@ -41,6 +46,10 @@ export const AdminOrderDetail: React.FC = () => {
   const [fulfillmentConfig, setFulfillmentConfig] = useState<FulfillmentConfig | null>(null);
   const [showFulfillmentModal, setShowFulfillmentModal] = useState(false);
   const [isRefreshingTracking, setIsRefreshingTracking] = useState(false);
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
+  const [isRetryingLabel, setIsRetryingLabel] = useState(false);
+  const [isRetryingPickup, setIsRetryingPickup] = useState(false);
+  const [isRetryingManifest, setIsRetryingManifest] = useState(false);
 
   // Fulfillment update state (manual fallback)
   const [isUpdating, setIsUpdating] = useState(false);
@@ -104,6 +113,81 @@ export const AdminOrderDetail: React.FC = () => {
       setActionError(err.message || 'Failed to refresh live tracking');
     } finally {
       setIsRefreshingTracking(false);
+    }
+  };
+
+  const handleDownloadInvoice = async () => {
+    if (!order) return;
+    if (!order.shiprocket_order_id) {
+      setActionError("Shiprocket order has not been created yet. Please use 'Ship via Shiprocket' first to generate consignment and invoice.");
+      return;
+    }
+    setIsGeneratingInvoice(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const res = await generateOrderInvoice(token, order.id);
+      setOrder({ ...order, invoice_url: res.invoice_url });
+      setActionSuccess("Shiprocket invoice ready. Opening PDF in new tab...");
+      window.open(res.invoice_url, '_blank', 'noopener,noreferrer');
+    } catch (err: any) {
+      setActionError(err.message || "Failed to generate or retrieve Shiprocket invoice.");
+    } finally {
+      setIsGeneratingInvoice(false);
+    }
+  };
+
+  const handleRetryLabel = async () => {
+    if (!order) return;
+    setIsRetryingLabel(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await retryOrderLabel(token, order.id);
+      setOrder(updated);
+      setActionSuccess("Shipping label generated successfully.");
+      if (updated.label_url) {
+        window.open(updated.label_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Failed to generate shipping label.");
+    } finally {
+      setIsRetryingLabel(false);
+    }
+  };
+
+  const handleRetryPickup = async () => {
+    if (!order) return;
+    setIsRetryingPickup(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await retryOrderPickup(token, order.id);
+      setOrder(updated);
+      setActionSuccess("Courier pickup scheduled successfully.");
+    } catch (err: any) {
+      setActionError(err.message || "Failed to schedule courier pickup.");
+    } finally {
+      setIsRetryingPickup(false);
+    }
+  };
+
+  const handleRetryManifest = async () => {
+    if (!order) return;
+    setIsRetryingManifest(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await retryOrderManifest(token, order.id);
+      setOrder(updated);
+      setActionSuccess("Shipping manifest generated successfully.");
+      if (updated.manifest_url) {
+        window.open(updated.manifest_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Failed to generate shipping manifest.");
+    } finally {
+      setIsRetryingManifest(false);
     }
   };
 
@@ -222,7 +306,7 @@ export const AdminOrderDetail: React.FC = () => {
   )}`;
 
   const currentStatus = order.status.toUpperCase();
-  const steps = ['PLACED', 'PACKED', 'SHIPPED', 'DELIVERED'];
+  const steps = ['PLACED', 'PACKED', 'READY_FOR_PICKUP', 'SHIPPED', 'DELIVERED'];
   const stepIndex = steps.indexOf(currentStatus);
   const isCancelled = currentStatus === 'CANCELLED';
   const isPaid = order.payment_status === 'PAID';
@@ -346,7 +430,7 @@ export const AdminOrderDetail: React.FC = () => {
                         : 'text-gray-400'
                     }`}
                   >
-                    {st === 'PLACED' ? 'Received' : st}
+                    {st === 'PLACED' ? 'Received' : st === 'READY_FOR_PICKUP' ? 'Ready for Pickup' : st}
                   </span>
                 </div>
               );
@@ -369,6 +453,19 @@ export const AdminOrderDetail: React.FC = () => {
               </button>
             )}
 
+            {currentStatus === 'READY_FOR_PICKUP' && (
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => handleUpdateStatus('SHIPPED')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-semibold rounded shadow transition-colors"
+                title="Mark order as handed over to courier / in transit"
+              >
+                <Truck className="w-4 h-4 text-[#B58A3C]" />
+                <span>Mark Handed Over (Shipped)</span>
+              </button>
+            )}
+
             {(currentStatus === 'PLACED' || currentStatus === 'CONFIRMED' || currentStatus === 'PACKED') && (
               <>
                 <button
@@ -380,6 +477,20 @@ export const AdminOrderDetail: React.FC = () => {
                   <Truck className="w-4 h-4 text-[#B58A3C]" />
                   <span>Ship via Shiprocket</span>
                 </button>
+
+                {!order.shiprocket_order_id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionError("Shiprocket order has not been created yet. Please click 'Ship via Shiprocket' first to generate consignment and invoice.");
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-600 text-xs font-medium rounded transition-colors"
+                    title="Ship order with Shiprocket first to generate the invoice"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Invoice (Ship first)</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -493,9 +604,26 @@ export const AdminOrderDetail: React.FC = () => {
                   </span>
                 )}
                 {order.pickup_status && (
-                  <span className="text-[11px] text-indigo-800 block mt-0.5">
-                    Pickup Status: <strong>{order.pickup_status}</strong>
-                  </span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[11px] text-indigo-900">
+                      Pickup Status:{' '}
+                      <strong className={order.pickup_status === 'SCHEDULE_FAILED' ? 'text-red-700 bg-red-100 px-1.5 py-0.5 rounded' : 'font-semibold'}>
+                        {order.pickup_status}
+                      </strong>
+                    </span>
+                    {order.pickup_status === 'SCHEDULE_FAILED' && (
+                      <button
+                        type="button"
+                        disabled={isRetryingPickup}
+                        onClick={handleRetryPickup}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-800 text-[10px] font-bold rounded transition-colors"
+                        title="Retry scheduling courier pickup"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRetryingPickup ? 'animate-spin' : ''}`} />
+                        <span>Retry Pickup</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -522,30 +650,133 @@ export const AdminOrderDetail: React.FC = () => {
               </div>
             </div>
 
-            {(order.label_url || order.manifest_url) && (
-              <div className="pt-2 border-t border-indigo-200/60 flex flex-wrap items-center gap-4">
-                {order.label_url && (
-                  <a
-                    href={order.label_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#5E1224] hover:underline"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Download Shipping Label (PDF)</span>
-                  </a>
-                )}
-                {order.manifest_url && (
-                  <a
-                    href={order.manifest_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#5E1224] hover:underline"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Download Manifest (PDF)</span>
-                  </a>
-                )}
+            {/* Consignment Documents Status & Actions */}
+            {(order.shiprocket_order_id || order.awb_code) && (
+              <div className="pt-3 border-t border-indigo-200/60 space-y-2">
+                <span className="text-[11px] font-bold text-indigo-950 uppercase tracking-wider block">
+                  Consignment Documents & Actions
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* 1. Tax Invoice */}
+                  <div className="p-2.5 bg-white rounded border border-indigo-100 flex flex-col justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-800 text-xs">Tax Invoice</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          order.invoice_url
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : order.shiprocket_order_id
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {order.invoice_url ? 'Available' : order.shiprocket_order_id ? 'Ready to Generate' : 'Ship First'}
+                      </span>
+                    </div>
+                    {order.shiprocket_order_id ? (
+                      <button
+                        type="button"
+                        disabled={isGeneratingInvoice}
+                        onClick={handleDownloadInvoice}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-[#5E1224] hover:bg-[#430C19] text-white rounded text-[11px] font-semibold shadow-2xs disabled:opacity-50 transition-colors"
+                        title="Download and print official Shiprocket tax invoice"
+                      >
+                        {isGeneratingInvoice ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-[#B58A3C]" />
+                        ) : (
+                          <Printer className="w-3 h-3 text-[#B58A3C]" />
+                        )}
+                        <span>{isGeneratingInvoice ? 'Fetching...' : order.invoice_url ? 'Print / Download Invoice' : 'Generate Invoice'}</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 italic text-center py-1">Ship order first</span>
+                    )}
+                  </div>
+
+                  {/* 2. Shipping Label */}
+                  <div className="p-2.5 bg-white rounded border border-indigo-100 flex flex-col justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-800 text-xs">Shipping Label</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          order.label_url
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : order.awb_code
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {order.label_url ? 'Available' : order.awb_code ? 'Pending / Retry' : 'Ship First'}
+                      </span>
+                    </div>
+                    {order.label_url ? (
+                      <a
+                        href={order.label_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-white border border-[#5E1224] text-xs font-semibold text-[#5E1224] rounded hover:bg-amber-50/50 transition-colors"
+                      >
+                        <FileText className="w-3 h-3 text-[#5E1224]" />
+                        <span>Download Label (PDF)</span>
+                      </a>
+                    ) : order.awb_code ? (
+                      <button
+                        type="button"
+                        disabled={isRetryingLabel}
+                        onClick={handleRetryLabel}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-300 text-amber-900 text-[11px] font-semibold rounded hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                        title="Retry generating shipping label"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRetryingLabel ? 'animate-spin' : ''}`} />
+                        <span>Generate Label</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 italic text-center py-1">Ship order first</span>
+                    )}
+                  </div>
+
+                  {/* 3. Shipping Manifest */}
+                  <div className="p-2.5 bg-white rounded border border-indigo-100 flex flex-col justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-800 text-xs">Shipping Manifest</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          order.manifest_url
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : order.awb_code
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {order.manifest_url ? 'Available' : order.awb_code ? 'Not Generated' : 'Ship First'}
+                      </span>
+                    </div>
+                    {order.manifest_url ? (
+                      <a
+                        href={order.manifest_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-white border border-indigo-400 text-xs font-semibold text-indigo-950 rounded hover:bg-indigo-50 transition-colors"
+                      >
+                        <FileText className="w-3 h-3 text-indigo-700" />
+                        <span>Download Manifest (PDF)</span>
+                      </a>
+                    ) : order.awb_code ? (
+                      <button
+                        type="button"
+                        disabled={isRetryingManifest}
+                        onClick={handleRetryManifest}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 border border-indigo-300 text-indigo-950 text-[11px] font-semibold rounded hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                        title="Generate shipping manifest"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRetryingManifest ? 'animate-spin' : ''}`} />
+                        <span>Generate Manifest</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-400 italic text-center py-1">Ship order first</span>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

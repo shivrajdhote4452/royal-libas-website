@@ -80,15 +80,24 @@ export interface OrderResponse {
   total: number;
   courier_name?: string | null;
   tracking_url?: string | null;
+  shiprocket_order_id?: string | null;
   shipment_id?: string | null;
   awb_code?: string | null;
   label_url?: string | null;
   manifest_url?: string | null;
+  invoice_url?: string | null;
   pickup_status?: string | null;
   created_at: string;
   updated_at?: string;
   items: OrderItemResponse[];
   address: OrderAddress & { id: number };
+}
+
+export interface InvoiceResponse {
+  order_id: number;
+  order_code: string;
+  shiprocket_order_id: string;
+  invoice_url: string;
 }
 
 export interface CashfreeSyncResult {

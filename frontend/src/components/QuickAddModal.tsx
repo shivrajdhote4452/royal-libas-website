@@ -21,8 +21,8 @@ export const QuickAddModal: React.FC = () => {
     if (activeProduct) {
       setQuantity(1);
       setBtnState('idle');
-      // Auto-select first in-stock variant
-      const firstInStock = activeProduct.variants?.find((v) => v.stock > 0) || null;
+      // Auto-select first available active variant
+      const firstInStock = activeProduct.variants?.find((v) => v.is_active && v.stock > 0) || null;
       setSelectedVariant(firstInStock);
       // Lock background scroll
       document.body.style.overflow = 'hidden';
@@ -52,7 +52,7 @@ export const QuickAddModal: React.FC = () => {
   const isSoldOut = activeProduct.total_stock === 0;
 
   const handleAddToCart = () => {
-    if (!selectedVariant || selectedVariant.stock <= 0 || btnState !== 'idle') return;
+    if (!selectedVariant || !selectedVariant.is_active || selectedVariant.stock <= 0 || btnState !== 'idle') return;
 
     setBtnState('adding');
     setTimeout(() => {
@@ -165,17 +165,18 @@ export const QuickAddModal: React.FC = () => {
 
           <div className="grid grid-cols-5 gap-2">
             {activeProduct.variants?.map((v) => {
-              const soldOut = v.stock <= 0;
+              const isUnavailable = !v.is_active || v.stock <= 0;
               const isSelected = selectedVariant?.id === v.id;
 
               return (
                 <button
                   key={v.id}
                   type="button"
-                  disabled={soldOut}
+                  disabled={isUnavailable}
                   onClick={() => setSelectedVariant(v)}
+                  title={!v.is_active ? 'Size currently unavailable' : v.stock <= 0 ? 'Sold out' : undefined}
                   className={`h-10 rounded-lg border text-center transition-all ${
-                    soldOut
+                    isUnavailable
                       ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
                       : isSelected
                       ? 'bg-[#5B111A] text-white border-[#5B111A] shadow font-bold'
@@ -219,7 +220,7 @@ export const QuickAddModal: React.FC = () => {
         <div className="space-y-2 pt-3 border-t border-[#E8DFD0]">
           <button
             type="button"
-            disabled={isSoldOut || !selectedVariant || selectedVariant.stock <= 0 || btnState === 'adding'}
+            disabled={isSoldOut || !selectedVariant || !selectedVariant.is_active || selectedVariant.stock <= 0 || btnState === 'adding'}
             onClick={handleAddToCart}
             className="w-full py-3 px-4 rounded-lg bg-[#5B111A] hover:bg-[#460C13] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-ui font-semibold text-xs sm:text-sm uppercase tracking-wider transition-all shadow flex items-center justify-center gap-2"
           >

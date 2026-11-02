@@ -97,11 +97,11 @@ def list_products(
 
     products = query.all()
 
-    # In-memory filter for size if specified (ensure variant with that size has stock > 0)
+    # In-memory filter for size if specified (ensure variant with that size is active and has stock > 0)
     if size:
         filtered = []
         for p in products:
-            matching = [v for v in p.variants if v.size.upper() == size.upper() and v.stock > 0]
+            matching = [v for v in p.variants if v.size.upper() == size.upper() and getattr(v, "is_active", True) and v.stock > 0]
             if matching:
                 filtered.append(p)
         products = filtered
@@ -408,6 +408,7 @@ def admin_add_variant(
         mrp=payload.mrp,
         selling_price=payload.selling_price,
         stock=payload.stock,
+        is_active=payload.is_active if payload.is_active is not None else True,
     )
     db.add(variant)
     db.flush()
@@ -505,6 +506,8 @@ def admin_update_variant(
         variant.colour = payload.colour
     if payload.size is not None:
         variant.size = payload.size
+    if payload.is_active is not None:
+        variant.is_active = payload.is_active
 
     db.commit()
     db.refresh(variant)

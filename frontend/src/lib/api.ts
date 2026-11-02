@@ -439,6 +439,66 @@ export async function shipOrderViaFulfillment(
   return response.json();
 }
 
+export async function generateOrderInvoice(
+  token: string,
+  orderId: number
+): Promise<{ order_id: number; order_code: string; shiprocket_order_id: string; invoice_url: string }> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/invoice`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to generate invoice from Shiprocket');
+  }
+  return response.json();
+}
+
+export async function retryOrderLabel(
+  token: string,
+  orderId: number
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/label`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to generate shipping label from Shiprocket');
+  }
+  return response.json();
+}
+
+export async function retryOrderPickup(
+  token: string,
+  orderId: number
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/pickup`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to schedule courier pickup with Shiprocket');
+  }
+  return response.json();
+}
+
+export async function retryOrderManifest(
+  token: string,
+  orderId: number
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/manifest`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to generate manifest from Shiprocket');
+  }
+  return response.json();
+}
+
 export async function refreshFulfillmentTracking(
   token: string,
   orderId: number,

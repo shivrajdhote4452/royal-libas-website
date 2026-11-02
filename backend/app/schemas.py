@@ -47,6 +47,7 @@ class ProductVariantBase(BaseModel):
     mrp: Optional[Decimal] = None
     selling_price: Decimal
     stock: int
+    is_active: bool = True
 
     @field_validator("stock")
     @classmethod
@@ -67,6 +68,7 @@ class ProductVariantUpdate(BaseModel):
     mrp: Optional[Decimal] = None
     selling_price: Optional[Decimal] = None
     stock: Optional[int] = None
+    is_active: Optional[bool] = None
 
     @field_validator("stock")
     @classmethod
@@ -85,6 +87,7 @@ class ProductVariantResponse(BaseModel):
     mrp: Optional[Decimal] = None
     selling_price: Decimal
     stock: int
+    is_active: bool = True
     is_available: bool
 
     model_config = ConfigDict(from_attributes=True)
@@ -478,6 +481,7 @@ class OrderResponse(BaseModel):
     awb_code: Optional[str] = None
     label_url: Optional[str] = None
     manifest_url: Optional[str] = None
+    invoice_url: Optional[str] = None
     pickup_status: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -617,7 +621,7 @@ class OrderStatusUpdateRequest(BaseModel):
     @classmethod
     def validate_status(cls, v: str) -> str:
         s = v.upper().strip()
-        allowed = ("PENDING", "PLACED", "CONFIRMED", "PACKED", "SHIPPED", "DELIVERED", "CANCELLED")
+        allowed = ("PENDING", "PLACED", "CONFIRMED", "PACKED", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "CANCELLED")
         if s not in allowed:
             raise ValueError(f"Invalid order status. Allowed statuses: {', '.join(allowed)}")
         return s
@@ -1637,7 +1641,15 @@ class ShipmentRecordResponse(BaseModel):
     tracking_url: Optional[str] = None
     label_url: Optional[str] = None
     manifest_url: Optional[str] = None
+    invoice_url: Optional[str] = None
     created_at: datetime
+
+
+class InvoiceResponse(BaseModel):
+    order_id: int
+    order_code: str
+    shiprocket_order_id: str
+    invoice_url: str
 
 
 class ReportSummaryResponse(BaseModel):

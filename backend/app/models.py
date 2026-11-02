@@ -133,6 +133,7 @@ class ProductVariant(Base):
     mrp = Column(Numeric(10, 2), nullable=True)
     selling_price = Column(Numeric(10, 2), nullable=False)
     stock = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
 
     __table_args__ = (
         CheckConstraint("stock >= 0", name="check_variant_stock_non_negative"),
@@ -246,6 +247,7 @@ class Order(Base):
     awb_code = Column(String(100), nullable=True)
     label_url = Column(String(500), nullable=True)
     manifest_url = Column(String(500), nullable=True)
+    invoice_url = Column(String(500), nullable=True)
     pickup_status = Column(String(50), nullable=True)
     order_token = Column(String(64), unique=True, index=True, nullable=True)  # Secure unguessable access token
     reservation_expires_at = Column(DateTime(timezone=True), nullable=True)  # Prepaid reservation expiry

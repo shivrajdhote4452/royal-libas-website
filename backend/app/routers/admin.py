@@ -1,4 +1,7 @@
 from pathlib import Path
+import logging
+
+logger = logging.getLogger("royal_libas.admin")
 from datetime import datetime, date, time, timedelta, timezone
 from decimal import Decimal
 import os
@@ -109,6 +112,7 @@ from app.schemas import (
     ContactInquiryReply,
     PaymentRecordResponse,
     ShipmentRecordResponse,
+    InvoiceResponse,
     ReportSummaryResponse,
 )
 from app.services import shiprocket
@@ -771,6 +775,7 @@ def admin_list_shipments(
                 tracking_url=o.tracking_url,
                 label_url=o.label_url,
                 manifest_url=o.manifest_url,
+                invoice_url=o.invoice_url,
                 created_at=o.created_at,
             )
         )
@@ -820,6 +825,12 @@ def admin_check_fulfillment_serviceability(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Enter the packed parcel's weight and dimensions",
+        )
+
+    if not order.address or not (order.address.line1 and order.address.line1.strip()) or not (order.address.pincode and order.address.pincode.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order shipping address is incomplete. Please ensure address line 1 and pincode are present before booking shipment.",
         )
 
     delivery_pincode = (order.address.pincode if order.address else "").strip() or "452001"
@@ -899,6 +910,12 @@ def admin_ship_order_via_shiprocket(
             detail="Enter the packed parcel's weight and dimensions",
         )
 
+    if not order.address or not (order.address.line1 and order.address.line1.strip()) or not (order.address.pincode and order.address.pincode.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order shipping address is incomplete. Please ensure address line 1 and pincode are present before booking shipment.",
+        )
+
     # Step 1: Create Order in Shiprocket
     if not order.shipment_id:
         items_payload = []
@@ -963,9 +980,12 @@ def admin_ship_order_via_shiprocket(
             pickup_res = shiprocket.generate_pickup(order.shipment_id)
             order.pickup_status = pickup_res.get("pickup_status", "SCHEDULED")
             db.commit()
-        except Exception:
-            order.pickup_status = "SCHEDULE_PENDING"
+            log_activity(db, current_admin, "PICKUP_SCHEDULED", "order", order.id, f"Pickup status: {order.pickup_status}")
+        except Exception as pk_err:
+            logger.warning(f"Initial pickup scheduling deferred for order {order.id}: {pk_err}")
+            order.pickup_status = "SCHEDULE_FAILED"
             db.commit()
+            log_activity(db, current_admin, "PICKUP_SCHEDULE_FAILED", "order", order.id, f"Pickup scheduling failed: {pk_err}")
 
     # Step 4: Generate Label
     if not order.label_url:
@@ -974,8 +994,13 @@ def admin_ship_order_via_shiprocket(
             if label_res.get("label_url"):
                 order.label_url = label_res["label_url"]
                 db.commit()
-        except Exception:
-            pass
+                log_activity(db, current_admin, "LABEL_GENERATED", "order", order.id, f"Label URL: {order.label_url}")
+            else:
+                logger.warning(f"Label URL was not returned by Shiprocket for order {order.id}")
+                log_activity(db, current_admin, "LABEL_PENDING", "order", order.id, "Label URL not yet returned by Shiprocket")
+        except Exception as lbl_err:
+            logger.warning(f"Initial label generation deferred for order {order.id}: {lbl_err}")
+            log_activity(db, current_admin, "LABEL_GENERATION_FAILED", "order", order.id, f"Label generation deferred: {lbl_err}")
 
     # Step 5: Generate Manifest
     if not order.manifest_url:
@@ -984,11 +1009,35 @@ def admin_ship_order_via_shiprocket(
             if manifest_res.get("manifest_url"):
                 order.manifest_url = manifest_res["manifest_url"]
                 db.commit()
-        except Exception:
-            pass
+                log_activity(db, current_admin, "MANIFEST_GENERATED", "order", order.id, f"Manifest URL: {order.manifest_url}")
+            else:
+                logger.warning(f"Manifest URL was not returned by Shiprocket for order {order.id}")
+                log_activity(db, current_admin, "MANIFEST_PENDING", "order", order.id, "Manifest URL not yet returned by Shiprocket")
+        except Exception as man_err:
+            logger.warning(f"Initial manifest generation deferred for order {order.id}: {man_err}")
+            log_activity(db, current_admin, "MANIFEST_GENERATION_FAILED", "order", order.id, f"Manifest generation deferred: {man_err}")
 
-    # Step 6: Mark order status as SHIPPED
-    order.status = "SHIPPED"
+    # Step 6: Generate Invoice (non-blocking)
+    if order.shiprocket_order_id and not order.invoice_url:
+        try:
+            inv_res = shiprocket.generate_invoice(order.shiprocket_order_id)
+            if inv_res.get("invoice_url"):
+                order.invoice_url = inv_res["invoice_url"]
+                db.commit()
+                log_activity(db, current_admin, "INVOICE_GENERATED", "order", order.id, f"Invoice URL: {order.invoice_url}")
+        except Exception as inv_err:
+            logger.warning(f"Initial invoice generation deferred for order {order.id}: {inv_err}")
+            log_activity(db, current_admin, "INVOICE_GENERATION_FAILED", "order", order.id, f"Invoice generation deferred: {inv_err}")
+
+    # Step 7: Accurate Order Status Transition:
+    # If pickup was successfully scheduled (or pending carrier queue), order is READY_FOR_PICKUP.
+    # If pickup scheduling failed, order remains PACKED (the box is packed, but pickup is not scheduled).
+    # NEVER mark SHIPPED here - physical shipping is confirmed only when courier tracking verifies pickup.
+    if order.status not in ("SHIPPED", "DELIVERED", "CANCELLED"):
+        if order.pickup_status and order.pickup_status not in ("SCHEDULE_FAILED", ""):
+            order.status = "READY_FOR_PICKUP"
+        else:
+            order.status = "PACKED"
     db.commit()
     db.refresh(order)
     log_activity(
@@ -997,7 +1046,7 @@ def admin_ship_order_via_shiprocket(
         "SHIPMENT_CREATED",
         "order",
         order.id,
-        f"Shiprocket AWB: {order.awb_code}, Courier: {order.courier_name}",
+        f"Shiprocket AWB: {order.awb_code}, Courier: {order.courier_name}, Pickup: {order.pickup_status}, Status: {order.status}",
     )
     return order
 
@@ -1036,6 +1085,229 @@ def admin_refresh_fulfillment_tracking(
     db.refresh(order)
     log_activity(db, current_admin, "TRACKING_REFRESHED", "order", order.id, f"Current status: {curr_status}")
     return order
+
+
+@router.post("/orders/{id}/fulfillment/invoice", response_model=InvoiceResponse)
+def admin_generate_order_invoice(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Generate, refresh, and retrieve the Shiprocket invoice PDF URL for an order."""
+    if not is_shiprocket_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shiprocket is not configured. Invoice generation requires an active Shiprocket integration.",
+        )
+
+    order = db.query(Order).filter(Order.id == id).first()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{id} not found.")
+
+    if not order.shiprocket_order_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shiprocket consignment has not been created yet. Please use 'Ship via Shiprocket' first before generating an invoice.",
+        )
+
+    inv_res = shiprocket.generate_invoice(order.shiprocket_order_id)
+    order.invoice_url = inv_res["invoice_url"]
+    db.commit()
+    db.refresh(order)
+
+    log_activity(
+        db,
+        current_admin,
+        "INVOICE_GENERATED",
+        "order",
+        order.id,
+        f"Generated invoice URL for Shiprocket order {order.shiprocket_order_id}",
+    )
+    return InvoiceResponse(
+        order_id=order.id,
+        order_code=order.order_code,
+        shiprocket_order_id=order.shiprocket_order_id,
+        invoice_url=order.invoice_url,
+    )
+
+
+@router.get("/orders/{id}/fulfillment/invoice", response_model=InvoiceResponse)
+def admin_get_order_invoice(
+    id: int,
+    regenerate: bool = Query(False, description="Force regenerate fresh invoice URL from Shiprocket"),
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve existing invoice URL or regenerate fresh URL from Shiprocket."""
+    if not is_shiprocket_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shiprocket is not configured.",
+        )
+
+    order = db.query(Order).filter(Order.id == id).first()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{id} not found.")
+
+    if not order.shiprocket_order_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shiprocket consignment has not been created yet. Please use 'Ship via Shiprocket' first before generating an invoice.",
+        )
+
+    if regenerate or not order.invoice_url:
+        inv_res = shiprocket.generate_invoice(order.shiprocket_order_id)
+        order.invoice_url = inv_res["invoice_url"]
+        db.commit()
+        db.refresh(order)
+        log_activity(
+            db,
+            current_admin,
+            "INVOICE_GENERATED",
+            "order",
+            order.id,
+            f"Refreshed invoice URL for Shiprocket order {order.shiprocket_order_id}",
+        )
+
+    return InvoiceResponse(
+        order_id=order.id,
+        order_code=order.order_code,
+        shiprocket_order_id=order.shiprocket_order_id,
+        invoice_url=order.invoice_url,
+    )
+
+
+@router.post("/orders/{id}/fulfillment/label", response_model=OrderResponse)
+def admin_retry_order_label(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retry generating or retrieving the shipping label PDF from Shiprocket."""
+    if not is_shiprocket_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shiprocket is not configured.",
+        )
+
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.items), joinedload(Order.address))
+        .filter(Order.id == id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{id} not found.")
+
+    if not order.shipment_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shipment has not been created yet. Please use 'Ship via Shiprocket' first.",
+        )
+
+    label_res = shiprocket.generate_label(order.shipment_id)
+    if label_res.get("label_url"):
+        order.label_url = label_res["label_url"]
+        db.commit()
+        db.refresh(order)
+        log_activity(db, current_admin, "LABEL_GENERATED", "order", order.id, f"Generated label URL: {order.label_url}")
+        return order
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Shiprocket did not return a label URL. Please try again in a few moments.",
+        )
+
+
+@router.post("/orders/{id}/fulfillment/pickup", response_model=OrderResponse)
+def admin_retry_order_pickup(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retry scheduling courier pickup for an existing Shiprocket shipment."""
+    if not is_shiprocket_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shiprocket is not configured.",
+        )
+
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.items), joinedload(Order.address))
+        .filter(Order.id == id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{id} not found.")
+
+    if not order.shipment_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shipment has not been created yet in Shiprocket. Please book shipment first.",
+        )
+
+    try:
+        pickup_res = shiprocket.generate_pickup(order.shipment_id)
+        order.pickup_status = pickup_res.get("pickup_status", "SCHEDULED")
+        if order.status not in ("SHIPPED", "DELIVERED", "CANCELLED"):
+            order.status = "READY_FOR_PICKUP"
+        db.commit()
+        db.refresh(order)
+        log_activity(db, current_admin, "PICKUP_SCHEDULED", "order", order.id, f"Pickup status: {order.pickup_status}, Status: {order.status}")
+        return order
+    except Exception as e:
+        order.pickup_status = "SCHEDULE_FAILED"
+        if order.status not in ("SHIPPED", "DELIVERED", "CANCELLED"):
+            order.status = "PACKED"
+        db.commit()
+        log_activity(db, current_admin, "PICKUP_SCHEDULE_FAILED", "order", order.id, f"Retry pickup failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Pickup scheduling failed: {str(e)}",
+        )
+
+
+@router.post("/orders/{id}/fulfillment/manifest", response_model=OrderResponse)
+def admin_retry_order_manifest(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Generate or retry shipping manifest PDF from Shiprocket."""
+    if not is_shiprocket_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shiprocket is not configured.",
+        )
+
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.items), joinedload(Order.address))
+        .filter(Order.id == id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{id} not found.")
+
+    if not order.shipment_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shipment has not been created yet in Shiprocket. Please book shipment first.",
+        )
+
+    manifest_res = shiprocket.generate_manifest(order.shipment_id)
+    if manifest_res.get("manifest_url"):
+        order.manifest_url = manifest_res["manifest_url"]
+        db.commit()
+        db.refresh(order)
+        log_activity(db, current_admin, "MANIFEST_GENERATED", "order", order.id, f"Manifest URL: {order.manifest_url}")
+        return order
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Shiprocket did not return a manifest URL. Please try again in a few moments.",
+        )
 
 
 # ==========================================
