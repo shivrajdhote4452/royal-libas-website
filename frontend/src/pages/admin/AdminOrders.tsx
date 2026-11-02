@@ -193,6 +193,7 @@ export const AdminOrders: React.FC = () => {
     { id: 'PLACED', label: 'Placed (New)' },
     { id: 'CONFIRMED', label: 'Confirmed' },
     { id: 'PACKED', label: 'Packed' },
+    { id: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
     { id: 'SHIPPED', label: 'Shipped' },
     { id: 'DELIVERED', label: 'Delivered' },
     { id: 'CANCELLED', label: 'Cancelled' },
@@ -421,6 +422,8 @@ export const AdminOrders: React.FC = () => {
                           ? 'bg-emerald-100 text-emerald-900'
                           : o.status === 'SHIPPED'
                           ? 'bg-blue-100 text-blue-900'
+                          : o.status === 'READY_FOR_PICKUP'
+                          ? 'bg-purple-100 text-purple-900'
                           : o.status === 'CANCELLED'
                           ? 'bg-red-100 text-red-900'
                           : 'bg-gray-100 text-gray-800'

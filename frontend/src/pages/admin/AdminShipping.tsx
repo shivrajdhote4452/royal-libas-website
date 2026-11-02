@@ -408,7 +408,13 @@ export const AdminShipping: React.FC = () => {
                               AWB: <span className="font-bold text-gray-900">{s.awb_code}</span>
                             </div>
                             {s.pickup_status && (
-                              <span className="inline-block px-1.5 py-0.5 mt-1 bg-gray-100 text-[9px] rounded font-medium text-gray-600">
+                              <span
+                                className={`inline-block px-1.5 py-0.5 mt-1 text-[9px] rounded font-medium ${
+                                  s.pickup_status === 'SCHEDULE_FAILED'
+                                    ? 'bg-red-100 text-red-800 font-bold'
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
                                 Pickup: {s.pickup_status}
                               </span>
                             )}
@@ -426,12 +432,14 @@ export const AdminShipping: React.FC = () => {
                               ? 'bg-emerald-100 text-emerald-800'
                               : s.status === 'SHIPPED'
                               ? 'bg-sky-100 text-sky-800'
+                              : s.status === 'READY_FOR_PICKUP'
+                              ? 'bg-purple-100 text-purple-800'
                               : s.status === 'PACKED'
                               ? 'bg-indigo-100 text-indigo-800'
                               : 'bg-amber-100 text-amber-800'
                           }`}
                         >
-                          {s.status}
+                          {s.status === 'READY_FOR_PICKUP' ? 'READY FOR PICKUP' : s.status}
                         </span>
                       </td>
 

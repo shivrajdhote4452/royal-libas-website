@@ -469,6 +469,36 @@ export async function retryOrderLabel(
   return response.json();
 }
 
+export async function retryOrderPickup(
+  token: string,
+  orderId: number
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/pickup`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to schedule courier pickup with Shiprocket');
+  }
+  return response.json();
+}
+
+export async function retryOrderManifest(
+  token: string,
+  orderId: number
+): Promise<OrderResponse> {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/fulfillment/manifest`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to generate manifest from Shiprocket');
+  }
+  return response.json();
+}
+
 export async function refreshFulfillmentTracking(
   token: string,
   orderId: number,

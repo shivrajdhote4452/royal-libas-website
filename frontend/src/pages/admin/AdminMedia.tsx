@@ -242,7 +242,7 @@ export const AdminMedia: React.FC = () => {
   // currentFolder: null = All Media; "" = Root / Uncategorized; "path/to/folder" = specific folder
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-    new Set(['Photos for royal libas', 'Heavy Dress', 'royal_libas', 'samples'])
+    new Set(['Photos for royal libas', 'royal_libas', 'samples'])
   );
   const [folderSearchTerm, setFolderSearchTerm] = useState('');
 

@@ -27,6 +27,8 @@ import {
   refreshFulfillmentTracking,
   generateOrderInvoice,
   retryOrderLabel,
+  retryOrderPickup,
+  retryOrderManifest,
   adminSyncPayment,
   adminCollectCOD,
   adminUpdateOrderNotes,
@@ -46,6 +48,8 @@ export const AdminOrderDetail: React.FC = () => {
   const [isRefreshingTracking, setIsRefreshingTracking] = useState(false);
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const [isRetryingLabel, setIsRetryingLabel] = useState(false);
+  const [isRetryingPickup, setIsRetryingPickup] = useState(false);
+  const [isRetryingManifest, setIsRetryingManifest] = useState(false);
 
   // Fulfillment update state (manual fallback)
   const [isUpdating, setIsUpdating] = useState(false);
@@ -149,6 +153,41 @@ export const AdminOrderDetail: React.FC = () => {
       setActionError(err.message || "Failed to generate shipping label.");
     } finally {
       setIsRetryingLabel(false);
+    }
+  };
+
+  const handleRetryPickup = async () => {
+    if (!order) return;
+    setIsRetryingPickup(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await retryOrderPickup(token, order.id);
+      setOrder(updated);
+      setActionSuccess("Courier pickup scheduled successfully.");
+    } catch (err: any) {
+      setActionError(err.message || "Failed to schedule courier pickup.");
+    } finally {
+      setIsRetryingPickup(false);
+    }
+  };
+
+  const handleRetryManifest = async () => {
+    if (!order) return;
+    setIsRetryingManifest(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const updated = await retryOrderManifest(token, order.id);
+      setOrder(updated);
+      setActionSuccess("Shipping manifest generated successfully.");
+      if (updated.manifest_url) {
+        window.open(updated.manifest_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: any) {
+      setActionError(err.message || "Failed to generate shipping manifest.");
+    } finally {
+      setIsRetryingManifest(false);
     }
   };
 
@@ -267,7 +306,7 @@ export const AdminOrderDetail: React.FC = () => {
   )}`;
 
   const currentStatus = order.status.toUpperCase();
-  const steps = ['PLACED', 'PACKED', 'SHIPPED', 'DELIVERED'];
+  const steps = ['PLACED', 'PACKED', 'READY_FOR_PICKUP', 'SHIPPED', 'DELIVERED'];
   const stepIndex = steps.indexOf(currentStatus);
   const isCancelled = currentStatus === 'CANCELLED';
   const isPaid = order.payment_status === 'PAID';
@@ -391,7 +430,7 @@ export const AdminOrderDetail: React.FC = () => {
                         : 'text-gray-400'
                     }`}
                   >
-                    {st === 'PLACED' ? 'Received' : st}
+                    {st === 'PLACED' ? 'Received' : st === 'READY_FOR_PICKUP' ? 'Ready for Pickup' : st}
                   </span>
                 </div>
               );
@@ -411,6 +450,19 @@ export const AdminOrderDetail: React.FC = () => {
               >
                 <Package className="w-4 h-4" />
                 <span>Mark Packed</span>
+              </button>
+            )}
+
+            {currentStatus === 'READY_FOR_PICKUP' && (
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => handleUpdateStatus('SHIPPED')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-semibold rounded shadow transition-colors"
+                title="Mark order as handed over to courier / in transit"
+              >
+                <Truck className="w-4 h-4 text-[#B58A3C]" />
+                <span>Mark Handed Over (Shipped)</span>
               </button>
             )}
 
@@ -552,9 +604,26 @@ export const AdminOrderDetail: React.FC = () => {
                   </span>
                 )}
                 {order.pickup_status && (
-                  <span className="text-[11px] text-indigo-800 block mt-0.5">
-                    Pickup Status: <strong>{order.pickup_status}</strong>
-                  </span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[11px] text-indigo-900">
+                      Pickup Status:{' '}
+                      <strong className={order.pickup_status === 'SCHEDULE_FAILED' ? 'text-red-700 bg-red-100 px-1.5 py-0.5 rounded' : 'font-semibold'}>
+                        {order.pickup_status}
+                      </strong>
+                    </span>
+                    {order.pickup_status === 'SCHEDULE_FAILED' && (
+                      <button
+                        type="button"
+                        disabled={isRetryingPickup}
+                        onClick={handleRetryPickup}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-800 text-[10px] font-bold rounded transition-colors"
+                        title="Retry scheduling courier pickup"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRetryingPickup ? 'animate-spin' : ''}`} />
+                        <span>Retry Pickup</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -626,7 +695,7 @@ export const AdminOrderDetail: React.FC = () => {
                 ) : null}
 
                 {/* Manifest */}
-                {order.manifest_url && (
+                {order.manifest_url ? (
                   <a
                     href={order.manifest_url}
                     target="_blank"
@@ -636,7 +705,18 @@ export const AdminOrderDetail: React.FC = () => {
                     <FileText className="w-3.5 h-3.5" />
                     <span>Manifest (PDF)</span>
                   </a>
-                )}
+                ) : order.awb_code ? (
+                  <button
+                    type="button"
+                    disabled={isRetryingManifest}
+                    onClick={handleRetryManifest}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-300 text-xs font-semibold text-indigo-900 rounded hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                    title="Generate and print shipping manifest"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRetryingManifest ? 'animate-spin' : ''}`} />
+                    <span>Generate Manifest</span>
+                  </button>
+                ) : null}
               </div>
             )}
           </div>

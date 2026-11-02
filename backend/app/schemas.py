@@ -621,7 +621,7 @@ class OrderStatusUpdateRequest(BaseModel):
     @classmethod
     def validate_status(cls, v: str) -> str:
         s = v.upper().strip()
-        allowed = ("PENDING", "PLACED", "CONFIRMED", "PACKED", "SHIPPED", "DELIVERED", "CANCELLED")
+        allowed = ("PENDING", "PLACED", "CONFIRMED", "PACKED", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "CANCELLED")
         if s not in allowed:
             raise ValueError(f"Invalid order status. Allowed statuses: {', '.join(allowed)}")
         return s

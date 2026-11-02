@@ -60,15 +60,17 @@ class TestShiprocketInvoice(unittest.TestCase):
         # Create isolated test admin
         db = SessionLocal()
         try:
-            cls.admin = Admin(
-                email="test_shiprocket_admin@test.local",
-                password_hash=hash_password("SafeTestPassword123!"),
-                role="OWNER",
-                is_active=True,
-            )
-            db.add(cls.admin)
-            db.commit()
-            db.refresh(cls.admin)
+            cls.admin = db.query(Admin).filter(Admin.email == "test_shiprocket_admin@test.local").first()
+            if not cls.admin:
+                cls.admin = Admin(
+                    email="test_shiprocket_admin@test.local",
+                    password_hash=hash_password("SafeTestPassword123!"),
+                    role="OWNER",
+                    is_active=True,
+                )
+                db.add(cls.admin)
+                db.commit()
+                db.refresh(cls.admin)
             cls.admin_token = create_access_token(
                 {"sub": str(cls.admin.id), "email": cls.admin.email, "role": cls.admin.role}
             )
@@ -82,6 +84,10 @@ class TestShiprocketInvoice(unittest.TestCase):
 
     def setUp(self):
         self.db = SessionLocal()
+        self.patch_router_cfg = patch("app.routers.admin.is_shiprocket_configured", return_value=True)
+        self.patch_svc_cfg = patch("app.services.shiprocket.is_shiprocket_configured", return_value=True)
+        self.patch_router_cfg.start()
+        self.patch_svc_cfg.start()
         # Clean existing test orders
         self.db.query(OrderItem).delete()
         self.db.query(Address).delete()
@@ -89,14 +95,26 @@ class TestShiprocketInvoice(unittest.TestCase):
         self.db.commit()
 
     def tearDown(self):
+        self.patch_router_cfg.stop()
+        self.patch_svc_cfg.stop()
         self.db.close()
 
-    def _create_sample_order(self, shiprocket_order_id=None, shipment_id=None, awb_code=None, label_url=None, invoice_url=None):
+    def _create_sample_order(
+        self,
+        shiprocket_order_id=None,
+        shipment_id=None,
+        awb_code=None,
+        label_url=None,
+        invoice_url=None,
+        status="PLACED",
+        pickup_status=None,
+        manifest_url=None,
+    ):
         order = Order(
             order_code=f"RL-TEST-{os.urandom(3).hex().upper()}",
             customer_name="Pooja Sharma",
             phone="9876543210",
-            status="PLACED",
+            status=status,
             payment_method="PREPAID",
             payment_status="PAID",
             subtotal=Decimal("4999.00"),
@@ -108,6 +126,8 @@ class TestShiprocketInvoice(unittest.TestCase):
             awb_code=awb_code,
             label_url=label_url,
             invoice_url=invoice_url,
+            pickup_status=pickup_status,
+            manifest_url=manifest_url,
         )
         self.db.add(order)
         self.db.flush()
@@ -333,6 +353,113 @@ class TestShiprocketInvoice(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("shipping address is incomplete", resp.json()["detail"])
+
+
+    # -------------------------------------------------------------
+    # 7. Status Separation: READY_FOR_PICKUP vs SHIPPED
+    # -------------------------------------------------------------
+    @patch("app.services.shiprocket.is_shiprocket_configured", return_value=True)
+    @patch("app.services.shiprocket.create_order")
+    @patch("app.services.shiprocket.assign_awb")
+    @patch("app.services.shiprocket.generate_pickup")
+    @patch("app.services.shiprocket.generate_label")
+    @patch("app.services.shiprocket.generate_manifest")
+    @patch("app.services.shiprocket.generate_invoice")
+    def test_shipment_booking_sets_ready_for_pickup_not_shipped(
+        self, mock_inv, mock_man, mock_lab, mock_pick, mock_awb, mock_create, mock_conf
+    ):
+        """Initial shipment creation transitions order to READY_FOR_PICKUP (not SHIPPED)."""
+        order = self._create_sample_order()
+        mock_create.return_value = {"shiprocket_order_id": 998811, "shipment_id": "SH-7788"}
+        mock_awb.return_value = {"awb_code": "AWB-9999", "courier_name": "Delhivery Express"}
+        mock_pick.return_value = {"pickup_status": "SCHEDULED"}
+        mock_lab.return_value = {"label_url": "https://shiprocket.co/label/9999.pdf"}
+        mock_man.return_value = {"manifest_url": "https://shiprocket.co/manifest/9999.pdf"}
+        mock_inv.return_value = {"invoice_url": "https://s3.amazonaws.com/inv.pdf", "is_invoice_created": True}
+
+        resp = self.client.post(
+            f"/admin/orders/{order.id}/fulfillment/ship",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+            json={"length": 25, "breadth": 20, "height": 5, "weight": 0.5},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["status"], "READY_FOR_PICKUP")
+        self.assertNotEqual(data["status"], "SHIPPED")
+
+        # Verify in DB
+        self.db.expire_all()
+        db_order = self.db.query(Order).filter(Order.id == order.id).first()
+        self.assertEqual(db_order.status, "READY_FOR_PICKUP")
+        self.assertEqual(db_order.pickup_status, "SCHEDULED")
+        self.assertEqual(db_order.awb_code, "AWB-9999")
+
+    # -------------------------------------------------------------
+    # 8. Tracking Refresh Transitions READY_FOR_PICKUP to SHIPPED
+    # -------------------------------------------------------------
+    @patch("app.services.shiprocket.is_shiprocket_configured", return_value=True)
+    @patch("app.services.shiprocket.track")
+    def test_tracking_refresh_advances_ready_for_pickup_to_shipped(
+        self, mock_track, mock_conf
+    ):
+        """Tracking showing courier has picked up / in transit advances status to SHIPPED."""
+        order = self._create_sample_order(status="READY_FOR_PICKUP", awb_code="AWB-7777")
+        mock_track.return_value = {"current_status": "IN TRANSIT"}
+
+        resp = self.client.post(
+            f"/admin/orders/{order.id}/fulfillment/refresh-tracking",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["status"], "SHIPPED")
+
+        # Verify in DB
+        self.db.expire_all()
+        db_order = self.db.query(Order).filter(Order.id == order.id).first()
+        self.assertEqual(db_order.status, "SHIPPED")
+
+    # -------------------------------------------------------------
+    # 9. Pickup Failure & Retry Action
+    # -------------------------------------------------------------
+    @patch("app.services.shiprocket.is_shiprocket_configured", return_value=True)
+    @patch("app.services.shiprocket.generate_pickup")
+    def test_pickup_retry_action_success(self, mock_pickup, mock_conf):
+        """Retrying pickup scheduling updates pickup_status to SCHEDULED."""
+        order = self._create_sample_order(shipment_id="SH-5555", pickup_status="SCHEDULE_FAILED")
+        mock_pickup.return_value = {"pickup_status": "SCHEDULED"}
+
+        resp = self.client.post(
+            f"/admin/orders/{order.id}/fulfillment/pickup",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["pickup_status"], "SCHEDULED")
+
+        self.db.expire_all()
+        db_order = self.db.query(Order).filter(Order.id == order.id).first()
+        self.assertEqual(db_order.pickup_status, "SCHEDULED")
+
+    # -------------------------------------------------------------
+    # 10. Manifest Retry Action
+    # -------------------------------------------------------------
+    @patch("app.services.shiprocket.is_shiprocket_configured", return_value=True)
+    @patch("app.services.shiprocket.generate_manifest")
+    def test_manifest_retry_action_success(self, mock_manifest, mock_conf):
+        """Generating or retrying manifest updates manifest_url on order."""
+        order = self._create_sample_order(shipment_id="SH-5555")
+        mock_manifest.return_value = {"manifest_url": "https://shiprocket.co/manifest/5555.pdf"}
+
+        resp = self.client.post(
+            f"/admin/orders/{order.id}/fulfillment/manifest",
+            headers={"Authorization": f"Bearer {self.admin_token}"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["manifest_url"], "https://shiprocket.co/manifest/5555.pdf")
+
+        self.db.expire_all()
+        db_order = self.db.query(Order).filter(Order.id == order.id).first()
+        self.assertEqual(db_order.manifest_url, "https://shiprocket.co/manifest/5555.pdf")
 
 
 if __name__ == "__main__":

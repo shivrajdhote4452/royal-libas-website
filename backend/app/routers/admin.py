@@ -977,8 +977,9 @@ def admin_ship_order_via_shiprocket(
             pickup_res = shiprocket.generate_pickup(order.shipment_id)
             order.pickup_status = pickup_res.get("pickup_status", "SCHEDULED")
             db.commit()
-        except Exception:
-            order.pickup_status = "SCHEDULE_PENDING"
+        except Exception as pk_err:
+            logger.warning(f"Initial pickup scheduling deferred for order {order.id}: {pk_err}")
+            order.pickup_status = "SCHEDULE_FAILED"
             db.commit()
 
     # Step 4: Generate Label
@@ -1011,8 +1012,9 @@ def admin_ship_order_via_shiprocket(
         except Exception as inv_err:
             logger.warning(f"Initial invoice generation deferred for order {order.id}: {inv_err}")
 
-    # Step 7: Mark order status as SHIPPED
-    order.status = "SHIPPED"
+    # Step 7: Mark order status as READY_FOR_PICKUP (not physically SHIPPED until courier pickup)
+    if order.status not in ("SHIPPED", "DELIVERED", "CANCELLED"):
+        order.status = "READY_FOR_PICKUP"
     db.commit()
     db.refresh(order)
     log_activity(
@@ -1021,7 +1023,7 @@ def admin_ship_order_via_shiprocket(
         "SHIPMENT_CREATED",
         "order",
         order.id,
-        f"Shiprocket AWB: {order.awb_code}, Courier: {order.courier_name}",
+        f"Shiprocket AWB: {order.awb_code}, Courier: {order.courier_name}, Status: {order.status}",
     )
     return order
 
@@ -1191,6 +1193,92 @@ def admin_retry_order_label(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Shiprocket did not return a label URL. Please try again in a few moments.",
+        )
+
+
+@router.post("/orders/{id}/fulfillment/pickup", response_model=OrderResponse)
+def admin_retry_order_pickup(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retry scheduling courier pickup for an existing Shiprocket shipment."""
+    if not is_shiprocket_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shiprocket is not configured.",
+        )
+
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.items), joinedload(Order.address))
+        .filter(Order.id == id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{id} not found.")
+
+    if not order.shipment_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shipment has not been created yet in Shiprocket. Please book shipment first.",
+        )
+
+    try:
+        pickup_res = shiprocket.generate_pickup(order.shipment_id)
+        order.pickup_status = pickup_res.get("pickup_status", "SCHEDULED")
+        db.commit()
+        db.refresh(order)
+        log_activity(db, current_admin, "PICKUP_SCHEDULED", "order", order.id, f"Pickup status: {order.pickup_status}")
+        return order
+    except Exception as e:
+        order.pickup_status = "SCHEDULE_FAILED"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Pickup scheduling failed: {str(e)}",
+        )
+
+
+@router.post("/orders/{id}/fulfillment/manifest", response_model=OrderResponse)
+def admin_retry_order_manifest(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Generate or retry shipping manifest PDF from Shiprocket."""
+    if not is_shiprocket_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Shiprocket is not configured.",
+        )
+
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.items), joinedload(Order.address))
+        .filter(Order.id == id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Order #{id} not found.")
+
+    if not order.shipment_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shipment has not been created yet in Shiprocket. Please book shipment first.",
+        )
+
+    manifest_res = shiprocket.generate_manifest(order.shipment_id)
+    if manifest_res.get("manifest_url"):
+        order.manifest_url = manifest_res["manifest_url"]
+        db.commit()
+        db.refresh(order)
+        log_activity(db, current_admin, "MANIFEST_GENERATED", "order", order.id, f"Manifest URL: {order.manifest_url}")
+        return order
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Shiprocket did not return a manifest URL. Please try again in a few moments.",
         )
 
 
