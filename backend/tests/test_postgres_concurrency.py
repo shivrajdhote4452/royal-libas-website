@@ -95,6 +95,12 @@ class TestPostgresConcurrency(unittest.TestCase):
 
             db = cls.SessionLocal()
             try:
+                # Clean up any residual test records from prior runs
+                db.query(ProductVariant).delete()
+                db.query(Product).delete()
+                db.query(Admin).filter(Admin.email == "pg_owner@royallibas.com").delete()
+                db.commit()
+
                 owner = Admin(
                     email="pg_owner@royallibas.com",
                     name="PG Store Owner",

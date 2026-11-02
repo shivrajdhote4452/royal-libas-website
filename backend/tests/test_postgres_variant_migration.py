@@ -127,6 +127,9 @@ class TestPostgresVariantMigration(unittest.TestCase):
     def tearDownClass(cls):
         if hasattr(cls, "engine"):
             try:
+                with cls.engine.begin() as conn:
+                    conn.execute(text("DELETE FROM product_variants;"))
+                    conn.execute(text("DELETE FROM products;"))
                 # Ensure tables and migrations are fully restored for any subsequent test suites
                 Base.metadata.create_all(bind=cls.engine)
                 run_migrations(cls.engine)
@@ -150,18 +153,25 @@ class TestPostgresVariantMigration(unittest.TestCase):
             conn.execute(text("ALTER TABLE product_variants DROP COLUMN IF EXISTS is_active;"))
 
             # Seed pre-migration products and variants without is_active
-            conn.execute(text("""
-                INSERT INTO products (id, name, slug, category, subcategory, status, is_bestseller, is_active)
-                VALUES (1, 'Test Anarkali Set', 'test-anarkali-set', 'SUIT SET', 'Three Pieces', 'PUBLISHED', FALSE, TRUE);
-            """))
+            res = conn.execute(text("""
+                INSERT INTO products (name, slug, category, subcategory, status, is_bestseller, is_active)
+                VALUES ('Test Anarkali Set', 'test-anarkali-set', 'SUIT SET', 'Three Pieces', 'PUBLISHED', FALSE, TRUE)
+                RETURNING id;
+            """)).fetchone()
+            self.product_id = res[0]
 
             conn.execute(text("""
-                INSERT INTO product_variants (id, product_id, size, colour, sku, selling_price, stock)
+                INSERT INTO product_variants (product_id, size, colour, sku, selling_price, stock)
                 VALUES
-                    (10, 1, 'S', 'Ruby Red', 'RL-TEST-S', 3499.00, 12),
-                    (11, 1, 'M', 'Ruby Red', 'RL-TEST-M', 3499.00, 8),
-                    (12, 1, 'L', 'Ruby Red', 'RL-TEST-L', 3499.00, 0);
-            """))
+                    (:pid, 'S', 'Ruby Red', 'RL-TEST-S', 3499.00, 12),
+                    (:pid, 'M', 'Ruby Red', 'RL-TEST-M', 3499.00, 8),
+                    (:pid, 'L', 'Ruby Red', 'RL-TEST-L', 3499.00, 0);
+            """), {"pid": self.product_id})
+
+    def tearDown(self):
+        with self.engine.begin() as conn:
+            conn.execute(text("DELETE FROM product_variants;"))
+            conn.execute(text("DELETE FROM products;"))
 
     def test_01_migration_adds_boolean_column_and_enables_existing_variants(self):
         """Verify run_migrations adds is_active as BOOLEAN without integer coercion error and defaults existing rows to TRUE."""
@@ -185,33 +195,30 @@ class TestPostgresVariantMigration(unittest.TestCase):
             rows = conn.execute(text("""
                 SELECT id, size, sku, selling_price, stock, is_active
                 FROM product_variants
-                ORDER BY id ASC;
+                ORDER BY sku ASC;
             """)).mappings().all()
 
         self.assertEqual(len(rows), 3)
 
-        # Variant S: stock=12, price=3499.00, is_active=True
-        self.assertEqual(rows[0]["id"], 10)
-        self.assertEqual(rows[0]["size"], "S")
-        self.assertEqual(rows[0]["sku"], "RL-TEST-S")
+        # Variant L: stock=0, price=3499.00, is_active=True
+        self.assertEqual(rows[0]["size"], "L")
+        self.assertEqual(rows[0]["sku"], "RL-TEST-L")
         self.assertEqual(Decimal(str(rows[0]["selling_price"])), Decimal("3499.00"))
-        self.assertEqual(rows[0]["stock"], 12)
+        self.assertEqual(rows[0]["stock"], 0)
         self.assertIs(rows[0]["is_active"], True)
 
         # Variant M: stock=8, price=3499.00, is_active=True
-        self.assertEqual(rows[1]["id"], 11)
         self.assertEqual(rows[1]["size"], "M")
         self.assertEqual(rows[1]["sku"], "RL-TEST-M")
         self.assertEqual(Decimal(str(rows[1]["selling_price"])), Decimal("3499.00"))
         self.assertEqual(rows[1]["stock"], 8)
         self.assertIs(rows[1]["is_active"], True)
 
-        # Variant L: stock=0, price=3499.00, is_active=True
-        self.assertEqual(rows[2]["id"], 12)
-        self.assertEqual(rows[2]["size"], "L")
-        self.assertEqual(rows[2]["sku"], "RL-TEST-L")
+        # Variant S: stock=12, price=3499.00, is_active=True
+        self.assertEqual(rows[2]["size"], "S")
+        self.assertEqual(rows[2]["sku"], "RL-TEST-S")
         self.assertEqual(Decimal(str(rows[2]["selling_price"])), Decimal("3499.00"))
-        self.assertEqual(rows[2]["stock"], 0)
+        self.assertEqual(rows[2]["stock"], 12)
         self.assertIs(rows[2]["is_active"], True)
 
     def test_02_migration_is_idempotent_and_preserves_admin_toggles(self):
@@ -221,7 +228,7 @@ class TestPostgresVariantMigration(unittest.TestCase):
 
         # Simulate admin toggling size 'S' to OFF (is_active = False)
         with self.engine.begin() as conn:
-            conn.execute(text("UPDATE product_variants SET is_active = FALSE WHERE id = 10;"))
+            conn.execute(text("UPDATE product_variants SET is_active = FALSE WHERE sku = 'RL-TEST-S';"))
 
         # Re-run migration (as happens on next deploy/server restart)
         run_migrations(self.engine)
@@ -229,12 +236,13 @@ class TestPostgresVariantMigration(unittest.TestCase):
         # Verify: S is still False (not overwritten), M and L are still True
         with self.engine.connect() as conn:
             rows = conn.execute(text("""
-                SELECT id, is_active FROM product_variants ORDER BY id ASC;
+                SELECT sku, is_active FROM product_variants ORDER BY sku ASC;
             """)).mappings().all()
 
-        self.assertIs(rows[0]["is_active"], False)
-        self.assertIs(rows[1]["is_active"], True)
-        self.assertIs(rows[2]["is_active"], True)
+        by_sku = {r["sku"]: r["is_active"] for r in rows}
+        self.assertIs(by_sku["RL-TEST-S"], False)
+        self.assertIs(by_sku["RL-TEST-M"], True)
+        self.assertIs(by_sku["RL-TEST-L"], True)
 
     def test_03_null_variant_is_active_repaired_to_true(self):
         """Verify that any pre-existing or imported rows with NULL is_active are safely updated to True."""
@@ -244,15 +252,15 @@ class TestPostgresVariantMigration(unittest.TestCase):
         # Insert a row with NULL is_active (e.g. via raw insert or partial seed)
         with self.engine.begin() as conn:
             conn.execute(text("""
-                INSERT INTO product_variants (id, product_id, size, colour, sku, selling_price, stock, is_active)
-                VALUES (13, 1, 'XL', 'Ruby Red', 'RL-TEST-XL', 3799.00, 5, NULL);
-            """))
+                INSERT INTO product_variants (product_id, size, colour, sku, selling_price, stock, is_active)
+                VALUES (:pid, 'XL', 'Ruby Red', 'RL-TEST-XL', 3799.00, 5, NULL);
+            """), {"pid": self.product_id})
 
         # Run migration - should repair NULL to True without type error
         run_migrations(self.engine)
 
         with self.engine.connect() as conn:
-            row = conn.execute(text("SELECT is_active FROM product_variants WHERE id = 13;")).mappings().first()
+            row = conn.execute(text("SELECT is_active FROM product_variants WHERE sku = 'RL-TEST-XL';")).mappings().first()
 
         self.assertIsNotNone(row)
         self.assertIs(row["is_active"], True)
