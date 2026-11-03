@@ -333,6 +333,26 @@ class TestSeoSitemap(unittest.TestCase):
         self.assertEqual(robots_resp.status_code, 200)
         self.assertIn("text/plain", robots_resp.headers["content-type"])
 
+    def test_12_favicon_ico_endpoint(self):
+        """Verify /favicon.ico and /api/favicon.ico return valid binary image/x-icon with proper caching."""
+        resp = self.client.get("/favicon.ico")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("image/x-icon", resp.headers["content-type"])
+        self.assertTrue(len(resp.content) > 0)
+        # Check standard Windows ICO magic header bytes (00 00 01 00)
+        self.assertEqual(resp.content[:4], b"\x00\x00\x01\x00")
+
+        # Verify HEAD request
+        head_resp = self.client.head("/favicon.ico")
+        self.assertEqual(head_resp.status_code, 200)
+        self.assertIn("image/x-icon", head_resp.headers["content-type"])
+
+        # Verify API alias
+        api_resp = self.client.get("/api/favicon.ico")
+        self.assertEqual(api_resp.status_code, 200)
+        self.assertIn("image/x-icon", api_resp.headers["content-type"])
+        self.assertEqual(api_resp.content[:4], b"\x00\x00\x01\x00")
+
 
 if __name__ == "__main__":
     unittest.main()

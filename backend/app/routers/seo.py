@@ -17,6 +17,7 @@ Serves:
 """
 
 import logging
+from pathlib import Path
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -180,3 +181,32 @@ def get_robots():
             "Cache-Control": "public, max-age=86400",
         },
     )
+
+
+FAVICON_STATIC_PATH = Path(__file__).resolve().parent.parent / "static" / "favicon.ico"
+FAVICON_PUBLIC_PATH = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "public" / "favicon.ico"
+
+
+@router.api_route("/favicon.ico", methods=["GET", "HEAD"])
+@router.api_route("/api/favicon.ico", methods=["GET", "HEAD"])
+def get_favicon_ico():
+    """Serve binary favicon.ico with appropriate caching and MIME type."""
+    target_path = None
+    if FAVICON_STATIC_PATH.is_file():
+        target_path = FAVICON_STATIC_PATH
+    elif FAVICON_PUBLIC_PATH.is_file():
+        target_path = FAVICON_PUBLIC_PATH
+
+    if target_path:
+        with open(target_path, "rb") as f:
+            data = f.read()
+        return Response(
+            content=data,
+            media_type="image/x-icon",
+            headers={
+                "Content-Type": "image/x-icon",
+                "Cache-Control": "public, max-age=86400",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+    return Response(status_code=404)
