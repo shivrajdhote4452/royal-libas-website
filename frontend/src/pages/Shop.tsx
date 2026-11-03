@@ -39,7 +39,7 @@ const COLOR_HEX_MAP: Record<string, string> = {
 export const MAIN_CATEGORIES_CONFIG = [
   {
     name: 'TWO PIECES',
-    subcategories: ['Co-ord Sets', 'Kurta Pant'],
+    subcategories: ['Co-ord Sets'],
   },
   {
     name: 'SUIT SET',
@@ -48,6 +48,10 @@ export const MAIN_CATEGORIES_CONFIG = [
   {
     name: 'HEAVY DRESS',
     subcategories: ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
+  },
+  {
+    name: 'UNSTITCHED MATERIAL',
+    subcategories: ['Unstitched Suits', 'Dress Material'],
   },
 ];
 

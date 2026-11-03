@@ -25,10 +25,11 @@ export const Header: React.FC = () => {
   const [twoPiecesAccordionOpen, setTwoPiecesAccordionOpen] = useState(false);
   const [suitSetAccordionOpen, setSuitSetAccordionOpen] = useState(false);
   const [heavyDressAccordionOpen, setHeavyDressAccordionOpen] = useState(false);
-  const [activeDropdown, setActiveDropdown] = useState<'two_pieces' | 'suit_set' | 'heavy_dress' | null>(null);
+  const [unstitchedMaterialAccordionOpen, setUnstitchedMaterialAccordionOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<'two_pieces' | 'suit_set' | 'heavy_dress' | 'unstitched_material' | null>(null);
   const closeDropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleDropdownEnter = (type: 'two_pieces' | 'suit_set' | 'heavy_dress') => {
+  const handleDropdownEnter = (type: 'two_pieces' | 'suit_set' | 'heavy_dress' | 'unstitched_material') => {
     if (closeDropdownTimerRef.current) {
       clearTimeout(closeDropdownTimerRef.current);
       closeDropdownTimerRef.current = null;
@@ -203,13 +204,6 @@ export const Header: React.FC = () => {
                     >
                       <span>Co-ord Sets</span>
                     </Link>
-                    <Link
-                      to="/shop?category=TWO+PIECES&subcategory=Kurta+Pant"
-                      onClick={() => setActiveDropdown(null)}
-                      className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
-                    >
-                      <span>Kurta Pant</span>
-                    </Link>
                     <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
                       <Link
                         to="/shop?category=TWO+PIECES"
@@ -371,6 +365,69 @@ export const Header: React.FC = () => {
                         className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
                       >
                         <span>Explore All Heavy Dresses &rarr;</span>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+
+                {/* UNSTITCHED MATERIAL Dropdown */}
+                <div
+                  className="relative"
+                  onMouseEnter={() => handleDropdownEnter('unstitched_material')}
+                  onMouseLeave={handleDropdownLeave}
+                >
+                  <Link
+                    to="/shop?category=UNSTITCHED+MATERIAL"
+                    onFocus={() => handleDropdownEnter('unstitched_material')}
+                    className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none whitespace-nowrap ${
+                      location.search.includes('category=UNSTITCHED+MATERIAL') || location.search.includes('category=UNSTITCHED%20MATERIAL')
+                        ? 'text-[#5E1224] border-b-2 border-[#B58A3C]'
+                        : 'text-gray-700'
+                    }`}
+                    aria-haspopup="true"
+                    aria-expanded={activeDropdown === 'unstitched_material'}
+                  >
+                    <span>UNSTITCHED MATERIAL</span>
+                    <ChevronDown
+                      className={`w-3 h-3 text-[#B58A3C] transition-transform duration-250 ease-out ${
+                        activeDropdown === 'unstitched_material' ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </Link>
+
+                  <div
+                    className={`absolute top-full left-0 w-56 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl py-2 transition-all duration-200 ease-out z-50 ${
+                      activeDropdown === 'unstitched_material'
+                        ? 'opacity-100 visible translate-y-0 pointer-events-auto'
+                        : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+                    }`}
+                  >
+                    <div className="px-4 py-1.5 border-b border-[#E8DFD0]/60 mb-1">
+                      <span className="text-[9px] uppercase tracking-[0.2em] text-[#B58A3C] font-bold block">
+                        Unstitched Material
+                      </span>
+                    </div>
+                    <Link
+                      to="/shop?category=UNSTITCHED+MATERIAL&subcategory=Unstitched+Suits"
+                      onClick={() => setActiveDropdown(null)}
+                      className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                    >
+                      <span>Unstitched Suits</span>
+                    </Link>
+                    <Link
+                      to="/shop?category=UNSTITCHED+MATERIAL&subcategory=Dress+Material"
+                      onClick={() => setActiveDropdown(null)}
+                      className="px-4 py-2 text-xs font-semibold text-gray-800 hover:bg-[#F3E9DA] hover:text-[#5E1224] transition-colors flex items-center justify-between"
+                    >
+                      <span>Dress Material</span>
+                    </Link>
+                    <div className="pt-1 mt-1 border-t border-[#E8DFD0]/60">
+                      <Link
+                        to="/shop?category=UNSTITCHED+MATERIAL"
+                        onClick={() => setActiveDropdown(null)}
+                        className="px-4 py-1.5 text-[11px] font-bold text-[#5E1224] hover:underline flex items-center gap-1"
+                      >
+                        <span>Explore All Unstitched Material &rarr;</span>
                       </Link>
                     </div>
                   </div>
@@ -584,13 +641,6 @@ export const Header: React.FC = () => {
                       Co-ord Sets
                     </Link>
                     <Link
-                      to="/shop?category=TWO+PIECES&subcategory=Kurta+Pant"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
-                    >
-                      Kurta Pant
-                    </Link>
-                    <Link
                       to="/shop?category=TWO+PIECES"
                       onClick={() => setMobileMenuOpen(false)}
                       className="block px-2.5 py-1.5 rounded text-[#5E1224] font-semibold hover:underline"
@@ -710,6 +760,49 @@ export const Header: React.FC = () => {
                       className="block px-2.5 py-1.5 rounded text-[#5E1224] font-semibold hover:underline"
                     >
                       View All Heavy Dresses &rarr;
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. UNSTITCHED MATERIAL Accordion */}
+              <div className="border-b border-[#E8DFD0]/40 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setUnstitchedMaterialAccordionOpen(!unstitchedMaterialAccordionOpen)}
+                  className="w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-gray-800 hover:bg-[#E8DFD0]/40 flex items-center justify-between"
+                  aria-expanded={unstitchedMaterialAccordionOpen}
+                >
+                  <span className="tracking-wide">UNSTITCHED MATERIAL</span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
+                      unstitchedMaterialAccordionOpen ? 'rotate-180 text-[#5E1224]' : ''
+                    }`}
+                  />
+                </button>
+
+                {unstitchedMaterialAccordionOpen && (
+                  <div className="pl-4 pr-2 py-1 space-y-1 text-xs border-l-2 border-[#C59B27] ml-3 mt-0.5 animate-in slide-in-from-top-1 duration-200">
+                    <Link
+                      to="/shop?category=UNSTITCHED+MATERIAL&subcategory=Unstitched+Suits"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Unstitched Suits
+                    </Link>
+                    <Link
+                      to="/shop?category=UNSTITCHED+MATERIAL&subcategory=Dress+Material"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-gray-700 hover:text-[#5E1224] font-medium"
+                    >
+                      Dress Material
+                    </Link>
+                    <Link
+                      to="/shop?category=UNSTITCHED+MATERIAL"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-2.5 py-1.5 rounded text-[#5E1224] font-semibold hover:underline"
+                    >
+                      View All Unstitched Material &rarr;
                     </Link>
                   </div>
                 )}

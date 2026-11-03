@@ -143,7 +143,7 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <Link to="/return-policy" className="hover:text-[#B58A3C] transition-colors">
-                  7-Day Exchange
+                  Returns &amp; Exchange Policy
                 </Link>
               </li>
               <li>

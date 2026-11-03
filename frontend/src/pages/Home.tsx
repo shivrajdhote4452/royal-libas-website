@@ -287,7 +287,7 @@ export const Home: React.FC = () => {
                 <span className="text-[#B58A3C]">✦</span> MASTER ARTISAN ZARI EMBROIDERY
               </span>
               <span className="flex items-center gap-2">
-                <span className="text-[#B58A3C]">✦</span> HASSLE-FREE 7-DAY EXCHANGE
+                <span className="text-[#B58A3C]">✦</span> STRICT QUALITY INSPECTION BEFORE DISPATCH
               </span>
               <span className="flex items-center gap-2">
                 <span className="text-[#B58A3C]">✦</span> 100% AUTHENTIC ATELIER CRAFTSMANSHIP
@@ -322,7 +322,7 @@ export const Home: React.FC = () => {
           {[
             {
               title: 'TWO PIECES',
-              subtitle: 'Co-ord Sets & Kurta Pant',
+              subtitle: 'Contemporary Co-ord Sets',
               image: (!failedCatImages['TWO PIECES'] && settings.categoryTwoPiecesImage && !settings.categoryTwoPiecesImage.includes('res.cloudinary.com/demo/'))
                 ? settings.categoryTwoPiecesImage
                 : DEFAULT_CAT_IMAGES['TWO PIECES'],

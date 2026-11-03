@@ -37,6 +37,10 @@ const CANONICAL_TAXONOMY: Record<
       'Sharara / Gharara',
     ],
   },
+  'UNSTITCHED MATERIAL': {
+    slug: 'unstitched-material',
+    subcategories: ['Unstitched Suits', 'Dress Material'],
+  },
 };
 
 interface CollectionWithProducts extends Collection {

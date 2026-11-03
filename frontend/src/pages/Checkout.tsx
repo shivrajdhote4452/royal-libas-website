@@ -834,7 +834,7 @@ export const Checkout: React.FC = () => {
                 className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
               />
               <label htmlFor="terms_agree" className="text-[11px] text-gray-600 select-none">
-                I agree to the <Link to="/terms-of-service" className="text-[#5E1224] underline">Terms & Conditions</Link> and <Link to="/privacy-policy" className="text-[#5E1224] underline">Privacy Policy</Link>.
+                I agree to the <Link to="/terms-of-service" className="text-[#5E1224] underline">Terms & Conditions</Link>, <Link to="/return-policy" className="text-[#5E1224] underline">Return Policy (No Returns/Exchanges)</Link>, and <Link to="/privacy-policy" className="text-[#5E1224] underline">Privacy Policy</Link>.
               </label>
             </div>
 

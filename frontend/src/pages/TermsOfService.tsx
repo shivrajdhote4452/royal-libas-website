@@ -49,7 +49,7 @@ export const TermsOfService: React.FC = () => {
           <section className="space-y-3">
             <h2 className="font-serif text-lg font-bold text-[#5E1224]">1. Overview & General Conditions</h2>
             <p className="text-xs sm:text-sm text-gray-600">
-              By accessing our website and placing an order with Royal Libas by Tanya, you agree to be bound by these Terms of Service and our associated Shipping, Exchange, and Privacy Policies.
+              By accessing our website and placing an order with Royal Libas by Tanya, you agree to be bound by these Terms of Service and our associated Shipping, Returns, and Privacy Policies. Royal Libas operates under a strict no returns and no exchanges policy on all artisanal garments. All sales are final.
             </p>
           </section>
 
