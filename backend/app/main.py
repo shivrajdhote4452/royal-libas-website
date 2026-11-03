@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import FRONTEND_URL
 from app.database import get_db, engine, Base
 from app.models import Order
-from app.routers import admin, products, collections, cart, orders, payments, coupons, store_info
+from app.routers import admin, products, collections, cart, orders, payments, coupons, store_info, seo
 from app.services import shiprocket
 
 # Create any missing database tables safely
@@ -56,6 +56,7 @@ app.include_router(orders.router)
 app.include_router(payments.router)
 app.include_router(coupons.router)
 app.include_router(store_info.router)
+app.include_router(seo.router)
 
 
 # ==========================================

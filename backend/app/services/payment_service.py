@@ -67,8 +67,20 @@ def create_cashfree_order(db: Session, order_code: str) -> CashfreeCreateOrderRe
     # Server-computed total in INR rupees (not paise)
     order_amount = float(Decimal(str(order.total)))
 
+    # Clean customer details for Cashfree API compliance (strict 10-digit phone)
+    raw_phone = "".join(filter(str.isdigit, order.phone or ""))
+    if len(raw_phone) == 12 and raw_phone.startswith("91"):
+        clean_phone = raw_phone[2:]
+    elif len(raw_phone) >= 10:
+        clean_phone = raw_phone[-10:]
+    else:
+        clean_phone = raw_phone.ljust(10, "0") if raw_phone else "9999999999"
+
+    clean_name = (order.customer_name or "Guest Customer").strip() or "Guest Customer"
+
+    token_param = f"?token={order.order_token}" if order.order_token else ""
     order_meta = {
-        "return_url": f"{FRONTEND_URL}/order-success/{order.order_code}",
+        "return_url": f"{FRONTEND_URL}/order-success/{order.order_code}{token_param}",
     }
     if BACKEND_PUBLIC_URL:
         order_meta["notify_url"] = f"{BACKEND_PUBLIC_URL.rstrip('/')}/payments/cashfree/webhook"
@@ -79,8 +91,8 @@ def create_cashfree_order(db: Session, order_code: str) -> CashfreeCreateOrderRe
         "order_currency": "INR",
         "customer_details": {
             "customer_id": order.order_code,
-            "customer_name": order.customer_name,
-            "customer_phone": order.phone,
+            "customer_name": clean_name,
+            "customer_phone": clean_phone,
         },
         "order_meta": order_meta,
     }

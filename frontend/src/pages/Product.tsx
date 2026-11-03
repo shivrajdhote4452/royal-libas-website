@@ -28,6 +28,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { ProductCard } from '../components/ProductCard';
 import { ProductPlaceholder } from '../components/ProductPlaceholder';
 import { useStoreSettings } from '../lib/settings';
+import { setCanonicalUrl } from '../lib/seo';
 
 const RECENTLY_VIEWED_KEY = 'royal_libas_recently_viewed';
 
@@ -72,6 +73,7 @@ export const ProductPage: React.FC = () => {
         if (isMounted) {
           setProduct(data);
           document.title = `${data.name} | Royal Libas by Tanya`;
+          setCanonicalUrl(`/product/${data.slug}`);
           if (cleanId !== data.slug) {
             navigate(`/product/${data.slug}`, { replace: true });
           }
