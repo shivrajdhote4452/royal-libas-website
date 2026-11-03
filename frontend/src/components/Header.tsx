@@ -193,7 +193,7 @@ export const Header: React.FC = () => {
               </div>
 
               {/* Desktop Left Nav (1024px+): Compact 3-item layout leaving space for centered logo */}
-              <nav className="hidden lg:flex items-center space-x-4 xl:space-x-6 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui">
+              <nav className="hidden lg:flex items-center space-x-6 xl:space-x-8 2xl:space-x-9 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui">
                 <Link
                   to="/shop?sort=newest"
                   className={`transition-colors py-1 hover:text-[#5E1224] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#B58A3C] ${
@@ -222,7 +222,7 @@ export const Header: React.FC = () => {
                     type="button"
                     onClick={() => setCategoriesDropdownOpen((prev) => !prev)}
                     onFocus={handleCategoriesEnter}
-                    className={`transition-colors py-1 flex items-center gap-1 hover:text-[#5E1224] focus:outline-none whitespace-nowrap focus-visible:ring-1 focus-visible:ring-[#B58A3C] ${
+                    className={`transition-colors py-1 flex items-center gap-1.5 hover:text-[#5E1224] focus:outline-none whitespace-nowrap focus-visible:ring-1 focus-visible:ring-[#B58A3C] ${
                       location.search.includes('category=')
                         ? 'text-[#5E1224] border-b-2 border-[#B58A3C]'
                         : 'text-gray-700'
@@ -304,7 +304,7 @@ export const Header: React.FC = () => {
                 ======================================================== */}
             <div className="flex items-center flex-1 justify-end min-w-0">
               {/* Desktop Right Nav (1024px+) */}
-              <nav className="hidden lg:flex items-center space-x-4 xl:space-x-5 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui mr-3">
+              <nav className="hidden lg:flex items-center space-x-5 xl:space-x-7 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui mr-3">
                 <Link
                   to="/about"
                   className={`transition-colors py-1 hover:text-[#5E1224] ${
