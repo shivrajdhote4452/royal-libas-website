@@ -61,19 +61,67 @@ export const Header: React.FC = () => {
   const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
   const categoriesDropdownRef = useRef<HTMLDivElement>(null);
   const closeDropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerOpenedTimeRef = useRef<number>(0);
+  const justOpenedByPointerRef = useRef<boolean>(false);
 
   const handleCategoriesEnter = () => {
     if (closeDropdownTimerRef.current) {
       clearTimeout(closeDropdownTimerRef.current);
       closeDropdownTimerRef.current = null;
     }
-    setCategoriesDropdownOpen(true);
+    if (!categoriesDropdownOpen) {
+      justOpenedByPointerRef.current = true;
+      pointerOpenedTimeRef.current = Date.now();
+      setCategoriesDropdownOpen(true);
+      setTimeout(() => {
+        justOpenedByPointerRef.current = false;
+      }, 450);
+    }
   };
 
   const handleCategoriesLeave = () => {
     closeDropdownTimerRef.current = setTimeout(() => {
       setCategoriesDropdownOpen(false);
+      justOpenedByPointerRef.current = false;
     }, 180);
+  };
+
+  const handleCategoriesButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    const timeSincePointerOpen = Date.now() - pointerOpenedTimeRef.current;
+    // If the dropdown just opened via hover or pointer entry within the last 450ms, keep it open!
+    if (justOpenedByPointerRef.current || (categoriesDropdownOpen && timeSincePointerOpen < 450)) {
+      justOpenedByPointerRef.current = false;
+      setCategoriesDropdownOpen(true);
+      return;
+    }
+    // Deliberate click: open if closed, close if open
+    setCategoriesDropdownOpen((prev) => !prev);
+  };
+
+  const handleCategoriesButtonKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setCategoriesDropdownOpen((prev) => !prev);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setCategoriesDropdownOpen(true);
+      setTimeout(() => {
+        const firstItem = categoriesDropdownRef.current?.querySelector<HTMLAnchorElement>('a[role="menuitem"]');
+        firstItem?.focus();
+      }, 50);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setCategoriesDropdownOpen(false);
+    }
+  };
+
+  const handleCategoriesDropdownKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setCategoriesDropdownOpen(false);
+      document.getElementById('desktop-categories-menu-button')?.focus();
+    }
   };
 
   // Scroll detection (reduce height smoothly after 60-100px)
@@ -220,8 +268,8 @@ export const Header: React.FC = () => {
                 >
                   <button
                     type="button"
-                    onClick={() => setCategoriesDropdownOpen((prev) => !prev)}
-                    onFocus={handleCategoriesEnter}
+                    onClick={handleCategoriesButtonClick}
+                    onKeyDown={handleCategoriesButtonKeyDown}
                     className={`transition-colors py-1 flex items-center gap-1.5 hover:text-[#5E1224] focus:outline-none whitespace-nowrap focus-visible:ring-1 focus-visible:ring-[#B58A3C] ${
                       location.search.includes('category=')
                         ? 'text-[#5E1224] border-b-2 border-[#B58A3C]'
@@ -248,6 +296,7 @@ export const Header: React.FC = () => {
                     }`}
                     role="menu"
                     aria-labelledby="desktop-categories-menu-button"
+                    onKeyDown={handleCategoriesDropdownKeyDown}
                   >
                     {NAV_CATEGORIES.map((cat) => {
                       const isCatActive =
