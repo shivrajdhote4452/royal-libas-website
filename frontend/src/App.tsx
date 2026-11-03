@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -44,10 +44,18 @@ import { CartDrawer } from './components/CartDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { BackToTop } from './components/BackToTop';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { setCanonicalUrl } from './lib/seo';
 
 const StorefrontLayout: React.FC = () => {
   const location = useLocation();
   const hasBottomNav = !location.pathname.startsWith('/product/') && !location.pathname.startsWith('/checkout');
+
+  useEffect(() => {
+    // Dynamically update canonical URL for storefront routes (ProductPage sets canonical with slug on load)
+    if (!location.pathname.startsWith('/product/')) {
+      setCanonicalUrl(location.pathname);
+    }
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FCF8F0] text-[#2B1B1E] selection:bg-[#B58A3C] selection:text-white">

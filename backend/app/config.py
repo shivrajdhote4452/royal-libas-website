@@ -41,6 +41,11 @@ BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "").strip()
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+# Canonical Store Domain for SEO & Sitemap
+CANONICAL_BASE_URL = os.getenv("CANONICAL_BASE_URL", "https://royallibasbytanya.com").strip().rstrip("/")
+if not CANONICAL_BASE_URL:
+    CANONICAL_BASE_URL = "https://royallibasbytanya.com"
+
 
 def is_cashfree_configured() -> bool:
     """Check if valid non-placeholder Cashfree credentials are provided."""

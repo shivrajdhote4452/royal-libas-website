@@ -1,0 +1,12 @@
+# https://royallibasbytanya.com/robots.txt
+User-agent: *
+Allow: /
+
+# Disallow private administrative and checkout paths
+Disallow: /admin/
+Disallow: /cart
+Disallow: /checkout
+Disallow: /order-success/
+
+Sitemap: https://royallibasbytanya.com/sitemap.xml
+
