@@ -7,17 +7,11 @@ import { BrandLogo } from './BrandLogo';
 import { useStoreSettings } from '../lib/settings';
 import { SearchModal } from './SearchModal';
 
-export interface NavSubcategory {
-  name: string;
-  href: string;
-}
-
 export interface NavCategory {
   id: string;
   name: string;
   displayName: string;
   href: string;
-  subcategories: NavSubcategory[];
 }
 
 export const NAV_CATEGORIES: NavCategory[] = [
@@ -26,43 +20,24 @@ export const NAV_CATEGORIES: NavCategory[] = [
     name: 'TWO PIECES',
     displayName: 'Two Pieces',
     href: '/shop?category=TWO+PIECES',
-    subcategories: [
-      { name: 'Co-ord Sets', href: '/shop?category=TWO+PIECES&subcategory=Co-ord+Sets' },
-    ],
   },
   {
     id: 'suit_set',
     name: 'SUIT SET',
     displayName: 'Suit Set',
     href: '/shop?category=SUIT+SET',
-    subcategories: [
-      { name: 'Three Pieces', href: '/shop?category=SUIT+SET&subcategory=Three+Pieces' },
-      { name: 'Semi-party Wear', href: '/shop?category=SUIT+SET&subcategory=Semi-party+Wear' },
-      { name: 'Party Wear', href: '/shop?category=SUIT+SET&subcategory=Party+Wear' },
-    ],
   },
   {
     id: 'heavy_dress',
     name: 'HEAVY DRESS',
     displayName: 'Heavy Dress',
     href: '/shop?category=HEAVY+DRESS',
-    subcategories: [
-      { name: 'Lehenga', href: '/shop?category=HEAVY+DRESS&subcategory=Lehenga' },
-      { name: 'Short Kurta', href: '/shop?category=HEAVY+DRESS&subcategory=Short+Kurta' },
-      { name: 'Palazzo Set', href: '/shop?category=HEAVY+DRESS&subcategory=Palazzo+Set' },
-      { name: 'Designer Wear', href: '/shop?category=HEAVY+DRESS&subcategory=Designer+Wear' },
-      { name: 'Sharara / Gharara', href: '/shop?category=HEAVY+DRESS&subcategory=Sharara+%2F+Gharara' },
-    ],
   },
   {
     id: 'unstitched_material',
     name: 'UNSTITCHED MATERIAL',
     displayName: 'Unstitched Material',
     href: '/shop?category=UNSTITCHED+MATERIAL',
-    subcategories: [
-      { name: 'Unstitched Suits', href: '/shop?category=UNSTITCHED+MATERIAL&subcategory=Unstitched+Suits' },
-      { name: 'Dress Material', href: '/shop?category=UNSTITCHED+MATERIAL&subcategory=Dress+Material' },
-    ],
   },
 ];
 
@@ -86,15 +61,6 @@ export const Header: React.FC = () => {
   const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
   const categoriesDropdownRef = useRef<HTMLDivElement>(null);
   const closeDropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Mobile Drawer Category Accordions
-  const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(true);
-  const [mobileSubOpen, setMobileSubOpen] = useState<{ [key: string]: boolean }>({
-    two_pieces: false,
-    suit_set: false,
-    heavy_dress: false,
-    unstitched_material: false,
-  });
 
   const handleCategoriesEnter = () => {
     if (closeDropdownTimerRef.current) {
@@ -273,73 +239,39 @@ export const Header: React.FC = () => {
                     />
                   </button>
 
-                  {/* Mega Dropdown Panel */}
+                  {/* Compact Categories Dropdown Menu */}
                   <div
-                    className={`absolute top-full left-0 w-[680px] xl:w-[740px] max-w-[90vw] bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-2xl p-6 transition-all duration-200 ease-out z-50 ${
+                    className={`absolute top-full left-0 mt-2 w-56 bg-[#FCF8F0] border border-[#E8DFD0] border-t-2 border-t-[#B58A3C] shadow-xl py-1.5 transition-all duration-150 ease-out z-50 ${
                       categoriesDropdownOpen
                         ? 'opacity-100 visible translate-y-0 pointer-events-auto'
-                        : 'opacity-0 invisible -translate-y-2 pointer-events-none'
+                        : 'opacity-0 invisible -translate-y-1 pointer-events-none'
                     }`}
                     role="menu"
                     aria-labelledby="desktop-categories-menu-button"
                   >
-                    <div className="grid grid-cols-4 gap-4 xl:gap-6">
-                      {NAV_CATEGORIES.map((cat) => (
-                        <div key={cat.id} className="space-y-2.5">
-                          {/* Main Category Header Link */}
-                          <Link
-                            to={cat.href}
-                            onClick={() => setCategoriesDropdownOpen(false)}
-                            className="font-serif text-xs xl:text-sm font-bold text-[#5E1224] hover:text-[#B58A3C] tracking-[0.08em] uppercase block pb-1.5 border-b border-[#E8DFD0] transition-colors focus:outline-none focus-visible:text-[#B58A3C]"
-                            role="menuitem"
-                          >
-                            {cat.name}
-                          </Link>
-
-                          {/* Subcategories list */}
-                          <ul className="space-y-1.5 pt-0.5">
-                            {cat.subcategories.map((sub) => (
-                              <li key={sub.name}>
-                                <Link
-                                  to={sub.href}
-                                  onClick={() => setCategoriesDropdownOpen(false)}
-                                  className="text-xs text-gray-700 hover:text-[#5E1224] transition-colors block py-1 hover:translate-x-0.5 transition-transform font-normal focus:outline-none focus-visible:text-[#5E1224]"
-                                  role="menuitem"
-                                >
-                                  {sub.name}
-                                </Link>
-                              </li>
-                            ))}
-                          </ul>
-
-                          {/* Explore All link */}
-                          <div className="pt-2">
-                            <Link
-                              to={cat.href}
-                              onClick={() => setCategoriesDropdownOpen(false)}
-                              className="text-[10px] font-bold text-[#B58A3C] hover:text-[#5E1224] hover:underline flex items-center gap-1 tracking-wider"
-                              role="menuitem"
-                            >
-                              <span>Explore All &rarr;</span>
-                            </Link>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Bottom strip */}
-                    <div className="mt-5 pt-3 border-t border-[#E8DFD0] flex items-center justify-between text-[11px] text-gray-500">
-                      <span className="italic font-serif text-gray-600">
-                        Handcrafted ethnic ensembles &amp; bespoke boutique textiles
-                      </span>
-                      <Link
-                        to="/shop"
-                        onClick={() => setCategoriesDropdownOpen(false)}
-                        className="font-bold text-[#5E1224] hover:text-[#B58A3C] transition-colors uppercase tracking-wider flex items-center gap-1"
-                      >
-                        <span>View Full Catalog &rarr;</span>
-                      </Link>
-                    </div>
+                    {NAV_CATEGORIES.map((cat) => {
+                      const isCatActive =
+                        location.search.includes(`category=${encodeURIComponent(cat.name)}`) ||
+                        location.search.includes(`category=${cat.name.replace(/ /g, '+')}`);
+                      return (
+                        <Link
+                          key={cat.id}
+                          to={cat.href}
+                          onClick={() => setCategoriesDropdownOpen(false)}
+                          className={`flex items-center justify-between px-4 py-2.5 text-xs font-semibold tracking-wider uppercase transition-colors font-ui ${
+                            isCatActive
+                              ? 'text-[#5E1224] bg-[#F3ECE1] font-bold border-l-2 border-[#5E1224]'
+                              : 'text-gray-800 hover:text-[#5E1224] hover:bg-[#F3ECE1]'
+                          }`}
+                          role="menuitem"
+                        >
+                          <span>{cat.displayName}</span>
+                          <span className="text-[10px] text-gray-400 font-normal">
+                            &rarr;
+                          </span>
+                        </Link>
+                      );
+                    })}
                   </div>
                 </div>
               </nav>
@@ -531,87 +463,33 @@ export const Header: React.FC = () => {
                 Shop All Boutique Styles
               </Link>
 
-              {/* Single Expandable CATEGORIES Accordion */}
-              <div className="border-t border-b border-[#E8DFD0]/60 py-1 my-1">
-                <button
-                  type="button"
-                  onClick={() => setMobileCategoriesOpen((prev) => !prev)}
-                  className="w-full px-3 py-2.5 rounded-lg text-sm font-bold text-gray-900 hover:bg-[#E8DFD0]/40 flex items-center justify-between min-h-[44px] transition-colors"
-                  aria-expanded={mobileCategoriesOpen}
-                >
-                  <span className="tracking-wide text-xs sm:text-sm uppercase font-serif text-[#5E1224]">
-                    CATEGORIES
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
-                      mobileCategoriesOpen ? 'rotate-180 text-[#5E1224]' : ''
-                    }`}
-                  />
-                </button>
-
-                {mobileCategoriesOpen && (
-                  <div className="pl-1 pr-1 py-1 space-y-2 mt-1">
-                    {NAV_CATEGORIES.map((cat) => {
-                      const isSubOpen = !!mobileSubOpen[cat.id];
-                      return (
-                        <div
-                          key={cat.id}
-                          className="bg-white/80 border border-[#E8DFD0] rounded-none p-2 space-y-1"
-                        >
-                          <div className="flex items-center justify-between">
-                            <Link
-                              to={cat.href}
-                              onClick={() => setMobileMenuOpen(false)}
-                              className="flex-1 text-xs font-bold text-gray-900 hover:text-[#5E1224] uppercase tracking-wider py-1.5 px-1 min-h-[40px] flex items-center"
-                            >
-                              {cat.displayName}
-                            </Link>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setMobileSubOpen((prev) => ({
-                                  ...prev,
-                                  [cat.id]: !prev[cat.id],
-                                }))
-                              }
-                              className="p-2 text-gray-500 hover:text-[#5E1224] min-h-[44px] min-w-[44px] flex items-center justify-center focus:outline-none"
-                              aria-label={`Toggle ${cat.displayName} subcategories`}
-                              aria-expanded={isSubOpen}
-                            >
-                              <ChevronDown
-                                className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                  isSubOpen ? 'rotate-180 text-[#5E1224]' : ''
-                                }`}
-                              />
-                            </button>
-                          </div>
-
-                          {isSubOpen && (
-                            <div className="pl-3 pr-1 py-1 space-y-1 border-l-2 border-[#B58A3C] ml-1 mt-0.5 animate-in slide-in-from-top-1 duration-150">
-                              {cat.subcategories.map((sub) => (
-                                <Link
-                                  key={sub.name}
-                                  to={sub.href}
-                                  onClick={() => setMobileMenuOpen(false)}
-                                  className="block py-2 px-1 text-xs text-gray-700 hover:text-[#5E1224] font-medium min-h-[40px] flex items-center"
-                                >
-                                  {sub.name}
-                                </Link>
-                              ))}
-                              <Link
-                                to={cat.href}
-                                onClick={() => setMobileMenuOpen(false)}
-                                className="block py-1.5 px-1 text-[11px] font-bold text-[#B58A3C] hover:text-[#5E1224] hover:underline"
-                              >
-                                Explore All {cat.displayName} &rarr;
-                              </Link>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              {/* Clean Mobile CATEGORIES Section */}
+              <div className="border-t border-b border-[#E8DFD0]/60 py-2 my-2">
+                <span className="block px-3 py-1.5 text-[10px] sm:text-[11px] font-serif font-bold uppercase tracking-[0.2em] text-[#5E1224]">
+                  CATEGORIES
+                </span>
+                <div className="space-y-0.5 mt-1">
+                  {NAV_CATEGORIES.map((cat) => {
+                    const isCatActive =
+                      location.search.includes(`category=${encodeURIComponent(cat.name)}`) ||
+                      location.search.includes(`category=${cat.name.replace(/ /g, '+')}`);
+                    return (
+                      <Link
+                        key={cat.id}
+                        to={cat.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`block px-3 py-2.5 rounded-none text-xs sm:text-sm font-semibold tracking-wide uppercase transition-colors min-h-[44px] flex items-center justify-between ${
+                          isCatActive
+                            ? 'text-[#5E1224] font-bold bg-[#E8DFD0]/60'
+                            : 'text-gray-800 hover:text-[#5E1224] hover:bg-[#E8DFD0]/30'
+                        }`}
+                      >
+                        <span>{cat.displayName}</span>
+                        <span className="text-gray-400 text-xs font-normal">&rarr;</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
 
               <Link
