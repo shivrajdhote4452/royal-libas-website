@@ -27,6 +27,7 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { ProductCard } from '../components/ProductCard';
 import { ProductPlaceholder } from '../components/ProductPlaceholder';
+import { ProductGalleryVideo } from '../components/ProductGalleryVideo';
 import { useStoreSettings } from '../lib/settings';
 import { setCanonicalUrl } from '../lib/seo';
 
@@ -374,11 +375,11 @@ export const ProductPage: React.FC = () => {
                     } ${!isVid ? 'cursor-zoom-in' : ''}`}
                   >
                     {isVid ? (
-                      <video
+                      <ProductGalleryVideo
                         src={imgUrl}
-                        controls
-                        playsInline
+                        poster={imgUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg')}
                         className="w-full h-full object-cover bg-black"
+                        alt={`${product.name} video showcase - view ${idx + 1}`}
                       />
                     ) : (
                       <img
@@ -453,13 +454,12 @@ export const ProductPage: React.FC = () => {
               >
                 {activeImageUrl ? (
                   /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(activeImageUrl) ? (
-                    <video
+                    <ProductGalleryVideo
                       key={activeImageUrl}
                       src={activeImageUrl}
-                      controls
-                      playsInline
                       poster={activeImageUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg')}
                       className="w-full h-full object-contain bg-black"
+                      alt={`${product.name} video showcase`}
                     />
                   ) : (
                     <img
