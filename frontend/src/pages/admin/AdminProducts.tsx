@@ -61,6 +61,7 @@ export const CATEGORY_GROUPS: Record<string, string[]> = {
   'TWO PIECES': ['Co-ord Sets', 'Kurta Pant'],
   'SUIT SET': ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
   'HEAVY DRESS': ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
+  'UNSTITCHED MATERIAL': ['Unstitched Suits', 'Dress Material'],
 };
 
 export const AdminProducts: React.FC = () => {

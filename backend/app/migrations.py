@@ -219,6 +219,7 @@ def run_migrations(engine: Engine) -> None:
                 ("TWO PIECES", "two-pieces", "Boutique co-ord sets, kurta pants, and contemporary two-piece edits."),
                 ("SUIT SET", "suit-set", "Handcrafted three-pieces, semi-party wear, and formal party wear suit sets."),
                 ("HEAVY DRESS", "heavy-dress", "Occasion wear including lehengas, palazzo sets, designer wear, and shararas."),
+                ("UNSTITCHED MATERIAL", "unstitched-material", "Premium unstitched boutique dress material, suit cuts, and handloom fabrics."),
             ]
             for col_name, col_slug, col_desc in canonical_collections:
                 exists = conn.execute(

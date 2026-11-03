@@ -39,7 +39,7 @@ const COLOR_HEX_MAP: Record<string, string> = {
 export const MAIN_CATEGORIES_CONFIG = [
   {
     name: 'TWO PIECES',
-    subcategories: ['Co-ord Sets', 'Kurta Pant'],
+    subcategories: ['Co-ord Sets'],
   },
   {
     name: 'SUIT SET',
@@ -48,6 +48,10 @@ export const MAIN_CATEGORIES_CONFIG = [
   {
     name: 'HEAVY DRESS',
     subcategories: ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
+  },
+  {
+    name: 'UNSTITCHED MATERIAL',
+    subcategories: ['Unstitched Suits', 'Dress Material'],
   },
 ];
 
@@ -400,38 +404,44 @@ export const Shop: React.FC = () => {
                         </span>
                       </button>
 
-                      <div className="pl-3 space-y-1 border-l border-[#E8DFD0]/60">
-                        {group.subcategories.map((sub) => {
-                          const isSubSelected = isSelected && currentSubcategory === sub;
-                          const subCount = catalogReference.filter(
-                            p => p.category?.toUpperCase() === group.name && p.subcategory === sub
-                          ).length;
-                          return (
-                            <button
-                              key={sub}
-                              type="button"
-                              onClick={() => {
-                                const next = new URLSearchParams(searchParams);
-                                if (isSubSelected) {
-                                  next.delete('subcategory');
-                                } else {
-                                  next.set('category', group.name);
-                                  next.set('subcategory', sub);
-                                }
-                                setSearchParams(next);
-                              }}
-                              className={`w-full text-left text-[11px] py-1 flex items-center justify-between transition-colors ${
-                                isSubSelected
-                                  ? 'text-[#5E1224] font-bold'
-                                  : 'text-gray-600 hover:text-gray-900'
-                              }`}
-                            >
-                              <span>{sub}</span>
-                              <span className="text-gray-400 text-[10px]">({subCount})</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      {/* Subcategories shown for the selected category (or all when browsing all) */}
+                      {(isSelected || !currentCategory) && (
+                        <div className="pl-3 space-y-1 border-l-2 border-[#B58A3C]/40 ml-1 mt-1 animate-in fade-in duration-150">
+                          {group.subcategories.map((sub) => {
+                            const isSubSelected = isSelected && currentSubcategory === sub;
+                            const subCount = catalogReference.filter(
+                              p => p.category?.toUpperCase() === group.name && p.subcategory === sub
+                            ).length;
+                            return (
+                              <button
+                                key={sub}
+                                type="button"
+                                onClick={() => {
+                                  const next = new URLSearchParams(searchParams);
+                                  if (isSubSelected) {
+                                    next.delete('subcategory');
+                                  } else {
+                                    next.set('category', group.name);
+                                    next.set('subcategory', sub);
+                                  }
+                                  setSearchParams(next);
+                                }}
+                                className={`w-full text-left text-[11px] py-1 flex items-center justify-between transition-colors ${
+                                  isSubSelected
+                                    ? 'text-[#5E1224] font-bold'
+                                    : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  {isSubSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#5E1224]" />}
+                                  {sub}
+                                </span>
+                                <span className="text-gray-400 text-[10px]">({subCount})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -802,36 +812,41 @@ export const Shop: React.FC = () => {
                         </span>
                       </button>
 
-                      <div className="pl-3 space-y-1.5 border-l-2 border-[#D4AF67]/50">
-                        {group.subcategories.map((sub) => {
-                          const isSubSelected = isSelected && currentSubcategory === sub;
-                          return (
-                            <button
-                              key={sub}
-                              type="button"
-                              onClick={() => {
-                                const next = new URLSearchParams(searchParams);
-                                if (isSubSelected) {
-                                  next.delete('subcategory');
-                                } else {
-                                  next.set('category', group.name);
-                                  next.set('subcategory', sub);
-                                }
-                                setSearchParams(next);
-                                setMobileFilterOpen(false);
-                              }}
-                              className={`w-full text-left text-xs py-1 flex items-center justify-between ${
-                                isSubSelected ? 'text-[#5E1224] font-bold' : 'text-gray-600'
-                              }`}
-                            >
-                              <span>{sub}</span>
-                              <span className="text-gray-400 text-[10px]">
-                                ({catalogReference.filter(p => p.category?.toUpperCase() === group.name && p.subcategory === sub).length})
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      {(isSelected || !currentCategory) && (
+                        <div className="pl-3 space-y-1.5 border-l-2 border-[#D4AF67]/50 ml-1 mt-1 animate-in fade-in duration-150">
+                          {group.subcategories.map((sub) => {
+                            const isSubSelected = isSelected && currentSubcategory === sub;
+                            return (
+                              <button
+                                key={sub}
+                                type="button"
+                                onClick={() => {
+                                  const next = new URLSearchParams(searchParams);
+                                  if (isSubSelected) {
+                                    next.delete('subcategory');
+                                  } else {
+                                    next.set('category', group.name);
+                                    next.set('subcategory', sub);
+                                  }
+                                  setSearchParams(next);
+                                  setMobileFilterOpen(false);
+                                }}
+                                className={`w-full text-left text-xs py-1 flex items-center justify-between ${
+                                  isSubSelected ? 'text-[#5E1224] font-bold' : 'text-gray-600'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  {isSubSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#5E1224]" />}
+                                  {sub}
+                                </span>
+                                <span className="text-gray-400 text-[10px]">
+                                  ({catalogReference.filter(p => p.category?.toUpperCase() === group.name && p.subcategory === sub).length})
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

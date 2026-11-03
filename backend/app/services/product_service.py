@@ -15,12 +15,14 @@ CANONICAL_TAXONOMY: Dict[str, List[str]] = {
     "TWO PIECES": ["Co-ord Sets", "Kurta Pant"],
     "SUIT SET": ["Three Pieces", "Semi-party Wear", "Party Wear"],
     "HEAVY DRESS": ["Lehenga", "Short Kurta", "Palazzo Set", "Designer Wear", "Sharara / Gharara"],
+    "UNSTITCHED MATERIAL": ["Unstitched Suits", "Dress Material"],
 }
 
 CATEGORY_TO_COLLECTION_SLUG: Dict[str, str] = {
     "TWO PIECES": "two-pieces",
     "SUIT SET": "suit-set",
     "HEAVY DRESS": "heavy-dress",
+    "UNSTITCHED MATERIAL": "unstitched-material",
 }
 
 CANONICAL_COLLECTION_SLUGS: Set[str] = set(CATEGORY_TO_COLLECTION_SLUG.values())

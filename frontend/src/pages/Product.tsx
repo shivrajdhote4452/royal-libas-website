@@ -11,7 +11,7 @@ import {
   Minus,
   Plus,
   Truck,
-  RefreshCw,
+  ShieldCheck,
   CreditCard,
   Lock,
   Heart,
@@ -907,8 +907,8 @@ export const ProductPage: React.FC = () => {
                 </div>
               )}
               <div className="flex flex-col items-center space-y-0.5">
-                <RefreshCw className="w-3.5 h-3.5 text-[#B58A3C]" />
-                <span className="text-[10px] text-gray-700 font-medium">7 Days Exchange</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-[#B58A3C]" />
+                <span className="text-[10px] text-gray-700 font-medium">No Returns/Exchanges</span>
               </div>
               <div className="flex flex-col items-center space-y-0.5">
                 <Lock className="w-3.5 h-3.5 text-[#B58A3C]" />
@@ -916,14 +916,14 @@ export const ProductPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Tabs: Description | Fabric & Care | Shipping | Exchange */}
+            {/* Tabs: Description | Fabric & Care | Shipping | Returns & Policy */}
             <div className="pt-3 border-t border-gray-100">
               <div className="flex border-b border-gray-200 text-xs font-semibold">
                 {[
                   { id: 'desc', label: 'Description' },
                   { id: 'fabric', label: 'Fabric & Care' },
                   { id: 'shipping', label: 'Shipping' },
-                  { id: 'exchange', label: 'Exchange' },
+                  { id: 'exchange', label: 'Returns & Policy' },
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -967,9 +967,10 @@ export const ProductPage: React.FC = () => {
                 )}
                 {activeTab === 'exchange' && (
                   <div className="space-y-1.5">
-                    <p>&bull; 7-day doorstep size exchange policy.</p>
-                    <p>&bull; Garment must be unused with tags and original packaging intact.</p>
-                    <p>&bull; Contact concierge on WhatsApp for instant doorstep pickup.</p>
+                    <p><strong>Strict Policy:</strong> No returns or exchanges on artisanal creations.</p>
+                    <p>&bull; Every garment is handcrafted and thoroughly quality-checked prior to dispatch.</p>
+                    <p>&bull; All sales are final. Please consult the size chart before placing your order.</p>
+                    <p>&bull; For questions on fit or measurements, our concierge is available on WhatsApp.</p>
                   </div>
                 )}
               </div>
