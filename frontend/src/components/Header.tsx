@@ -324,6 +324,29 @@ export const Header: React.FC = () => {
                   </div>
                 </div>
               </nav>
+
+              {/* Desktop Left Action Buttons: Search & Admin (Between Categories & Logo) */}
+              <div className="hidden lg:flex items-center ml-3 xl:ml-5 space-x-0.5 sm:space-x-1 pl-3 border-l border-[#E8DFD0]">
+                <button
+                  id="desktop-search-button"
+                  type="button"
+                  onClick={() => setSearchModalOpen(true)}
+                  className="p-1.5 xl:p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
+                  title="Search styles"
+                  aria-label="Open Search"
+                >
+                  <Search className="w-4.5 h-4.5 xl:w-5 xl:h-5" />
+                </button>
+                <Link
+                  id="desktop-admin-link"
+                  to="/admin/login"
+                  className="p-1.5 xl:p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
+                  title="Account / Boutique Admin"
+                  aria-label="Account Login"
+                >
+                  <User className="w-4.5 h-4.5 xl:w-5 xl:h-5" />
+                </Link>
+              </div>
             </div>
 
             {/* ========================================================
@@ -348,53 +371,13 @@ export const Header: React.FC = () => {
 
             {/* ========================================================
                 RIGHT ZONE:
-                - Desktop (1024px+): "OUR STORY", "CONTACT US" + Action Icons
-                - Mobile & Tablet (< 1024px): User, Wishlist, Cart
+                - Desktop (1024px+): Action Icons (Wishlist & Cart) between Logo and "OUR STORY",
+                  followed by Nav Links ("OUR STORY", "CONTACT US")
+                - Mobile & Tablet (< 1024px): Action Icons (Wishlist & Cart)
                 ======================================================== */}
             <div className="flex items-center flex-1 justify-end min-w-0">
-              {/* Desktop Right Nav (1024px+) */}
-              <nav className="hidden lg:flex items-center space-x-5 xl:space-x-7 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui mr-3">
-                <Link
-                  to="/about"
-                  className={`transition-colors py-1 hover:text-[#5E1224] ${
-                    location.pathname === '/about' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
-                  }`}
-                >
-                  OUR STORY
-                </Link>
-                <Link
-                  to="/contact"
-                  className={`transition-colors py-1 hover:text-[#5E1224] ${
-                    location.pathname === '/contact' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
-                  }`}
-                >
-                  CONTACT US
-                </Link>
-              </nav>
-
-              {/* Action Icons */}
-              <div className="flex items-center space-x-0.5 sm:space-x-1.5">
-                {/* Search: Desktop Only (Mobile has it on the left next to Menu) */}
-                <button
-                  type="button"
-                  onClick={() => setSearchModalOpen(true)}
-                  className="hidden lg:flex p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
-                  title="Search styles"
-                  aria-label="Open Search"
-                >
-                  <Search className="w-5 h-5" />
-                </button>
-
-                {/* Account / Admin Login */}
-                <Link
-                  to="/admin/login"
-                  className="hidden min-[360px]:flex p-1.5 sm:p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
-                  title="Account / Boutique Admin"
-                  aria-label="Account Login"
-                >
-                  <User className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
-                </Link>
-
+              {/* Action Icons: Wishlist & Cart (Between Logo & Our Story on desktop) */}
+              <div className="flex items-center space-x-1 sm:space-x-1.5 lg:mr-3 xl:mr-5 lg:pr-3 border-[#E8DFD0] lg:border-r">
                 {/* Wishlist */}
                 <Link
                   to="/shop?wishlist=true"
@@ -428,6 +411,26 @@ export const Header: React.FC = () => {
                   )}
                 </button>
               </div>
+
+              {/* Desktop Right Nav (1024px+): OUR STORY & CONTACT US */}
+              <nav className="hidden lg:flex items-center space-x-5 xl:space-x-7 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui">
+                <Link
+                  to="/about"
+                  className={`transition-colors py-1 hover:text-[#5E1224] ${
+                    location.pathname === '/about' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                  }`}
+                >
+                  OUR STORY
+                </Link>
+                <Link
+                  to="/contact"
+                  className={`transition-colors py-1 hover:text-[#5E1224] ${
+                    location.pathname === '/contact' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
+                  }`}
+                >
+                  CONTACT US
+                </Link>
+              </nav>
             </div>
           </div>
         </div>
