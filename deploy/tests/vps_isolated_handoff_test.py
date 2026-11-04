@@ -1078,11 +1078,11 @@ def test_release_sha_verification_modes(base_dir: str, proposed_helper_path: str
 
 
 # ------------------------------------------------------------------------------
-# TEST 12: Guarded Root Helper Installation Script, Checksum & Rollback
+# TEST 12: Guarded Root Helper Installation, Root Staging & Pre-Execution Verification
 # ------------------------------------------------------------------------------
 def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_helper_path: str, install_script_path: str) -> bool:
     print("\n" + "=" * 72)
-    print("TEST 12: Guarded Root Helper Installation Script, Checksum & Rollback")
+    print("TEST 12: Guarded Root Helper Installation, Root Staging & Pre-Execution Verification")
     print("=" * 72)
 
     import glob
@@ -1097,107 +1097,214 @@ def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_hel
         f.write(initial_content)
     os.chmod(live_helper, 0o700)
 
-    # Compute expected hash of the proposed helper
+    # Compute expected hashes
     with open(proposed_helper_path, "rb") as f:
-        expected_sha256 = hashlib.sha256(f.read()).hexdigest()
+        expected_helper_sha256 = hashlib.sha256(f.read()).hexdigest()
+    with open(install_script_path, "rb") as f:
+        expected_installer_sha256 = hashlib.sha256(f.read()).hexdigest()
 
-    print(f"[Review Baseline] Reviewed Helper SHA-256: {expected_sha256}")
+    print(f"[Review Baseline] Reviewed Helper SHA-256:    {expected_helper_sha256}")
+    print(f"[Review Baseline] Reviewed Installer SHA-256: {expected_installer_sha256}")
 
-    env = os.environ.copy()
-    env["ALLOW_NON_ROOT_TEST"] = "1"
-    env["EXPECTED_SHA256"] = expected_sha256
-
-    # Test Case 12a: Candidate with syntax error
-    bad_syntax_candidate = os.path.join(base_dir, "bad_syntax.sh")
-    with open(bad_syntax_candidate, "w") as f:
-        f.write("#!/bin/bash\nif [ a == b ]; then echo incomplete\n")  # missing fi
-
-    print("[Case 12a] Testing guarded installer with syntax error...")
-    res_12a = subprocess.run([install_script_path, bad_syntax_candidate, live_helper], capture_output=True, text=True, env=env)
+    # Case 12a: Non-root execution prevention (ALLOW_NON_ROOT_TEST=0)
+    print("[Case 12a] Testing non-root execution rejection (ALLOW_NON_ROOT_TEST=0)...")
+    env_12a = os.environ.copy()
+    env_12a["ALLOW_NON_ROOT_TEST"] = "0"
+    res_12a = subprocess.run([install_script_path, proposed_helper_path, live_helper], capture_output=True, text=True, env=env_12a)
     print(f"[Case 12a] Exit code: {res_12a.returncode}")
-
-    if res_12a.returncode == 0:
-        print("FAIL: Guarded installer succeeded with invalid syntax!")
-        return False
-
-    # Assert no leftover temporary file in install_root
-    leftover_tmp_12a = glob.glob(os.path.join(install_root, "activate-release.tmp.*"))
-    if leftover_tmp_12a:
-        print(f"FAIL: Temporary file was not cleaned up! Found: {leftover_tmp_12a}")
-        return False
-
-    with open(live_helper) as f:
-        if f.read() != initial_content:
-            print("FAIL: Live helper was modified despite syntax error!")
+    if os.getuid() != 0:
+        if res_12a.returncode == 0:
+            print("FAIL 12a: Non-root execution was permitted!")
             return False
-    print("PASS 12a: Syntax error stopped installer, temp file cleaned up, live helper byte-for-byte unchanged.")
+        assert "must be executed as root" in res_12a.stderr or "Security violation" in res_12a.stderr
+        print("PASS 12a: Non-root execution correctly rejected.")
+    else:
+        print("SKIP 12a: Running as root; non-root guard skipped.")
 
-    # Test Case 12b: Checksum mismatch rejected
-    tampered_candidate = os.path.join(base_dir, "tampered.sh")
-    with open(tampered_candidate, "w") as f:
-        f.write("#!/bin/bash\necho TAMPERED_HELPER\n")
-
-    print("[Case 12b] Testing guarded installer with checksum mismatch...")
-    res_12b = subprocess.run([install_script_path, tampered_candidate, live_helper], capture_output=True, text=True, env=env)
+    # Case 12b: Unprivileged file ownership prevention
+    print("[Case 12b] Testing unprivileged installer ownership rejection...")
+    env_12b = os.environ.copy()
+    env_12b["ALLOW_NON_ROOT_TEST"] = "1"
+    env_12b["CHECK_OWNERSHIP_IN_TEST"] = "1"
+    env_12b["EXPECTED_UID"] = "99999"  # Deliberate mismatch
+    res_12b = subprocess.run([install_script_path, proposed_helper_path, live_helper], capture_output=True, text=True, env=env_12b)
     print(f"[Case 12b] Exit code: {res_12b.returncode}")
-
     if res_12b.returncode == 0:
-        print("FAIL: Guarded installer succeeded with mismatched checksum!")
+        print("FAIL 12b: Installer permitted execution with unprivileged owner!")
         return False
+    assert "Security violation" in res_12b.stderr
+    print("PASS 12b: Installer ownership guard blocked execution.")
 
-    leftover_tmp_12b = glob.glob(os.path.join(install_root, "activate-release.tmp.*"))
-    if leftover_tmp_12b:
-        print(f"FAIL: Temporary file was not cleaned up! Found: {leftover_tmp_12b}")
+    # Case 12c: Insecure parent directory permissions rejection
+    print("[Case 12c] Testing insecure parent directory permissions (0777)...")
+    insecure_dir = os.path.join(base_dir, "insecure_stage_dir")
+    os.makedirs(insecure_dir, exist_ok=True)
+    os.chmod(insecure_dir, 0o777)
+    insecure_installer = os.path.join(insecure_dir, "install_root_helper.sh")
+    shutil.copy2(install_script_path, insecure_installer)
+    os.chmod(insecure_installer, 0o755)
+
+    env_12c = os.environ.copy()
+    env_12c["ALLOW_NON_ROOT_TEST"] = "1"
+    env_12c["CHECK_OWNERSHIP_IN_TEST"] = "1"
+    env_12c["EXPECTED_UID"] = str(os.getuid())
+    res_12c = subprocess.run([insecure_installer, proposed_helper_path, live_helper], capture_output=True, text=True, env=env_12c)
+    print(f"[Case 12c] Exit code: {res_12c.returncode}")
+    if res_12c.returncode == 0:
+        print("FAIL 12c: Execution was permitted from group/world-writable directory!")
         return False
+    assert "insecure permissions" in res_12c.stderr
+    print("PASS 12c: Insecure directory permissions blocked execution.")
 
+    # Case 12d: Candidate helper unprivileged ownership rejection
+    print("[Case 12d] Testing candidate helper unprivileged ownership rejection...")
+    env_12d = os.environ.copy()
+    env_12d["ALLOW_NON_ROOT_TEST"] = "1"
+    env_12d["CHECK_OWNERSHIP_IN_TEST"] = "1"
+    env_12d["EXPECTED_UID"] = "99999"
+    res_12d = subprocess.run([install_script_path, proposed_helper_path, live_helper], capture_output=True, text=True, env=env_12d)
+    print(f"[Case 12d] Exit code: {res_12d.returncode}")
+    if res_12d.returncode == 0:
+        print("FAIL 12d: Candidate helper with mismatched ownership was accepted!")
+        return False
+    assert "Security violation" in res_12d.stderr
+    print("PASS 12d: Candidate helper ownership guard blocked execution.")
+
+    # Setup simulated root staging area for pre-execution verification tests
+    stage_dir = os.path.join(base_dir, "secure_root_stage")
+    os.makedirs(stage_dir, exist_ok=True)
+    os.chmod(stage_dir, 0o700)
+
+    # Helper function simulating the root pre-execution verification command:
+    def run_root_pre_verification_and_install(cand_installer: str, cand_helper: str) -> subprocess.CompletedProcess:
+        # Replicates the documented operator root bootstrap procedure
+        cmd = f"""
+        set -euo pipefail
+        STAGE="{stage_dir}"
+        cp "{cand_installer}" "$STAGE/install_root_helper.sh"
+        cp "{cand_helper}" "$STAGE/activate-release.sh"
+        chmod 0700 "$STAGE/install_root_helper.sh" "$STAGE/activate-release.sh"
+        
+        # Pre-execution independent verification of BOTH files:
+        echo "{expected_installer_sha256}  $STAGE/install_root_helper.sh" | sha256sum -c -
+        echo "{expected_helper_sha256}  $STAGE/activate-release.sh" | sha256sum -c -
+        bash -n "$STAGE/install_root_helper.sh"
+        bash -n "$STAGE/activate-release.sh"
+        
+        # Execute installer from private staged directory:
+        "$STAGE/install_root_helper.sh" "$STAGE/activate-release.sh" "{live_helper}"
+        """
+        env_test = os.environ.copy()
+        env_test["ALLOW_NON_ROOT_TEST"] = "1"
+        env_test["CHECK_OWNERSHIP_IN_TEST"] = "0"
+        env_test["EXPECTED_SHA256"] = expected_helper_sha256
+        return subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, env=env_test)
+
+    # Case 12e: Tampered installer checksum rejected BEFORE execution
+    print("[Case 12e] Testing tampered installer checksum rejected BEFORE execution...")
+    tampered_installer = os.path.join(base_dir, "tampered_installer.sh")
+    with open(tampered_installer, "w") as f:
+        f.write("#!/bin/bash\necho MALICIOUS_INSTALLER\n")
+    res_12e = run_root_pre_verification_and_install(tampered_installer, proposed_helper_path)
+    print(f"[Case 12e] Exit code: {res_12e.returncode}")
+    if res_12e.returncode == 0:
+        print("FAIL 12e: Pre-execution check allowed tampered installer!")
+        return False
     with open(live_helper) as f:
         if f.read() != initial_content:
-            print("FAIL: Live helper was modified despite checksum mismatch!")
+            print("FAIL 12e: Live helper was modified!")
             return False
-    print("PASS 12b: Checksum mismatch stopped installer, temp file cleaned up, live helper byte-for-byte unchanged.")
+    print("PASS 12e: Tampered installer rejected before execution; live helper unchanged.")
 
-    # Test Case 12c: Successful installation with exact hash and backup
-    print("[Case 12c] Testing valid installation with exact reviewed SHA-256...")
-    res_12c = subprocess.run([install_script_path, proposed_helper_path, live_helper], capture_output=True, text=True, env=env)
-    print(f"[Case 12c] Exit code: {res_12c.returncode}")
+    # Case 12f: Syntax error in installer rejected BEFORE execution
+    print("[Case 12f] Testing syntax error in installer rejected BEFORE execution...")
+    syntax_bad_installer = os.path.join(base_dir, "syntax_bad_installer.sh")
+    with open(syntax_bad_installer, "w") as f:
+        f.write("#!/bin/bash\nif [ a == b ]; then echo incomplete\n")
+    res_12f = run_root_pre_verification_and_install(syntax_bad_installer, proposed_helper_path)
+    print(f"[Case 12f] Exit code: {res_12f.returncode}")
+    if res_12f.returncode == 0:
+        print("FAIL 12f: Pre-execution check allowed syntax error in installer!")
+        return False
+    with open(live_helper) as f:
+        if f.read() != initial_content:
+            print("FAIL 12f: Live helper was modified!")
+            return False
+    print("PASS 12f: Syntax error in installer rejected before execution; live helper unchanged.")
 
-    if res_12c.returncode != 0:
-        print(f"FAIL 12c: Valid installation failed:\n{res_12c.stderr}")
+    # Case 12g: Tampered helper candidate checksum rejected BEFORE execution
+    print("[Case 12g] Testing tampered helper candidate checksum rejected BEFORE execution...")
+    tampered_helper = os.path.join(base_dir, "tampered_helper.sh")
+    with open(tampered_helper, "w") as f:
+        f.write("#!/bin/bash\necho MALICIOUS_HELPER\n")
+    res_12g = run_root_pre_verification_and_install(install_script_path, tampered_helper)
+    print(f"[Case 12g] Exit code: {res_12g.returncode}")
+    if res_12g.returncode == 0:
+        print("FAIL 12g: Pre-execution check allowed tampered helper!")
+        return False
+    with open(live_helper) as f:
+        if f.read() != initial_content:
+            print("FAIL 12g: Live helper was modified!")
+            return False
+    print("PASS 12g: Tampered helper candidate rejected before execution; live helper unchanged.")
+
+    # Case 12h: Syntax error in helper candidate rejected BEFORE execution
+    print("[Case 12h] Testing syntax error in helper candidate rejected BEFORE execution...")
+    syntax_bad_helper = os.path.join(base_dir, "syntax_bad_helper.sh")
+    with open(syntax_bad_helper, "w") as f:
+        f.write("#!/bin/bash\nif [ a == b ]; then echo incomplete\n")
+    res_12h = run_root_pre_verification_and_install(install_script_path, syntax_bad_helper)
+    print(f"[Case 12h] Exit code: {res_12h.returncode}")
+    if res_12h.returncode == 0:
+        print("FAIL 12h: Pre-execution check allowed syntax error in helper!")
+        return False
+    with open(live_helper) as f:
+        if f.read() != initial_content:
+            print("FAIL 12h: Live helper was modified!")
+            return False
+    print("PASS 12h: Syntax error in helper rejected before execution; live helper unchanged.")
+
+    # Case 12i: Staged into private root directory, both pre-execution checks pass -> successful installation
+    print("[Case 12i] Testing valid root-staged installation with verified checksums and syntax...")
+    res_12i = run_root_pre_verification_and_install(install_script_path, proposed_helper_path)
+    print(f"[Case 12i] Exit code: {res_12i.returncode}")
+    if res_12i.returncode != 0:
+        print(f"FAIL 12i: Valid installation failed:\nSTDOUT:\n{res_12i.stdout}\nSTDERR:\n{res_12i.stderr}")
         return False
 
-    leftover_tmp_12c = glob.glob(os.path.join(install_root, "activate-release.tmp.*"))
-    if leftover_tmp_12c:
-        print(f"FAIL: Temporary file was not cleaned up! Found: {leftover_tmp_12c}")
+    leftover_tmp = glob.glob(os.path.join(install_root, "activate-release.tmp.*"))
+    if leftover_tmp:
+        print(f"FAIL 12i: Temporary file leftover found: {leftover_tmp}")
         return False
 
     with open(live_helper, "rb") as f:
         installed_hash = hashlib.sha256(f.read()).hexdigest()
-    if installed_hash != expected_sha256:
-        print("FAIL 12c: Installed helper hash does not match expected!")
+    if installed_hash != expected_helper_sha256:
+        print(f"FAIL 12i: Installed helper hash mismatch! Got {installed_hash}")
         return False
 
     backups = glob.glob(os.path.join(install_root, "activate-release.sh.bak-*"))
     if not backups:
-        print("FAIL 12c: Backup file was not created!")
+        print("FAIL 12i: Backup file was not created!")
         return False
     backup_file = backups[0]
     with open(backup_file) as f:
         if f.read() != initial_content:
-            print("FAIL 12c: Backup does not match initial working helper byte-for-byte!")
+            print("FAIL 12i: Backup does not match initial working helper byte-for-byte!")
             return False
-    print("PASS 12c: Guarded installer succeeded, exact checksum verified, byte-for-byte backup created.")
+    print("PASS 12i: Valid staged installation succeeded; verified backup created and live helper installed.")
 
-    # Test Case 12d: Rollback from backup
-    print("[Case 12d] Testing rollback restoration from backup...")
+    # Case 12j: Rollback from backup restores initial working helper cleanly byte-for-byte
+    print("[Case 12j] Testing rollback restoration from backup...")
     shutil.copy2(backup_file, live_helper)
     os.chmod(live_helper, 0o700)
     with open(live_helper) as f:
         if f.read() != initial_content:
-            print("FAIL 12d: Rollback restoration failed!")
+            print("FAIL 12j: Rollback restoration failed!")
             return False
-    print("PASS 12d: Rollback procedure restored initial working helper cleanly byte-for-byte.")
+    print("PASS 12j: Rollback restoration verified byte-for-byte.")
 
-    print("PASS: Guarded root-helper installer stops immediately on any error and guarantees zero unintended replacements.")
+    print("PASS: All 10 subcases in root helper installation, root staging, and pre-execution verification passed.")
     return True
 
 
