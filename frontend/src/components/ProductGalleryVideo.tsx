@@ -13,15 +13,17 @@ export interface ProductGalleryVideoProps {
  * Strict specifications:
  * 1. Zero visible controls: No Play/Pause buttons, no native video controls, no badges,
  *    no progress bars, no control overlays.
- * 2. Silent inline autoplay: Starts automatically when in viewport, muted, loop, playsinline.
- * 3. Visibility management: Automatically pauses when scrolled out of viewport or when browser
+ * 2. Deterministic initialization: Reduced-motion preference and initial viewport visibility
+ *    are verified before mounting or starting video playback, eliminating autoplay race conditions.
+ * 3. Reduced-motion compliance: Detects `prefers-reduced-motion: reduce` synchronously on render.
+ *    Renders the still poster image without ever mounting, requesting, or buffering the video.
+ * 4. Deferred off-screen loading: Off-screen videos remain unmounted (rendering the poster only)
+ *    until scrolled into view, conserving user data and system memory.
+ * 5. Silent inline autoplay: Starts automatically only when visible on screen, muted, loop, playsinline.
+ * 6. Visibility management: Automatically pauses when scrolled out of viewport or when browser
  *    tab becomes hidden; resumes seamlessly when visible again.
- * 4. Reduced-motion compliance: Detects `prefers-reduced-motion: reduce`. When enabled, suppresses
- *    autoplay and video downloading entirely, rendering a clean still poster image without controls.
- * 5. Fallback on block or error: If autoplay is blocked by browser policy (e.g. low-power mode)
+ * 7. Fallback on block or error: If autoplay is blocked by browser policy (e.g. low-power mode)
  *    or if video loading fails, cleanly displays the still poster image without broken UI or play buttons.
- * 6. Efficient loading: Prevents unnecessary data downloads by deferring video loading when off-screen
- *    and avoiding video streams entirely when reduced-motion is requested.
  */
 export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
   src,
@@ -32,20 +34,30 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [isInViewport, setIsInViewport] = useState<boolean>(true);
+  // 1. Synchronous detection of reduced-motion preference before mount
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    try {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+      return false;
+    }
+  });
+
+  // Track if video has entered viewport (to defer mounting off-screen video assets)
+  const [hasBeenVisible, setHasBeenVisible] = useState<boolean>(false);
+  const [isInViewport, setIsInViewport] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState<boolean>(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(false);
 
   // Derive poster URL (uses Cloudinary's dynamic .jpg frame if no custom poster provided)
   const posterUrl =
     poster || (src ? src.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : undefined);
 
-  // 1. Detect user's reduced-motion system preference
+  // 2. Listen for runtime changes to reduced-motion preference
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
 
     const handleMotionChange = (e: MediaQueryListEvent) => {
       setPrefersReducedMotion(e.matches);
@@ -61,30 +73,50 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
     }
   }, []);
 
-  // 2. Track viewport visibility via IntersectionObserver
+  // 3. Track viewport entry and visibility via IntersectionObserver
   useEffect(() => {
+    // If user prefers reduced motion, never observe or mount video
+    if (prefersReducedMotion) return;
+
     const target = containerRef.current;
     if (!target) return;
+
+    // Check immediate viewport intersection synchronously on mount
+    try {
+      const rect = target.getBoundingClientRect();
+      const inViewNow = rect.top < window.innerHeight && rect.bottom > 0 && rect.height > 0;
+      if (inViewNow) {
+        setHasBeenVisible(true);
+        setIsInViewport(true);
+      }
+    } catch { }
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          setIsInViewport(entry.isIntersecting);
+          const visible = entry.isIntersecting;
+          setIsInViewport(visible);
+          if (visible) {
+            setHasBeenVisible(true);
+          }
         });
       },
-      { threshold: [0, 0.25, 0.5] }
+      { threshold: [0, 0.2, 0.5] }
     );
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, []);
+  }, [prefersReducedMotion]);
 
-  // 3. Autoplay & Viewport/Tab Visibility Pause/Resume Engine
+  // 4. Autoplay & Viewport/Tab Visibility Pause/Resume Engine
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || prefersReducedMotion || hasError || autoplayBlocked) return;
+    // Do not attempt playback if not mounted, reduced motion, error, or blocked
+    if (!hasBeenVisible || prefersReducedMotion || hasError || autoplayBlocked) return;
 
-    // Enforce strict DOM properties for mobile WebKit & Blink autoplay
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Strict DOM properties sync for mobile WebKit & Blink autoplay
     video.muted = true;
     video.defaultMuted = true;
     video.playsInline = true;
@@ -108,7 +140,7 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
 
     attemptPlay();
 
-    // 4. Tab visibility change listener
+    // 5. Tab visibility change listener (pause when switching tabs, resume when active)
     const handleVisibilityChange = () => {
       if (document.hidden) {
         if (!video.paused) {
@@ -125,9 +157,9 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isInViewport, prefersReducedMotion, hasError, autoplayBlocked]);
+  }, [hasBeenVisible, isInViewport, prefersReducedMotion, hasError, autoplayBlocked]);
 
-  // Fallback 1: User requested reduced motion -> Render clean still poster frame (0 video downloads)
+  // Fallback 1: User requested reduced motion -> Render clean still poster frame (0 video downloads, 0 video tags)
   if (prefersReducedMotion) {
     return (
       <div
@@ -163,7 +195,26 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
     );
   }
 
-  // Normal: Silent autoplay video with zero controls, overlays, or buttons
+  // State 3: Off-screen video not yet visible -> Defer video mounting and buffering, show poster only
+  if (!hasBeenVisible) {
+    return (
+      <div
+        ref={containerRef}
+        className="w-full h-full relative overflow-hidden bg-black select-none pointer-events-none"
+        aria-label={alt}
+      >
+        <img
+          src={posterUrl}
+          alt={alt}
+          className={className}
+          loading="lazy"
+          draggable={false}
+        />
+      </div>
+    );
+  }
+
+  // State 4: Verified in view -> Mount video with conditional autoplay and zero visible controls
   return (
     <div
       ref={containerRef}
@@ -174,7 +225,7 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
         ref={videoRef}
         src={src}
         poster={posterUrl}
-        autoPlay
+        autoPlay={isInViewport && !prefersReducedMotion}
         muted
         loop
         playsInline
