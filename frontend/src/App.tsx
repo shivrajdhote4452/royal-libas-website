@@ -43,6 +43,7 @@ import { AdminSettings } from './pages/admin/AdminSettings';
 import { CartDrawer } from './components/CartDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { BackToTop } from './components/BackToTop';
+import { ScrollRestoration } from './components/ScrollRestoration';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { setCanonicalUrl } from './lib/seo';
 
@@ -79,6 +80,7 @@ export const App: React.FC = () => {
       <WishlistProvider>
         <QuickAddProvider>
           <BrowserRouter>
+            <ScrollRestoration />
             <Routes>
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />

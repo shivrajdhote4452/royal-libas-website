@@ -292,7 +292,7 @@ const BoutiqueReviewsDisplay: React.FC<DisplayProps> = ({ settings, reviews }) =
       aria-roledescription="carousel"
       aria-label="Customer Google Reviews"
       onKeyDown={handleKeyDown}
-      className="w-full bg-[#FAF5EC] border-b border-[#B58A3C]/25 py-10 sm:py-14 px-4 sm:px-6 lg:px-8 select-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
+      className="scroll-mt-24 w-full bg-[#FAF5EC] border-b border-[#B58A3C]/25 py-10 sm:py-14 px-4 sm:px-6 lg:px-8 select-none overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B58A3C] focus-visible:ring-offset-2"
     >
       <div className="max-w-6xl mx-auto space-y-8 sm:space-y-10">
         {/* ========================================================

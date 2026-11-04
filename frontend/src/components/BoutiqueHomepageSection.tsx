@@ -33,21 +33,6 @@ const BoutiqueHomepageContent: React.FC<ContentProps> = ({ settings }) => {
   const boutiqueWhatsapp =
     settings.boutiqueWhatsapp || settings.whatsappNumber || '+91 98112 23344';
 
-  // Handle smooth scroll if page loads or changes to #boutique
-  useEffect(() => {
-    const handleHash = () => {
-      if (window.location.hash === '#boutique') {
-        const el = document.getElementById('boutique');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        }
-      }
-    };
-
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
 
   // Keyboard accessibility for Lightbox
   useEffect(() => {
@@ -262,13 +247,6 @@ const BoutiqueHomepageContent: React.FC<ContentProps> = ({ settings }) => {
 
               <a
                 href="#reviews"
-                onClick={(e) => {
-                  e.preventDefault();
-                  const target = document.getElementById('reviews') || document.querySelector('[aria-label="What Our Customers Say"]');
-                  if (target) {
-                    target.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
                 className="inline-flex items-center justify-center gap-1.5 px-4 py-3 text-xs font-semibold text-gray-700 hover:text-[#5E1224] hover:underline transition-colors"
               >
                 <Star className="w-3.5 h-3.5 text-[#B58A3C]" />
