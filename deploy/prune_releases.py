@@ -15,6 +15,8 @@ Safety Invariants:
    - If a required lock is missing, inaccessible, or busy, skips deletion safely.
 2. Genuine read-only dry run: Never creates, touches, or mutates lock files,
    ledger files, or filesystem assets when running in dry-run mode.
+   When locks are absent or unavailable, clearly labels the result as an
+   unprotected, potentially stale inspection (never a deletion-safe plan).
 3. Cryptographic commit verification: Verifies each candidate directory against
    its actual git commit on disk. Never authorizes deletion merely because a
    release name or SHA appears in the ledger. Preserves uncertain releases.
@@ -86,11 +88,14 @@ class ContinuousLockManager:
         self.skip_locks = skip_locks
         self.dry_run = dry_run
 
+        self.lock_status: str = "PENDING"
+        self.lock_details: List[str] = []
         self._pipeline_file_obj = None
         self._activation_file_obj = None
 
     def __enter__(self):
         if self.skip_locks or not HAS_FCNTL:
+            self.lock_status = "SKIPPED"
             return self
 
         # 1. Pipeline lock coordination
@@ -104,17 +109,18 @@ class ContinuousLockManager:
                         f"Inherited lock FD {self.pipeline_lock_fd} does not match '{self.pipeline_lock_file}'"
                     )
                 fcntl.flock(self.pipeline_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.lock_details.append(f"Inherited pipeline lock FD {self.pipeline_lock_fd} active")
             except (OSError, BlockingIOError) as exc:
                 raise LockAcquisitionError(
                     f"Inherited pipeline lock FD {self.pipeline_lock_fd} invalid or busy: {exc}"
                 )
         else:
-            # Standalone mode: acquire pipeline lock directly
+            # Standalone mode: inspect/acquire pipeline lock directly
             if not os.path.exists(self.pipeline_lock_file):
                 if self.dry_run:
-                    print(
-                        f"[Lock Manager] NOTICE: Pipeline lock file '{self.pipeline_lock_file}' does not exist. "
-                        f"In genuine read-only dry-run, lock files are never created. Skipping pipeline lock check."
+                    self.lock_status = "UNPROTECTED_MISSING_LOCK"
+                    self.lock_details.append(
+                        f"Pipeline lock '{self.pipeline_lock_file}' is missing on disk"
                     )
                 else:
                     raise LockAcquisitionError(
@@ -125,19 +131,27 @@ class ContinuousLockManager:
                     # Open read-only to never mutate filesystem or create file
                     self._pipeline_file_obj = open(self.pipeline_lock_file, "r")
                     fcntl.flock(self._pipeline_file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.lock_details.append(f"Pipeline lock '{self.pipeline_lock_file}' acquired")
                 except (BlockingIOError, PermissionError, OSError) as exc:
                     self._cleanup_locks()
-                    raise LockAcquisitionError(
-                        f"Cannot acquire exclusive pipeline lock on '{self.pipeline_lock_file}': {exc}"
-                    )
+                    if self.dry_run:
+                        self.lock_status = "UNPROTECTED_LOCK_BUSY"
+                        self.lock_details.append(
+                            f"Pipeline lock '{self.pipeline_lock_file}' is held by another process: {exc}"
+                        )
+                    else:
+                        raise LockAcquisitionError(
+                            f"Cannot acquire exclusive pipeline lock on '{self.pipeline_lock_file}': {exc}"
+                        )
 
         # 2. Activation lock coordination
         if self.activation_lock_file:
             if not os.path.exists(self.activation_lock_file):
                 if self.dry_run:
-                    print(
-                        f"[Lock Manager] NOTICE: Activation lock file '{self.activation_lock_file}' does not exist. "
-                        f"In genuine read-only dry-run, lock files are never created. Skipping activation lock check."
+                    if self.lock_status == "PENDING":
+                        self.lock_status = "UNPROTECTED_MISSING_LOCK"
+                    self.lock_details.append(
+                        f"Activation lock '{self.activation_lock_file}' is missing on disk"
                     )
                 else:
                     raise LockAcquisitionError(
@@ -148,11 +162,21 @@ class ContinuousLockManager:
                     # Open read-only to allow unprivileged royal-deploy user to lock 0644 file
                     self._activation_file_obj = open(self.activation_lock_file, "r")
                     fcntl.flock(self._activation_file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.lock_details.append(f"Activation lock '{self.activation_lock_file}' acquired")
                 except (BlockingIOError, PermissionError, OSError) as exc:
                     self._cleanup_locks()
-                    raise LockAcquisitionError(
-                        f"Cannot acquire exclusive activation lock on '{self.activation_lock_file}': {exc}"
-                    )
+                    if self.dry_run:
+                        self.lock_status = "UNPROTECTED_LOCK_BUSY"
+                        self.lock_details.append(
+                            f"Activation lock '{self.activation_lock_file}' is held by another process: {exc}"
+                        )
+                    else:
+                        raise LockAcquisitionError(
+                            f"Cannot acquire exclusive activation lock on '{self.activation_lock_file}': {exc}"
+                        )
+
+        if self.lock_status == "PENDING":
+            self.lock_status = "ALL_LOCKS_ACQUIRED"
 
         return self
 
@@ -269,7 +293,7 @@ def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, any]], L
     - Valid ISO 8601 UTC timestamp
     - Valid release name format
     - Valid 40-character hex commit SHA
-    - STATUS == 'activated' or 'active'
+    - STATUS == 'activated' or 'active' (uncertain or unverified entries flagged)
     
     Returns:
         (valid_records_chronological, validation_warnings)
@@ -311,9 +335,13 @@ def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, any]], L
                 warnings.append(f"Line {line_no}: Invalid commit SHA format '{sha_raw}' in ledger.")
                 continue
 
-            # 4. Activation status validation
-            if status_raw.lower() not in ("activated", "active"):
-                warnings.append(f"Line {line_no}: Release '{rel_raw}' has non-activated status '{status_raw}'; ignored.")
+            # 4. Activation status validation: only 'activated' or 'active' is trusted for retention
+            norm_status = status_raw.lower()
+            if norm_status not in ("activated", "active"):
+                warnings.append(
+                    f"Line {line_no}: Release '{rel_raw}' has non-verified status '{status_raw}'; "
+                    f"preserved as uncertain and excluded from deletion lineage."
+                )
                 continue
 
             valid_records.append({
@@ -664,7 +692,10 @@ def prune_releases(
     try:
         with lock_mgr:
             if not skip_locks:
-                print("[Lock Manager] Continuous lifecycle locks acquired and active.")
+                if lock_mgr.lock_status == "ALL_LOCKS_ACQUIRED":
+                    print("[Lock Manager] Continuous lifecycle locks acquired and active.")
+                else:
+                    print(f"[Lock Manager] Lifecycle lock status: {lock_mgr.lock_status}")
 
             # 2. Validate builds_dir and current symlink early (fail-closed invariant)
             if not os.path.isdir(builds_dir):
@@ -733,6 +764,20 @@ def prune_releases(
                 for u in unverified:
                     print(f" - {u['name']} [{u['size_formatted']}] (Age: {u['age_hours']:.1f}h) -> Preserved")
 
+            # Check whether lifecycle locks were acquired during dry run
+            if dry_run and lock_mgr.lock_status not in ("ALL_LOCKS_ACQUIRED", "SKIPPED"):
+                print("\n" + "=" * 72)
+                print("[DRY-RUN RESULT: UNPROTECTED / POTENTIALLY STALE INSPECTION]")
+                print("WARNING: Required lifecycle locks are absent or unavailable:")
+                for det in lock_mgr.lock_details:
+                    print(f"  - {det}")
+                print("\nBecause lifecycle locks could not be verified, this inspection is")
+                print("UNPROTECTED against concurrent deployments or manual activations.")
+                print("DO NOT report or treat this output as a deletion-safe plan.")
+                print("In execution mode, pruning would be skipped safely to prevent races.")
+                print("=" * 72)
+                return 0
+
             # Check rollback quota: must retain at least min_rollbacks verified usable releases
             if len(rollbacks) < min_rollbacks:
                 print(f"\nSAFETY GUARD: Fewer than {min_rollbacks} verified usable rollback releases available.")
@@ -751,6 +796,7 @@ def prune_releases(
 
             # Dry-run vs Execution path
             if dry_run:
+
                 # In dry-run mode, perform non-destructive safety checks
                 print("\n--- [FAIL-CLOSED SAFETY VERIFICATION] ---")
                 for c in candidates:
@@ -763,7 +809,7 @@ def prune_releases(
                         print(f"CRITICAL SAFETY ERROR on '{c['name']}': {exc}")
                         return 1
 
-                print("\n[DRY-RUN COMPLETE] All safety checks passed. GENUINE READ-ONLY: No files were touched or removed.")
+                print("\n[DRY-RUN COMPLETE] All safety checks and lifecycle locks passed. GENUINE READ-ONLY: No files were touched or removed.")
                 print("To execute real deletions, run with --execute.")
                 return 0
 
@@ -866,6 +912,11 @@ def main():
         help="Minimum verified usable rollback releases to retain (default: 3)"
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Perform genuine read-only inspection (default behavior)"
+    )
+    parser.add_argument(
         "--execute",
         action="store_true",
         help="Execute real directory removal (default is genuine read-only dry-run)"
@@ -888,7 +939,7 @@ def main():
         shared_env=args.shared_env,
         shared_uploads=args.shared_uploads,
         min_rollbacks=args.min_rollbacks,
-        dry_run=not args.execute,
+        dry_run=(not args.execute) or args.dry_run,
         skip_locks=args.skip_locks
     )
     sys.exit(exit_code)

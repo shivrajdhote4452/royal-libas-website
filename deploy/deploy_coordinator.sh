@@ -63,12 +63,19 @@ if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
   exit 1
 fi
 
-# 4. Activation phase (release preparation hold on activation lock so activate-release.sh can lock it)
+# 4. Activation phase
 echo ">>> [Phase 2/4] Activating Release: $RELEASE_NAME"
 if [ -f "$ACTIVATION_LOCK" ]; then
   exec 201<&-
 fi
 sudo -n /usr/local/lib/royal-libas/activate-release.sh "$RELEASE_NAME" "$EXPECTED_SHA"
+
+# Verify symlink target immediately matches intended release
+RESOLVED_TARGET="$(basename "$(readlink -f "$CURRENT_SYMLINK")")"
+if [ "$RESOLVED_TARGET" != "$RELEASE_NAME" ]; then
+  echo "CRITICAL: Activation verification failed: expected '$RELEASE_NAME', found '$RESOLVED_TARGET'." >&2
+  exit 1
+fi
 
 # 5. Post-activation health check verification
 echo ">>> [Phase 3/4] Verifying Service Health..."

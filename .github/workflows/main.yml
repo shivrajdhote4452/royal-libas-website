@@ -79,14 +79,21 @@ jobs:
           [[ "$release" =~ ^release-[A-Za-z0-9]{8}$ ]]
           [[ "$actual" = "$expected" ]]
 
-          # 4. Release activation (release preparation hold on activation lock so activate-release.sh can lock it)
+          # 4. Release activation
           echo ">>> [Phase 2/4] Activating Release: $release"
           if [ -f "$activation_lock" ]; then
             exec 201<&-
           fi
           sudo -n /usr/local/lib/royal-libas/activate-release.sh "$release" "$expected"
 
-          # 5. Post-activation health check verification
+          # 5. Immediate post-activation verification
+          resolved="$(basename "$(readlink -f "$current_symlink")")"
+          if [ "$resolved" != "$release" ]; then
+            echo "CRITICAL: Activation verification failed: expected '$release', found '$resolved'." >&2
+            exit 1
+          fi
+
+          # 6. Post-activation health check verification
           echo ">>> [Phase 3/4] Verifying Service Health..."
           health_url="http://127.0.0.1:8000/health"
           health_ok=0

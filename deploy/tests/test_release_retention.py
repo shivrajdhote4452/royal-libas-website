@@ -542,35 +542,109 @@ class TestReleaseRetentionEngine(unittest.TestCase):
         )
         self.assertEqual(exit_code, 1)
 
-    def test_seed_ledger_evidence_validation_and_ordering(self):
-        """Test seed_ledger verifies physical release directories, commits, and sorts chronologically."""
+    def test_seed_ledger_missing_evidence_disables_seeding(self):
+        """Without independent activation evidence, seed_ledger refuses to mark historical entries as activated."""
+        self._create_release("release-huDNUmEb", sha="805e7a93091e8f073ad3d629fc4d952d46cd454b")
+
+        # Without evidence file, execution must not mark it as activated
+        res = seed_ledger(
+            self.ledger_file,
+            builds_dir=self.builds_dir,
+            pipeline_lock_file=self.pipeline_lock,
+            evidence_file=None,
+            dry_run=False
+        )
+        self.assertEqual(res, 0)
+        # Ledger was not seeded with unverified activated records
+        recs, _ = parse_and_validate_ledger(self.ledger_file)
+        self.assertEqual(len(recs), 0)
+
+    def test_seed_ledger_with_independent_evidence(self):
+        """With independent activation evidence, seed_ledger verifies physical release directories, commits, and evidence."""
         # Create 2 physical releases
         self._create_release("release-huDNUmEb", sha="805e7a93091e8f073ad3d629fc4d952d46cd454b")
         self._create_release("release-CPCGzuLG", sha="d9e7507cd1b8f820e44c9644fc460bb50902c6f1")
 
+        # Independent evidence file containing proof for release-huDNUmEb only
+        evidence_file = os.path.join(self.test_dir, "evidence.tsv")
+        with open(evidence_file, "w", encoding="utf-8") as f:
+            f.write("release-huDNUmEb\t805e7a93091e8f073ad3d629fc4d952d46cd454b\tpostgres_backup_snapshot_1\n")
+
         # Existing ledger contains a newer deployment
         with open(self.ledger_file, "w", encoding="utf-8") as f:
             f.write("2026-11-04T12:00:00Z\trelease-00000005\t0000000000000000000000000000000000000005\tactivated\n")
-
-        # Dry run does not write
-        res_dry = seed_ledger(self.ledger_file, builds_dir=self.builds_dir, dry_run=True)
-        self.assertEqual(res_dry, 0)
 
         # Execute merges and sorts chronologically
         res_exec = seed_ledger(
             self.ledger_file,
             builds_dir=self.builds_dir,
             pipeline_lock_file=self.pipeline_lock,
+            evidence_file=evidence_file,
             dry_run=False
         )
         self.assertEqual(res_exec, 0)
 
         recs, _ = parse_and_validate_ledger(self.ledger_file)
-        # Should have 3 records, chronologically ordered
-        self.assertEqual(len(recs), 3)
+        # Only release-huDNUmEb has independent evidence and is seeded as activated
+        self.assertEqual(len(recs), 2)
         self.assertEqual(recs[0]["release"], "release-huDNUmEb")
-        self.assertEqual(recs[1]["release"], "release-CPCGzuLG")
-        self.assertEqual(recs[2]["release"], "release-00000005")
+        self.assertEqual(recs[0]["status"], "activated")
+        self.assertEqual(recs[1]["release"], "release-00000005")
+
+    def test_uncertain_historical_releases_never_deleted(self):
+        """Historical releases marked as uncertain_historical are strictly excluded from deletion."""
+        # Create 6 physical releases
+        releases = [f"release-0000000{i}" for i in range(1, 7)]
+        for r in releases:
+            self._create_release(r)
+
+        os.symlink(os.path.join(self.builds_dir, "release-00000006"), self.current_symlink)
+
+        # Write ledger where older releases 1, 2, 3 have status uncertain_historical
+        with open(self.ledger_file, "w", encoding="utf-8") as f:
+            f.write("# TIMESTAMP\tRELEASE_NAME\tCOMMIT_SHA\tSTATUS\n")
+            f.write("2026-11-01T10:00:00Z\trelease-00000001\t0000000000000000000000000000000000000001\tuncertain_historical\n")
+            f.write("2026-11-02T10:00:00Z\trelease-00000002\t0000000000000000000000000000000000000002\tuncertain_historical\n")
+            f.write("2026-11-03T10:00:00Z\trelease-00000003\t0000000000000000000000000000000000000003\tuncertain_historical\n")
+            f.write("2026-11-04T10:00:00Z\trelease-00000004\t0000000000000000000000000000000000000004\tactivated\n")
+            f.write("2026-11-04T11:00:00Z\trelease-00000005\t0000000000000000000000000000000000000005\tactivated\n")
+            f.write("2026-11-04T12:00:00Z\trelease-00000006\t0000000000000000000000000000000000000006\tactivated\n")
+
+        recs, warnings = parse_and_validate_ledger(self.ledger_file)
+        self.assertEqual(len(recs), 3, "Only the 3 activated releases are admitted to valid_records")
+        self.assertEqual(len(warnings), 3, "Uncertain releases produce validation notices")
+
+        live, rollbacks, candidates, unverified, _ = evaluate_retention_plan(
+            self.builds_dir, self.current_symlink, recs, self.shared_env, self.shared_uploads, min_rollbacks=3
+        )
+        # Because only 2 rollbacks are activated (release 4 and 5), min_rollbacks (3) is not satisfied
+        # candidates MUST be 0!
+        self.assertEqual(len(candidates), 0)
+        # Releases 1, 2, 3 must be in unverified and PRESERVED!
+        unverified_names = [u["name"] for u in unverified]
+        self.assertIn("release-00000001", unverified_names)
+        self.assertIn("release-00000002", unverified_names)
+        self.assertIn("release-00000003", unverified_names)
+
+        # Execute pruning
+        exit_code = prune_releases(
+            builds_dir=self.builds_dir,
+            current_symlink=self.current_symlink,
+            ledger_file=self.ledger_file,
+            shared_env=self.shared_env,
+            shared_uploads=self.shared_uploads,
+            min_rollbacks=3,
+            dry_run=False,
+            skip_locks=True,
+            mounts_file=self.mounts_file
+        )
+        self.assertEqual(exit_code, 0)
+        # All releases 1 through 6 MUST still exist on disk!
+        for i in range(1, 7):
+            self.assertTrue(
+                os.path.isdir(os.path.join(self.builds_dir, f"release-0000000{i}")),
+                f"release-0000000{i} must not be deleted!"
+            )
 
 
 if __name__ == "__main__":
