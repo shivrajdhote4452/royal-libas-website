@@ -90,24 +90,9 @@ jobs:
           [[ "$release" =~ ^release-[A-Za-z0-9]{8}$ ]]
           [[ "$actual" = "$expected" ]]
 
-          # 4. Release activation
+          # 4. Release activation (caller maintains continuous lifecycle locks)
           echo ">>> [Phase 2/4] Activating Release: $release"
-          if [ -f "$activation_lock" ]; then
-            exec 201<&-
-          fi
-          pipeline_token="$builds_dir/.deploy-pipeline.token"
-          echo "$$" > "$pipeline_token"
           sudo -n /usr/local/lib/royal-libas/activate-release.sh "$release" "$expected"
-          rm -f "$pipeline_token"
-
-          # Re-acquire activation lock immediately to prevent legacy direct-helper from running during health check/ledger/pruning
-          if [ -f "$activation_lock" ]; then
-            exec 201<"$activation_lock"
-            if ! flock -n 201; then
-              echo "CRITICAL: Unable to re-acquire activation lock ($activation_lock) post-activation." >&2
-              exit 1
-            fi
-          fi
 
           # 5. Immediate post-activation verification
           resolved="$(basename "$(readlink -f "$current_symlink")")"
@@ -134,16 +119,7 @@ jobs:
             # Attempt automated rollback to previous release if valid
             if [ -n "$previous_release" ] && [ "$previous_release" != "$release" ] && [[ "$previous_commit" =~ ^[0-9a-f]{40}$ ]]; then
               echo ">>> [Rollback] Attempting automated rollback to previous release: $previous_release ($previous_commit)..." >&2
-              if [ -f "$activation_lock" ]; then
-                exec 201<&-
-              fi
-              echo "$$" > "$pipeline_token"
               if sudo -n /usr/local/lib/royal-libas/activate-release.sh "$previous_release" "$previous_commit"; then
-                rm -f "$pipeline_token"
-                if [ -f "$activation_lock" ]; then
-                  exec 201<"$activation_lock"
-                  flock -n 201 || true
-                fi
                 rolled_back_target="$(basename "$(readlink -f "$current_symlink")")"
                 if [ "$rolled_back_target" = "$previous_release" ]; then
                   echo ">>> [Rollback] Automated rollback succeeded. Site reverted to $previous_release." >&2
@@ -151,7 +127,6 @@ jobs:
                   echo ">>> [Rollback WARNING] Symlink target after rollback is '$rolled_back_target', expected '$previous_release'." >&2
                 fi
               else
-                rm -f "$pipeline_token"
                 echo ">>> [Rollback CRITICAL] Automated rollback failed to activate $previous_release." >&2
               fi
             else

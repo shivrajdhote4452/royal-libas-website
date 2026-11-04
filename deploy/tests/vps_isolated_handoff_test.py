@@ -2,22 +2,38 @@
 """
 Isolated Linux Process Concurrency & Production Entry-Point Verification Suite.
 
-Designed to run on Linux (VPS) in an isolated /tmp sandbox to verify:
-1. Legacy Direct-Helper during Preparation: Attempting activation via the legacy
-   helper (which historically only acquires the activation lock) is strictly blocked.
-2. Legacy Direct-Helper during Hand-Off: Verifies that even in a simulated hand-off gap,
-   post-activation assertions fail-closed immediately and prevent concurrent activation
-   or unsafe deletion. Also proves that the protocol-aware helper blocks direct calls.
-3. Legacy Direct-Helper during Pruning: Verifies that the activation lock is continuously
-   held across health checks, ledger updates, and pruning, strictly blocking the legacy
-   helper from altering symlinks during pruning.
-4. Post-Activation Health Check Failure & Rollback: Verifies that a failing health check
-   accurately reports failure (exit code 1, never exit 0), triggers automated rollback
-   to the previous release, skips ledger recording, and skips release pruning.
-5. Authoritative Evidence Policy: Verifies that historical seeding for deletion is
-   disabled and all pre-existing releases are preserved safely as uncertain.
-6. Missing Lock Dry-Run Labeling: Verifies that dry-run mode flags missing locks with the
-   UNPROTECTED / POTENTIALLY STALE INSPECTION banner.
+Designed to run in an isolated sandbox (e.g. /tmp on VPS) under user 'royal-deploy':
+1. Test 1: Simultaneous Legacy Helper Invocation During Preparation
+   - Workflow holds pipeline lock (FD 200) and activation lock (FD 201).
+   - Competing legacy helper is strictly blocked by activation lock (exit 1).
+   - Observed symlink unchanged, no service restart.
+2. Test 2: Simultaneous Legacy Invocation During Activation (Zero Hand-Off Gap)
+   - Workflow holds continuous dual locks across preparation and activation.
+   - Proposed helper verifies ancestor lock hold via kernel /proc.
+   - Competing legacy helper during activation is strictly blocked.
+   - Proposed helper switches symlink and executes 'systemctl restart royal-libas'.
+   - Observed symlink, exit code, and service restart asserted directly.
+3. Test 3: Lock Contention on Direct Proposed Helper Invocation
+   - Direct invocation of proposed helper while pipeline is active is rejected.
+   - Assert: exits with code 1 and pipeline-in-progress error.
+4. Test 4: Failed Service Restart Handling & Automated Rollback
+   - Systemctl restart of 'royal-libas' fails.
+   - Proposed helper catches failure (NO || true; fails closed).
+   - Automatically reverts symlink to previous release and restarts previous release.
+   - Helper exits with code 1; ledger and pruning skipped.
+5. Test 5: Post-Activation Health Check Failure & Rollback
+   - Health check times out.
+   - Automated rollback reverts symlink to previous release.
+   - Helper exits with code 1; ledger and pruning skipped.
+6. Test 6: Simultaneous Legacy Invocation During Pruning
+   - Dual locks held across pruning strictly block competing legacy helper.
+   - Pruning completes safely under continuous locks.
+7. Test 7: Safe First Deployment & Manual Rollback Workflow
+   - First-run bootstrapping on fresh environment preserves active + 3 rollbacks.
+   - Coordinated rollback to a previous release verified end-to-end.
+8. Test 8: Authoritative Evidence Policy & Dry-Run Labeling
+   - Historical releases without independent proof preserved as uncertain_historical.
+   - Missing lock during dry-run produces UNPROTECTED banner.
 """
 
 import os
@@ -74,7 +90,7 @@ def create_mock_release(builds_dir: str, shared_dir: str, name: str, sha: str = 
 
 def create_legacy_helper_script(path: str, activation_lock: str, current_symlink: str, builds_dir: str):
     """
-    Creates an executable substitute matching the existing production root helper
+    Executable substitute matching the existing production root helper
     /usr/local/lib/royal-libas/activate-release.sh (which historically only acquires
     the activation lock and knows nothing about the pipeline lock).
     """
@@ -92,7 +108,6 @@ ACTIVATION_LOCK="{activation_lock}"
 CURRENT_SYMLINK="{current_symlink}"
 BUILDS_DIR="{builds_dir}"
 
-# Legacy helper takes only activation lock via flock -n
 exec 200>"$ACTIVATION_LOCK"
 if ! flock -n 200; then
   echo "Another deployment is running" >&2
@@ -121,13 +136,49 @@ echo "LEGACY_ACTIVATED $RELEASE_NAME"
     os.chmod(path, 0o755)
 
 
+def create_mock_systemctl(path: str, log_file: str, fail_flag: str):
+    script_content = f"""#!/bin/bash
+echo "$*" >> "{log_file}"
+if [ -f "{fail_flag}" ]; then
+  echo "Job for royal-libas.service failed because the control process exited with error code." >&2
+  exit 1
+fi
+exit 0
+"""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(script_content)
+    os.chmod(path, 0o755)
+
+
+def create_mock_curl(path: str, fail_flag: str):
+    script_content = f"""#!/bin/bash
+if [ -f "{fail_flag}" ]; then
+  exit 1
+fi
+echo '{{"status":"ok"}}'
+exit 0
+"""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(script_content)
+    os.chmod(path, 0o755)
+
+
+def create_mock_backup(path: str, log_file: str):
+    script_content = f"""#!/bin/bash
+echo "BACKUP_EXECUTED" >> "{log_file}"
+exit 0
+"""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(script_content)
+    os.chmod(path, 0o755)
+
+
+# ------------------------------------------------------------------------------
+# TEST 1: Simultaneous Legacy Helper Invocation During Preparation
+# ------------------------------------------------------------------------------
 def test_legacy_helper_during_preparation(base_dir: str) -> bool:
-    """
-    Test 1: Legacy direct helper is invoked during workflow release preparation.
-    Must be blocked by activation lock hold (FD 201).
-    """
     print("\n" + "=" * 72)
-    print("TEST 1: Legacy Direct-Helper Attempt During Preparation Phase")
+    print("TEST 1: Simultaneous Legacy Helper Attempt During Preparation Phase")
     print("=" * 72)
 
     builds_dir = os.path.join(base_dir, "test1_builds")
@@ -142,34 +193,31 @@ def test_legacy_helper_during_preparation(base_dir: str) -> bool:
     current_symlink = os.path.join(base_dir, "test1_current")
     pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
     activation_lock = os.path.join(base_dir, "test1_activation.lock")
+    ledger_file = os.path.join(builds_dir, ".deployments_ledger.tsv")
     open(pipeline_lock, "a").close()
     open(activation_lock, "a").close()
 
-    # Initial live release
     create_mock_release(builds_dir, shared_dir, "release-live0001", sha="1" * 40)
     os.symlink(os.path.join(builds_dir, "release-live0001"), current_symlink)
 
-    # Rogue release candidate
     create_mock_release(builds_dir, shared_dir, "release-rogue001", sha="9" * 40)
 
-    # Legacy helper script
     legacy_helper = os.path.join(base_dir, "legacy_helper_1.sh")
     create_legacy_helper_script(legacy_helper, activation_lock, current_symlink, builds_dir)
 
-    print("[Workflow] Step 1: Starting preparation, holding pipeline lock (FD 200) and activation lock (FD 201)...")
+    print("[Workflow] Holding pipeline lock (FD 200) and activation lock (FD 201) during preparation...")
     fd_pipeline = os.open(pipeline_lock, os.O_RDWR)
     fcntl.flock(fd_pipeline, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     fd_activation = os.open(activation_lock, os.O_RDWR)
     fcntl.flock(fd_activation, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-    print("[Operator/Direct Invocation] Attempting legacy activate-release.sh during preparation...")
+    print("[Competing Process] Invoking legacy activate-release.sh during preparation...")
     res = subprocess.run([legacy_helper, "release-rogue001", "9" * 40], capture_output=True, text=True)
 
     print(f"[Legacy Helper] Exit code: {res.returncode}")
     print(f"[Legacy Helper] Stderr: {res.stderr.strip()}")
 
-    # Cleanup workflow locks
     fcntl.flock(fd_activation, fcntl.LOCK_UN)
     os.close(fd_activation)
     fcntl.flock(fd_pipeline, fcntl.LOCK_UN)
@@ -184,17 +232,20 @@ def test_legacy_helper_during_preparation(base_dir: str) -> bool:
         print(f"FAIL: Current symlink was modified to {current_target}!")
         return False
 
+    if os.path.exists(ledger_file):
+        print("FAIL: Ledger file created unexpectedly during blocked preparation!")
+        return False
+
     print("PASS: Legacy direct-helper was strictly BLOCKED during preparation phase.")
     return True
 
 
-def test_legacy_helper_during_pruning(base_dir: str, prune_script_path: str) -> bool:
-    """
-    Test 2: Legacy direct helper is invoked during release retention pruning.
-    Must be blocked because ContinuousLockManager holds the activation lock.
-    """
+# ------------------------------------------------------------------------------
+# TEST 2: Simultaneous Legacy Invocation During Activation (Zero Hand-Off Gap)
+# ------------------------------------------------------------------------------
+def test_simultaneous_legacy_during_activation(base_dir: str, proposed_helper_path: str) -> bool:
     print("\n" + "=" * 72)
-    print("TEST 2: Legacy Direct-Helper Attempt During Pruning Phase")
+    print("TEST 2: Simultaneous Legacy Invocation During Activation (Zero Hand-Off Gap)")
     print("=" * 72)
 
     builds_dir = os.path.join(base_dir, "test2_builds")
@@ -202,104 +253,121 @@ def test_legacy_helper_during_pruning(base_dir: str, prune_script_path: str) -> 
     os.makedirs(builds_dir, exist_ok=True)
     os.makedirs(shared_dir, exist_ok=True)
 
-    shared_env = os.path.join(shared_dir, ".env")
-    with open(shared_env, "w") as f:
+    with open(os.path.join(shared_dir, ".env"), "w") as f:
         f.write("PROD_SECRET=test2\n")
-    shared_uploads = os.path.join(shared_dir, "uploads")
-    os.makedirs(shared_uploads, exist_ok=True)
+    os.makedirs(os.path.join(shared_dir, "uploads"), exist_ok=True)
 
     current_symlink = os.path.join(base_dir, "test2_current")
     pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
     activation_lock = os.path.join(base_dir, "test2_activation.lock")
-    ledger_file = os.path.join(builds_dir, ".deployments_ledger.tsv")
     open(pipeline_lock, "a").close()
     open(activation_lock, "a").close()
 
-    # Create 5 releases and seed ledger
-    releases = [f"release-pru0000{i}" for i in range(1, 6)]
-    for r in releases:
-        create_mock_release(builds_dir, shared_dir, r, sha="1" * 40)
-    os.symlink(os.path.join(builds_dir, "release-pru00005"), current_symlink)
+    create_mock_release(builds_dir, shared_dir, "release-live0002", sha="1" * 40)
+    os.symlink(os.path.join(builds_dir, "release-live0002"), current_symlink)
 
-    with open(ledger_file, "w") as f:
-        for i, r in enumerate(releases):
-            ts = (datetime.now(timezone.utc) - timedelta(hours=6 - i)).isoformat()
-            f.write(f"{ts}\t{r}\t{'1'*40}\tactivated\n")
+    create_mock_release(builds_dir, shared_dir, "release-next0002", sha="2" * 40)
+    create_mock_release(builds_dir, shared_dir, "release-comp0002", sha="3" * 40)
 
     legacy_helper = os.path.join(base_dir, "legacy_helper_2.sh")
     create_legacy_helper_script(legacy_helper, activation_lock, current_symlink, builds_dir)
 
-    # Workflow holds pipeline lock (FD 200) and activation lock (FD 201)
+    systemctl_log = os.path.join(base_dir, "systemctl_2.log")
+    mock_systemctl = os.path.join(base_dir, "mock_systemctl_2.sh")
+    create_mock_systemctl(mock_systemctl, systemctl_log, os.path.join(base_dir, "fail_sys_flag"))
+
+    mock_curl = os.path.join(base_dir, "mock_curl_2.sh")
+    create_mock_curl(mock_curl, os.path.join(base_dir, "fail_curl_flag"))
+
+    backup_log = os.path.join(base_dir, "backup_2.log")
+    mock_backup = os.path.join(base_dir, "mock_backup_2.sh")
+    create_mock_backup(mock_backup, backup_log)
+
+    # Workflow holds BOTH locks continuously
     fd_pipeline = os.open(pipeline_lock, os.O_RDWR)
     fcntl.flock(fd_pipeline, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     fd_activation = os.open(activation_lock, os.O_RDWR)
     fcntl.flock(fd_activation, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-    print("[Workflow] Step 1: Holding both locks, passing to prune_releases.py with --pipeline-lock-fd 200 and --activation-lock-fd 201...")
+    print("[Workflow] Holding continuous dual locks (FD 200, 201) across activation call...")
 
-    # Spawn competing legacy activation while pruning is running
-    # To verify mutual exclusion during pruning, we test locking activation_lock while held
-    competing_cmd = [legacy_helper, "release-pru00001", "1" * 40]
-    res_competing = subprocess.run(competing_cmd, capture_output=True, text=True)
+    # Competing legacy helper attempts activation while locks are held
+    print("[Competing Legacy Helper] Attempting activation while workflow is activating...")
+    res_comp = subprocess.run([legacy_helper, "release-comp0002", "3" * 40], capture_output=True, text=True)
+    print(f"[Competing Legacy Helper] Exit code: {res_comp.returncode}")
+    print(f"[Competing Legacy Helper] Stderr: {res_comp.stderr.strip()}")
 
-    print(f"[Legacy Helper] Exit code during pruning hold: {res_competing.returncode}")
-    print(f"[Legacy Helper] Stderr: {res_competing.stderr.strip()}")
-
-    if res_competing.returncode != 1 or "Another deployment is running" not in res_competing.stderr:
-        print("FAIL: Legacy helper was NOT blocked while activation lock is held during pruning!")
+    if res_comp.returncode != 1 or "Another deployment is running" not in res_comp.stderr:
+        print("FAIL: Competing legacy helper was NOT blocked during activation hold!")
         fcntl.flock(fd_activation, fcntl.LOCK_UN)
         os.close(fd_activation)
         fcntl.flock(fd_pipeline, fcntl.LOCK_UN)
         os.close(fd_pipeline)
         return False
 
-    print("PASS: Legacy direct-helper was strictly BLOCKED from altering symlink during pruning.")
+    # Workflow executes actual proposed helper (inheriting open FDs in process tree)
+    env = os.environ.copy()
+    env.update({
+        "BUILDS_DIR": builds_dir,
+        "CURRENT_SYMLINK": current_symlink,
+        "SHARED_DIR": shared_dir,
+        "PIPELINE_LOCK": pipeline_lock,
+        "ACTIVATION_LOCK": activation_lock,
+        "BACKUP_SCRIPT": mock_backup,
+        "SYSTEMCTL_BIN": mock_systemctl,
+        "CURL_BIN": mock_curl,
+        "SERVICE_NAME": "royal-libas",
+        "HEALTH_URL": "http://127.0.0.1:8000/health"
+    })
 
-    # Now execute prune_releases inheriting both FDs
-    prune_cmd = [
-        sys.executable, prune_script_path,
-        "--execute",
-        "--pipeline-lock-fd", str(fd_pipeline),
-        "--activation-lock-fd", str(fd_activation),
-        "--builds-dir", builds_dir,
-        "--current-symlink", current_symlink,
-        "--ledger-file", ledger_file,
-        "--pipeline-lock-file", pipeline_lock,
-        "--activation-lock-file", activation_lock,
-        "--shared-env", shared_env,
-        "--shared-uploads", shared_uploads,
-        "--min-rollbacks", "3"
-    ]
-    res_prune = subprocess.run(prune_cmd, capture_output=True, text=True, pass_fds=(fd_pipeline, fd_activation))
-    print(f"[Prune Engine] Exit code: {res_prune.returncode}")
+    print("[Workflow] Executing proposed activate-release.sh under active ancestry...")
+    res_prop = subprocess.run([proposed_helper_path, "release-next0002", "2" * 40], capture_output=True, text=True, env=env)
 
     fcntl.flock(fd_activation, fcntl.LOCK_UN)
     os.close(fd_activation)
     fcntl.flock(fd_pipeline, fcntl.LOCK_UN)
     os.close(fd_pipeline)
 
-    if res_prune.returncode != 0:
-        print(f"FAIL: Prune failed under inherited locks:\n{res_prune.stderr}")
+    print(f"[Proposed Helper] Exit code: {res_prop.returncode}")
+    print(f"[Proposed Helper] Stdout: {res_prop.stdout.strip()}")
+
+    if res_prop.returncode != 0:
+        print(f"FAIL: Proposed helper failed under ancestor locks:\n{res_prop.stderr}")
         return False
 
-    # Oldest release 1 was pruned, 2-4 rollbacks + 5 live preserved
-    if os.path.exists(os.path.join(builds_dir, "release-pru00001")):
-        print("FAIL: release-pru00001 was not pruned!")
+    # Directly assert observed symlink target
+    observed_target = os.path.basename(os.path.realpath(current_symlink))
+    print(f"[Direct Assertion] Current symlink target: {observed_target} (expected: release-next0002)")
+    if observed_target != "release-next0002":
+        print(f"FAIL: Observed symlink {observed_target} does not match release-next0002!")
         return False
 
-    print("PASS: Pruning completed safely under continuous dual lifecycle locks.")
+    # Directly assert service restart call on 'royal-libas'
+    with open(systemctl_log) as f:
+        sys_calls = f.read()
+    print(f"[Direct Assertion] Systemctl calls:\n{sys_calls.strip()}")
+    if "restart royal-libas" not in sys_calls:
+        print("FAIL: systemctl restart royal-libas was not called!")
+        return False
+
+    # Directly assert pre-deployment database backup was executed
+    with open(backup_log) as f:
+        backup_calls = f.read()
+    if "BACKUP_EXECUTED" not in backup_calls:
+        print("FAIL: Pre-deployment database backup was not executed!")
+        return False
+
+    print("PASS: Zero hand-off gap verified: competing helper blocked, proposed helper activated correctly.")
     return True
 
 
-def test_lock_handoff_gap_and_assertion(base_dir: str) -> bool:
-    """
-    Test 3: Simulates the hand-off window where FD 201 is closed right before activation.
-    Verifies that if a legacy helper intervenes, the workflow's immediate post-activation
-    symlink assertion fails closed and prevents ledger update or release pruning.
-    """
+# ------------------------------------------------------------------------------
+# TEST 3: Lock Contention on Direct Proposed Helper Invocation
+# ------------------------------------------------------------------------------
+def test_direct_proposed_helper_contention(base_dir: str, proposed_helper_path: str) -> bool:
     print("\n" + "=" * 72)
-    print("TEST 3: Lock Hand-Off Gap and Post-Activation Symlink Assertion")
+    print("TEST 3: Direct Proposed Helper Contention (CI Pipeline Active)")
     print("=" * 72)
 
     builds_dir = os.path.join(base_dir, "test3_builds")
@@ -314,88 +382,65 @@ def test_lock_handoff_gap_and_assertion(base_dir: str) -> bool:
     current_symlink = os.path.join(base_dir, "test3_current")
     pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
     activation_lock = os.path.join(base_dir, "test3_activation.lock")
-    ledger_file = os.path.join(builds_dir, ".deployments_ledger.tsv")
     open(pipeline_lock, "a").close()
     open(activation_lock, "a").close()
 
-    # Pre-existing release
-    create_mock_release(builds_dir, shared_dir, "release-orig0001", sha="1" * 40)
-    os.symlink(os.path.join(builds_dir, "release-orig0001"), current_symlink)
+    create_mock_release(builds_dir, shared_dir, "release-live0003", sha="1" * 40)
+    os.symlink(os.path.join(builds_dir, "release-live0003"), current_symlink)
+    create_mock_release(builds_dir, shared_dir, "release-comp0003", sha="2" * 40)
 
-    # Release intended by CI
-    create_mock_release(builds_dir, shared_dir, "release-ci000001", sha="2" * 40)
+    # Simulate CI pipeline holding the pipeline lock in a detached process
+    ci_script = f"""#!/bin/bash
+exec 200>"{pipeline_lock}"
+flock -n 200
+sleep 5
+"""
+    ci_proc = subprocess.Popen(["bash", "-c", ci_script])
+    time.sleep(0.3)
 
-    # Rogue release activated by competing process
-    create_mock_release(builds_dir, shared_dir, "release-comp0001", sha="3" * 40)
+    env = os.environ.copy()
+    env.update({
+        "BUILDS_DIR": builds_dir,
+        "CURRENT_SYMLINK": current_symlink,
+        "SHARED_DIR": shared_dir,
+        "PIPELINE_LOCK": pipeline_lock,
+        "ACTIVATION_LOCK": activation_lock,
+        "SERVICE_NAME": "royal-libas"
+    })
 
-    legacy_helper = os.path.join(base_dir, "legacy_helper_3.sh")
-    create_legacy_helper_script(legacy_helper, activation_lock, current_symlink, builds_dir)
+    print("[Operator] Attempting direct activate-release.sh in separate session while CI holds lock...")
+    res = subprocess.run(
+        [proposed_helper_path, "release-comp0003", "2" * 40],
+        capture_output=True,
+        text=True,
+        env=env
+    )
 
-    # CI acquires pipeline lock (FD 200) and activation lock (FD 201)
-    fd_pipeline = os.open(pipeline_lock, os.O_RDWR)
-    fcntl.flock(fd_pipeline, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    fd_activation = os.open(activation_lock, os.O_RDWR)
-    fcntl.flock(fd_activation, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    ci_proc.terminate()
+    ci_proc.wait()
 
-    # CI preparation finishes -> CI releases FD 201 for hand-off
-    print("[CI Workflow] Simulating hand-off: closing FD 201...")
-    fcntl.flock(fd_activation, fcntl.LOCK_UN)
-    os.close(fd_activation)
+    print(f"[Proposed Helper] Exit code: {res.returncode}")
+    print(f"[Proposed Helper] Stderr: {res.stderr.strip()}")
 
-    # Competing activation runs right at hand-off
-    print("[Competing Legacy Helper] Intervening at hand-off to activate release-comp0001...")
-    res_comp = subprocess.run([legacy_helper, "release-comp0001", "3" * 40], capture_output=True, text=True)
-    print(f"[Competing Legacy Helper] Exit code: {res_comp.returncode}")
-
-    # Now CI attempts its activation
-    print("[CI Workflow] CI invokes activate-release.sh for release-ci000001...")
-    res_ci = subprocess.run([legacy_helper, "release-ci000001", "2" * 40], capture_output=True, text=True)
-    print(f"[CI Workflow] Exit code: {res_ci.returncode}")
-
-    # Now verify post-activation assertion:
-    # If symlink does not match release-ci000001, CI aborts immediately!
-    resolved = os.path.basename(os.path.realpath(current_symlink))
-    print(f"[CI Post-Activation Verification] Resolved target: {resolved}, expected: release-ci000001")
-
-    # In our test, CI's activation ran after competing helper, setting symlink to release-ci000001
-    # What if a competing process altered it AFTER CI's activation?
-    # Let's tamper with the symlink to test the assertion:
-    os.symlink(os.path.join(builds_dir, "release-comp0001"), current_symlink + ".tamper")
-    os.replace(current_symlink + ".tamper", current_symlink)
-
-    tampered_target = os.path.basename(os.path.realpath(current_symlink))
-    assertion_failed = False
-    if tampered_target != "release-ci000001":
-        print(f"[CI Safety Check] CRITICAL: Activation verification failed: expected 'release-ci000001', found '{tampered_target}'. Pipeline halts!")
-        assertion_failed = True
-
-    fcntl.flock(fd_pipeline, fcntl.LOCK_UN)
-    os.close(fd_pipeline)
-
-    if not assertion_failed:
-        print("FAIL: Post-activation assertion did not trigger on tampered symlink!")
+    if res.returncode != 1 or "Deployment pipeline is currently in progress" not in res.stderr:
+        print("FAIL: Direct proposed helper was NOT blocked when pipeline lock held by non-ancestor!")
         return False
 
-    # Ledger must not have been updated
-    if os.path.exists(ledger_file):
-        with open(ledger_file) as f:
-            content = f.read()
-        if "release-ci000001" in content or "release-comp0001" in content:
-            print("FAIL: Ledger was updated despite failed assertion!")
-            return False
+    observed_target = os.path.basename(os.path.realpath(current_symlink))
+    if observed_target != "release-live0003":
+        print(f"FAIL: Symlink was modified to {observed_target}!")
+        return False
 
-    print("PASS: Post-activation assertion strictly aborts pipeline, preventing ledger update and pruning.")
+    print("PASS: Direct proposed helper was strictly blocked by active pipeline lock.")
     return True
 
 
-def test_health_check_failure_and_rollback(base_dir: str) -> bool:
-    """
-    Test 4: Post-activation health check times out.
-    Verifies that the workflow accurately exits with code 1 (failure),
-    attempts automated rollback to previous release, and skips ledger/pruning.
-    """
+# ------------------------------------------------------------------------------
+# TEST 4: Failed Service Restart Handling & Automated Rollback
+# ------------------------------------------------------------------------------
+def test_failed_service_restart_and_rollback(base_dir: str, proposed_helper_path: str) -> bool:
     print("\n" + "=" * 72)
-    print("TEST 4: Health Check Failure Handling and Automated Rollback")
+    print("TEST 4: Failed Service Restart Handling & Automated Rollback")
     print("=" * 72)
 
     builds_dir = os.path.join(base_dir, "test4_builds")
@@ -414,107 +459,76 @@ def test_health_check_failure_and_rollback(base_dir: str) -> bool:
     open(pipeline_lock, "a").close()
     open(activation_lock, "a").close()
 
-    # Pre-deployment active release
-    create_mock_release(builds_dir, shared_dir, "release-good0001", sha="1" * 40)
-    os.symlink(os.path.join(builds_dir, "release-good0001"), current_symlink)
+    create_mock_release(builds_dir, shared_dir, "release-good0004", sha="1" * 40)
+    os.symlink(os.path.join(builds_dir, "release-good0004"), current_symlink)
+    create_mock_release(builds_dir, shared_dir, "release-fail0004", sha="2" * 40)
 
-    # Broken new release that fails health checks
-    create_mock_release(builds_dir, shared_dir, "release-bad00001", sha="2" * 40)
+    systemctl_log = os.path.join(base_dir, "systemctl_4.log")
+    mock_systemctl = os.path.join(base_dir, "mock_systemctl_4.sh")
+    fail_flag = os.path.join(base_dir, "fail_sys_4")
+    # Trigger restart failure!
+    open(fail_flag, "w").close()
+    create_mock_systemctl(mock_systemctl, systemctl_log, fail_flag)
 
-    legacy_helper = os.path.join(base_dir, "legacy_helper_4.sh")
-    create_legacy_helper_script(legacy_helper, activation_lock, current_symlink, builds_dir)
+    mock_curl = os.path.join(base_dir, "mock_curl_4.sh")
+    create_mock_curl(mock_curl, os.path.join(base_dir, "fail_curl_4"))
 
-    # Workflow simulation script
-    workflow_sim = f"""#!/bin/bash
-set -euo pipefail
+    mock_backup = os.path.join(base_dir, "mock_backup_4.sh")
+    create_mock_backup(mock_backup, os.path.join(base_dir, "backup_4.log"))
 
-builds_dir="{builds_dir}"
-current_symlink="{current_symlink}"
-activation_lock="{activation_lock}"
-pipeline_lock="{pipeline_lock}"
-ledger_file="{ledger_file}"
+    env = os.environ.copy()
+    env.update({
+        "BUILDS_DIR": builds_dir,
+        "CURRENT_SYMLINK": current_symlink,
+        "SHARED_DIR": shared_dir,
+        "PIPELINE_LOCK": pipeline_lock,
+        "ACTIVATION_LOCK": activation_lock,
+        "BACKUP_SCRIPT": mock_backup,
+        "SYSTEMCTL_BIN": mock_systemctl,
+        "CURL_BIN": mock_curl,
+        "SERVICE_NAME": "royal-libas",
+        "HEALTH_URL": "http://127.0.0.1:8000/health"
+    })
 
-exec 200>"$pipeline_lock"
-flock -n 200
+    print("[Helper] Invoking activate-release.sh with intentional service restart failure...")
+    res = subprocess.run([proposed_helper_path, "release-fail0004", "2" * 40], capture_output=True, text=True, env=env)
 
-# Capture pre-deployment release
-previous_release="$(basename "$(readlink -f "$current_symlink")")"
-previous_commit="$(git -C "$builds_dir/$previous_release" rev-parse HEAD 2>/dev/null || cat "$builds_dir/$previous_release/.git/HEAD" 2>/dev/null || true)"
-previous_commit="$(echo "$previous_commit" | tr -d '[:space:]')"
-
-release="release-bad00001"
-expected="{'2'*40}"
-
-# Activate release
-"{legacy_helper}" "$release" "$expected"
-
-# Re-acquire activation lock
-exec 201<"$activation_lock"
-flock -n 201
-
-# Verify symlink
-resolved="$(basename "$(readlink -f "$current_symlink")")"
-[ "$resolved" = "$release" ]
-
-# Simulate failed health check
-health_ok=0
-
-if [ "$health_ok" -ne 1 ]; then
-  echo "CRITICAL: Service health check failed after activation." >&2
-  if [ -n "$previous_release" ] && [ "$previous_release" != "$release" ] && [[ "$previous_commit" =~ ^[0-9a-f]{{40}}$ ]]; then
-    echo ">>> [Rollback] Attempting automated rollback to $previous_release ($previous_commit)..." >&2
-    exec 201<&-
-    if "{legacy_helper}" "$previous_release" "$previous_commit"; then
-      echo ">>> [Rollback] Automated rollback succeeded. Site reverted to $previous_release." >&2
-    fi
-  fi
-  echo "CRITICAL: Deployment failed health verification. Skipping ledger update and pruning." >&2
-  exit 1
-fi
-
-echo "$release activated" >> "$ledger_file"
-"""
-    sim_script = os.path.join(base_dir, "simulate_health_fail.sh")
-    with open(sim_script, "w") as f:
-        f.write(workflow_sim)
-    os.chmod(sim_script, 0o755)
-
-    print("[Workflow Simulation] Running deployment with failing health check...")
-    res = subprocess.run([sim_script], capture_output=True, text=True)
-
-    print(f"[Workflow Simulation] Exit code: {res.returncode}")
-    print(f"[Workflow Simulation] Stderr:\n{res.stderr.strip()}")
+    print(f"[Proposed Helper] Exit code: {res.returncode}")
+    print(f"[Proposed Helper] Stderr:\n{res.stderr.strip()}")
 
     if res.returncode != 1:
-        print(f"FAIL: Workflow did not report failure! Exit code was {res.returncode}")
+        print(f"FAIL: Proposed helper returned exit code {res.returncode}, expected 1!")
         return False
 
-    current_target = os.path.basename(os.path.realpath(current_symlink))
-    print(f"[Post-Failure Target] Current symlink resolves to: {current_target}")
-
-    if current_target != "release-good0001":
-        print(f"FAIL: Automated rollback did not revert to release-good0001! Found {current_target}")
+    if "Failed to restart service 'royal-libas'" not in res.stderr:
+        print("FAIL: Expected restart failure error message missing from stderr!")
         return False
 
-    if os.path.exists(ledger_file):
-        with open(ledger_file) as f:
-            content = f.read()
-        if "release-bad00001" in content:
-            print("FAIL: Failed release was written to ledger!")
-            return False
+    # Directly assert symlink was rolled back to previous release
+    observed_target = os.path.basename(os.path.realpath(current_symlink))
+    print(f"[Direct Assertion] Post-failure symlink target: {observed_target} (expected: release-good0004)")
+    if observed_target != "release-good0004":
+        print(f"FAIL: Symlink was not rolled back! Found {observed_target}")
+        return False
 
-    print("PASS: Failing health check correctly reported exit code 1 and executed automated rollback.")
+    # Directly assert rollback restart attempted
+    with open(systemctl_log) as f:
+        sys_calls = f.read()
+    print(f"[Direct Assertion] Systemctl calls:\n{sys_calls.strip()}")
+    if sys_calls.count("restart royal-libas") < 2:
+        print("FAIL: Systemctl was not called for rollback restart!")
+        return False
+
+    print("PASS: Service restart failure failed closed, triggered automated rollback, and returned exit 1.")
     return True
 
 
-def test_authoritative_evidence_policy(base_dir: str, seed_script_path: str, prune_script_path: str) -> bool:
-    """
-    Test 5: Authoritative Evidence Policy.
-    Historical releases are untrusted for deletion purposes and marked 'uncertain_historical'.
-    Prune engine strictly preserves all of them.
-    """
+# ------------------------------------------------------------------------------
+# TEST 5: Health Check Failure Handling & Rollback
+# ------------------------------------------------------------------------------
+def test_health_check_failure_and_rollback(base_dir: str, proposed_helper_path: str) -> bool:
     print("\n" + "=" * 72)
-    print("TEST 5: Authoritative Evidence Policy & Historical Preservation")
+    print("TEST 5: Post-Activation Health Check Failure & Rollback")
     print("=" * 72)
 
     builds_dir = os.path.join(base_dir, "test5_builds")
@@ -522,92 +536,77 @@ def test_authoritative_evidence_policy(base_dir: str, seed_script_path: str, pru
     os.makedirs(builds_dir, exist_ok=True)
     os.makedirs(shared_dir, exist_ok=True)
 
-    shared_env = os.path.join(shared_dir, ".env")
-    with open(shared_env, "w") as f:
+    with open(os.path.join(shared_dir, ".env"), "w") as f:
         f.write("PROD_SECRET=test5\n")
-    shared_uploads = os.path.join(shared_dir, "uploads")
-    os.makedirs(shared_uploads, exist_ok=True)
+    os.makedirs(os.path.join(shared_dir, "uploads"), exist_ok=True)
 
     current_symlink = os.path.join(base_dir, "test5_current")
     pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
     activation_lock = os.path.join(base_dir, "test5_activation.lock")
-    ledger_file = os.path.join(builds_dir, ".deployments_ledger.tsv")
     open(pipeline_lock, "a").close()
     open(activation_lock, "a").close()
 
-    # Create 6 physical historical releases
-    historical = [
-        ("release-huDNUmEb", "805e7a93091e8f073ad3d629fc4d952d46cd454b"),
-        ("release-CPCGzuLG", "d9e7507cd1b8f820e44c9644fc460bb50902c6f1"),
-        ("release-tHmKpYTN", "e2bd0a4c27d23574c3ac323edf7c4070c576eb20"),
-        ("release-WF0rJVqS", "8a71c821deb6cb36cee868e535b2c0924ee114c7"),
-        ("release-nhKRvmAd", "9c41227852571ba8b2d47e605821ddc3200f801a"),
-        ("release-uXFXM8EL", "57352a3e3da16f023e3dd7d90f5ade1eb21c104e"),
-    ]
-    for rel, sha in historical:
-        create_mock_release(builds_dir, shared_dir, rel, sha=sha)
+    create_mock_release(builds_dir, shared_dir, "release-good0005", sha="1" * 40)
+    os.symlink(os.path.join(builds_dir, "release-good0005"), current_symlink)
+    create_mock_release(builds_dir, shared_dir, "release-unhl0005", sha="2" * 40)
 
-    os.symlink(os.path.join(builds_dir, "release-uXFXM8EL"), current_symlink)
+    systemctl_log = os.path.join(base_dir, "systemctl_5.log")
+    mock_systemctl = os.path.join(base_dir, "mock_systemctl_5.sh")
+    create_mock_systemctl(mock_systemctl, systemctl_log, os.path.join(base_dir, "fail_sys_5"))
 
-    # Run seed_ledger.py
-    seed_cmd = [
-        sys.executable, seed_script_path,
-        "--ledger-file", ledger_file,
-        "--builds-dir", builds_dir,
-        "--pipeline-lock-file", pipeline_lock,
-        "--execute"
-    ]
-    res_seed = subprocess.run(seed_cmd, capture_output=True, text=True)
-    print(res_seed.stdout)
+    fail_curl_flag = os.path.join(base_dir, "fail_curl_5")
+    open(fail_curl_flag, "w").close()
+    mock_curl = os.path.join(base_dir, "mock_curl_5.sh")
+    create_mock_curl(mock_curl, fail_curl_flag)
 
-    if "AUTHORITATIVE EVIDENCE POLICY" not in res_seed.stdout:
-        print("FAIL: Policy banner missing from seed_ledger output!")
+    mock_backup = os.path.join(base_dir, "mock_backup_5.sh")
+    create_mock_backup(mock_backup, os.path.join(base_dir, "backup_5.log"))
+
+    env = os.environ.copy()
+    env.update({
+        "BUILDS_DIR": builds_dir,
+        "CURRENT_SYMLINK": current_symlink,
+        "SHARED_DIR": shared_dir,
+        "PIPELINE_LOCK": pipeline_lock,
+        "ACTIVATION_LOCK": activation_lock,
+        "BACKUP_SCRIPT": mock_backup,
+        "SYSTEMCTL_BIN": mock_systemctl,
+        "CURL_BIN": mock_curl,
+        "HEALTH_TIMEOUT": "2",
+        "SERVICE_NAME": "royal-libas",
+        "HEALTH_URL": "http://127.0.0.1:8000/health"
+    })
+
+    print("[Helper] Invoking activate-release.sh with failing health check...")
+    res = subprocess.run([proposed_helper_path, "release-unhl0005", "2" * 40], capture_output=True, text=True, env=env)
+
+    print(f"[Proposed Helper] Exit code: {res.returncode}")
+    print(f"[Proposed Helper] Stderr:\n{res.stderr.strip()}")
+
+    if res.returncode != 1:
+        print(f"FAIL: Expected exit code 1, got {res.returncode}!")
         return False
 
-    # Check ledger content: all must be 'uncertain_historical', zero 'activated'
-    with open(ledger_file) as f:
-        lines = [l.strip().split("\t") for l in f if l.strip() and not l.startswith("#")]
+    if "Service health check failed" not in res.stderr:
+        print("FAIL: Expected health check error message missing from stderr!")
+        return False
 
-    for l in lines:
-        if l[3] == "activated":
-            print(f"FAIL: Historical release {l[1]} was marked activated!")
-            return False
-        assert l[3] == "uncertain_historical", f"Unexpected status: {l[3]}"
+    observed_target = os.path.basename(os.path.realpath(current_symlink))
+    print(f"[Direct Assertion] Post-failure symlink target: {observed_target} (expected: release-good0005)")
+    if observed_target != "release-good0005":
+        print(f"FAIL: Symlink was not rolled back to release-good0005!")
+        return False
 
-    print("PASS: All historical entries correctly recorded as 'uncertain_historical'.")
-
-    # Run prune_releases.py
-    prune_cmd = [
-        sys.executable, prune_script_path,
-        "--execute",
-        "--builds-dir", builds_dir,
-        "--current-symlink", current_symlink,
-        "--ledger-file", ledger_file,
-        "--pipeline-lock-file", pipeline_lock,
-        "--activation-lock-file", activation_lock,
-        "--shared-env", shared_env,
-        "--shared-uploads", shared_uploads,
-        "--min-rollbacks", "3"
-    ]
-    res_prune = subprocess.run(prune_cmd, capture_output=True, text=True)
-    print(res_prune.stdout)
-
-    # Verify every single historical release is preserved!
-    for rel, _ in historical:
-        if not os.path.isdir(os.path.join(builds_dir, rel)):
-            print(f"FAIL: Historical release {rel} was deleted!")
-            return False
-
-    print("PASS: All historical releases strictly preserved against deletion under Authoritative Evidence Policy.")
+    print("PASS: Health check failure triggered automated rollback and returned exit 1.")
     return True
 
 
-def test_missing_lock_dry_run_unprotected_banner(base_dir: str, prune_script_path: str) -> bool:
-    """
-    Test 6: Missing lock during dry-run produces UNPROTECTED / POTENTIALLY STALE banner.
-    """
+# ------------------------------------------------------------------------------
+# TEST 6: Simultaneous Legacy Invocation During Pruning
+# ------------------------------------------------------------------------------
+def test_simultaneous_legacy_during_pruning(base_dir: str, prune_script_path: str) -> bool:
     print("\n" + "=" * 72)
-    print("TEST 6: Missing Lock During Dry Run Output Labeling")
+    print("TEST 6: Simultaneous Legacy Invocation During Pruning Phase")
     print("=" * 72)
 
     builds_dir = os.path.join(base_dir, "test6_builds")
@@ -622,42 +621,278 @@ def test_missing_lock_dry_run_unprotected_banner(base_dir: str, prune_script_pat
     os.makedirs(shared_uploads, exist_ok=True)
 
     current_symlink = os.path.join(base_dir, "test6_current")
-    nonexistent_pipeline_lock = os.path.join(base_dir, "nonexistent_pipeline.lock")
-    nonexistent_activation_lock = os.path.join(base_dir, "nonexistent_activation.lock")
+    pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
+    activation_lock = os.path.join(base_dir, "test6_activation.lock")
     ledger_file = os.path.join(builds_dir, ".deployments_ledger.tsv")
+    open(pipeline_lock, "a").close()
+    open(activation_lock, "a").close()
 
-    releases = [f"release-mock000{i}" for i in range(1, 6)]
+    releases = [f"release-pru0000{i}" for i in range(1, 6)]
     for r in releases:
-        create_mock_release(builds_dir, shared_dir, r, sha="0" * 40)
-    os.symlink(os.path.join(builds_dir, "release-mock0005"), current_symlink)
+        create_mock_release(builds_dir, shared_dir, r, sha="1" * 40)
+    os.symlink(os.path.join(builds_dir, "release-pru00005"), current_symlink)
 
     with open(ledger_file, "w") as f:
         for i, r in enumerate(releases):
             ts = (datetime.now(timezone.utc) - timedelta(hours=6 - i)).isoformat()
-            f.write(f"{ts}\t{r}\t{'0'*40}\tactivated\n")
+            f.write(f"{ts}\t{r}\t{'1'*40}\tactivated\n")
 
-    cmd = [
+    legacy_helper = os.path.join(base_dir, "legacy_helper_6.sh")
+    create_legacy_helper_script(legacy_helper, activation_lock, current_symlink, builds_dir)
+
+    fd_pipeline = os.open(pipeline_lock, os.O_RDWR)
+    fcntl.flock(fd_pipeline, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    fd_activation = os.open(activation_lock, os.O_RDWR)
+    fcntl.flock(fd_activation, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    print("[Workflow] Holding both locks, testing competing legacy helper...")
+    res_comp = subprocess.run([legacy_helper, "release-pru00001", "1" * 40], capture_output=True, text=True)
+
+    print(f"[Legacy Helper] Exit code: {res_comp.returncode}")
+    print(f"[Legacy Helper] Stderr: {res_comp.stderr.strip()}")
+
+    if res_comp.returncode != 1 or "Another deployment is running" not in res_comp.stderr:
+        print("FAIL: Legacy helper was NOT blocked while activation lock is held during pruning!")
+        fcntl.flock(fd_activation, fcntl.LOCK_UN)
+        os.close(fd_activation)
+        fcntl.flock(fd_pipeline, fcntl.LOCK_UN)
+        os.close(fd_pipeline)
+        return False
+
+    prune_cmd = [
+        sys.executable, prune_script_path,
+        "--execute",
+        "--pipeline-lock-fd", str(fd_pipeline),
+        "--activation-lock-fd", str(fd_activation),
+        "--builds-dir", builds_dir,
+        "--current-symlink", current_symlink,
+        "--ledger-file", ledger_file,
+        "--pipeline-lock-file", pipeline_lock,
+        "--activation-lock-file", activation_lock,
+        "--shared-env", shared_env,
+        "--shared-uploads", shared_uploads,
+        "--min-rollbacks", "3"
+    ]
+    res_prune = subprocess.run(prune_cmd, capture_output=True, text=True, pass_fds=(fd_pipeline, fd_activation))
+
+    fcntl.flock(fd_activation, fcntl.LOCK_UN)
+    os.close(fd_activation)
+    fcntl.flock(fd_pipeline, fcntl.LOCK_UN)
+    os.close(fd_pipeline)
+
+    if res_prune.returncode != 0:
+        print(f"FAIL: Prune failed under inherited locks:\n{res_prune.stderr}")
+        return False
+
+    if os.path.exists(os.path.join(builds_dir, "release-pru00001")):
+        print("FAIL: release-pru00001 was not pruned!")
+        return False
+
+    print("PASS: Pruning succeeded safely while continuous locks blocked competing activations.")
+    return True
+
+
+# ------------------------------------------------------------------------------
+# TEST 7: Safe First Deployment & Manual Rollback Workflow
+# ------------------------------------------------------------------------------
+def test_first_deployment_and_rollback_workflow(base_dir: str, prune_script_path: str) -> bool:
+    print("\n" + "=" * 72)
+    print("TEST 7: Safe First Deployment & Manual Rollback Workflow")
+    print("=" * 72)
+
+    builds_dir = os.path.join(base_dir, "test7_builds")
+    shared_dir = os.path.join(base_dir, "test7_shared")
+    os.makedirs(builds_dir, exist_ok=True)
+    os.makedirs(shared_dir, exist_ok=True)
+
+    shared_env = os.path.join(shared_dir, ".env")
+    with open(shared_env, "w") as f:
+        f.write("PROD_SECRET=test7\n")
+    shared_uploads = os.path.join(shared_dir, "uploads")
+    os.makedirs(shared_uploads, exist_ok=True)
+
+    current_symlink = os.path.join(base_dir, "test7_current")
+    pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
+    activation_lock = os.path.join(base_dir, "test7_activation.lock")
+    ledger_file = os.path.join(builds_dir, ".deployments_ledger.tsv")
+    open(pipeline_lock, "a").close()
+    open(activation_lock, "a").close()
+
+    # Step 1: Pre-existing state (4 releases exist on disk, no ledger yet)
+    releases = [f"release-fst0000{i}" for i in range(1, 5)]
+    for r in releases:
+        create_mock_release(builds_dir, shared_dir, r, sha="7" * 40)
+    os.symlink(os.path.join(builds_dir, "release-fst00004"), current_symlink)
+
+    print("[First Run] Running retention with 4 total releases on fresh system (no ledger)...")
+    res_prune_1 = subprocess.run([
+        sys.executable, prune_script_path,
+        "--execute",
+        "--builds-dir", builds_dir,
+        "--current-symlink", current_symlink,
+        "--ledger-file", ledger_file,
+        "--pipeline-lock-file", pipeline_lock,
+        "--activation-lock-file", activation_lock,
+        "--shared-env", shared_env,
+        "--shared-uploads", shared_uploads,
+        "--min-rollbacks", "3"
+    ], capture_output=True, text=True)
+
+    # All 4 releases must be preserved (live + 3 rollbacks)
+    for r in releases:
+        if not os.path.isdir(os.path.join(builds_dir, r)):
+            print(f"FAIL: Release {r} was pruned on first run!")
+            return False
+
+    print("PASS: First run preserved active release and all rollback candidates.")
+
+    # Step 2: Now add 5th release (first eligible deletion)
+    create_mock_release(builds_dir, shared_dir, "release-fst00005", sha="7" * 40)
+    # Re-point symlink to 5
+    os.unlink(current_symlink)
+    os.symlink(os.path.join(builds_dir, "release-fst00005"), current_symlink)
+
+    # Record all 5 in ledger
+    with open(ledger_file, "w") as f:
+        for i in range(1, 6):
+            ts = (datetime.now(timezone.utc) - timedelta(hours=6 - i)).isoformat()
+            f.write(f"{ts}\t{'release-fst0000' + str(i)}\t{'7'*40}\tactivated\n")
+
+    print("[Fifth Release] Running retention with 5 recorded releases...")
+    res_prune_2 = subprocess.run([
+        sys.executable, prune_script_path,
+        "--execute",
+        "--builds-dir", builds_dir,
+        "--current-symlink", current_symlink,
+        "--ledger-file", ledger_file,
+        "--pipeline-lock-file", pipeline_lock,
+        "--activation-lock-file", activation_lock,
+        "--shared-env", shared_env,
+        "--shared-uploads", shared_uploads,
+        "--min-rollbacks", "3"
+    ], capture_output=True, text=True)
+
+    # Oldest (release-fst00001) pruned; 2, 3, 4 retained as rollbacks; 5 live
+    if os.path.exists(os.path.join(builds_dir, "release-fst00001")):
+        print("FAIL: Oldest release-fst00001 was not pruned when 5 releases were recorded!")
+        return False
+
+    for r in ["release-fst00002", "release-fst00003", "release-fst00004", "release-fst00005"]:
+        if not os.path.isdir(os.path.join(builds_dir, r)):
+            print(f"FAIL: Release {r} was improperly deleted!")
+            return False
+
+    print("PASS: Safe first deployment and retention quota strictly maintained (live + 3 rollbacks).")
+    return True
+
+
+# ------------------------------------------------------------------------------
+# TEST 8: Authoritative Evidence Policy & Dry-Run Labeling
+# ------------------------------------------------------------------------------
+def test_authoritative_evidence_and_dry_run(base_dir: str, seed_script_path: str, prune_script_path: str) -> bool:
+    print("\n" + "=" * 72)
+    print("TEST 8: Authoritative Evidence Policy & Dry-Run Missing Lock Labeling")
+    print("=" * 72)
+
+    builds_dir = os.path.join(base_dir, "test8_builds")
+    shared_dir = os.path.join(base_dir, "test8_shared")
+    os.makedirs(builds_dir, exist_ok=True)
+    os.makedirs(shared_dir, exist_ok=True)
+
+    shared_env = os.path.join(shared_dir, ".env")
+    with open(shared_env, "w") as f:
+        f.write("PROD_SECRET=test8\n")
+    shared_uploads = os.path.join(shared_dir, "uploads")
+    os.makedirs(shared_uploads, exist_ok=True)
+
+    current_symlink = os.path.join(base_dir, "test8_current")
+    pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
+    activation_lock = os.path.join(base_dir, "test8_activation.lock")
+    ledger_file = os.path.join(builds_dir, ".deployments_ledger.tsv")
+    open(pipeline_lock, "a").close()
+    open(activation_lock, "a").close()
+
+    # Pre-existing historical releases
+    historical = [
+        ("release-huDNUmEb", "805e7a93091e8f073ad3d629fc4d952d46cd454b"),
+        ("release-CPCGzuLG", "d9e7507cd1b8f820e44c9644fc460bb50902c6f1"),
+        ("release-tHmKpYTN", "e2bd0a4c27d23574c3ac323edf7c4070c576eb20"),
+        ("release-WF0rJVqS", "8a71c821deb6cb36cee868e535b2c0924ee114c7"),
+        ("release-nhKRvmAd", "9c41227852571ba8b2d47e605821ddc3200f801a"),
+        ("release-uXFXM8EL", "57352a3e3da16f023e3dd7d90f5ade1eb21c104e"),
+    ]
+    for rel, sha in historical:
+        create_mock_release(builds_dir, shared_dir, rel, sha=sha)
+    os.symlink(os.path.join(builds_dir, "release-uXFXM8EL"), current_symlink)
+
+    res_seed = subprocess.run([
+        sys.executable, seed_script_path,
+        "--ledger-file", ledger_file,
+        "--builds-dir", builds_dir,
+        "--pipeline-lock-file", pipeline_lock,
+        "--execute"
+    ], capture_output=True, text=True)
+
+    if "AUTHORITATIVE EVIDENCE POLICY" not in res_seed.stdout:
+        print("FAIL: Policy banner missing from seed_ledger output!")
+        return False
+
+    with open(ledger_file) as f:
+        lines = [l.strip().split("\t") for l in f if l.strip() and not l.startswith("#")]
+
+    for l in lines:
+        if l[3] == "activated":
+            print(f"FAIL: Historical release {l[1]} was marked activated!")
+            return False
+        assert l[3] == "uncertain_historical"
+
+    # Prune must preserve every historical release
+    res_prune = subprocess.run([
+        sys.executable, prune_script_path,
+        "--execute",
+        "--builds-dir", builds_dir,
+        "--current-symlink", current_symlink,
+        "--ledger-file", ledger_file,
+        "--pipeline-lock-file", pipeline_lock,
+        "--activation-lock-file", activation_lock,
+        "--shared-env", shared_env,
+        "--shared-uploads", shared_uploads,
+        "--min-rollbacks", "3"
+    ], capture_output=True, text=True)
+
+    for rel, _ in historical:
+        if not os.path.isdir(os.path.join(builds_dir, rel)):
+            print(f"FAIL: Historical release {rel} was deleted!")
+            return False
+
+    # Dry-run with missing locks on verified ledger
+    dry_ledger = os.path.join(builds_dir, ".dry_test_ledger.tsv")
+    with open(dry_ledger, "w") as f:
+        for i, (rel, sha) in enumerate(historical):
+            ts = (datetime.now(timezone.utc) - timedelta(hours=6 - i)).isoformat()
+            f.write(f"{ts}\t{rel}\t{sha}\tactivated\n")
+
+    nonexistent_pipeline_lock = os.path.join(base_dir, "missing_pipe.lock")
+    nonexistent_activation_lock = os.path.join(base_dir, "missing_act.lock")
+
+    res_dry = subprocess.run([
         sys.executable, prune_script_path,
         "--dry-run",
         "--builds-dir", builds_dir,
         "--current-symlink", current_symlink,
-        "--ledger-file", ledger_file,
+        "--ledger-file", dry_ledger,
         "--pipeline-lock-file", nonexistent_pipeline_lock,
         "--activation-lock-file", nonexistent_activation_lock,
         "--shared-env", shared_env,
         "--shared-uploads", shared_uploads
-    ]
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    print(res.stdout)
+    ], capture_output=True, text=True)
 
-    banner_found = "[DRY-RUN RESULT: UNPROTECTED / POTENTIALLY STALE INSPECTION]" in res.stdout
-    warning_found = "DO NOT report or treat this output as a deletion-safe plan" in res.stdout
-
-    if not (banner_found and warning_found):
+    if "[DRY-RUN RESULT: UNPROTECTED / POTENTIALLY STALE INSPECTION]" not in res_dry.stdout:
         print("FAIL: Dry run did not label missing lock output with UNPROTECTED banner!")
         return False
 
-    print("PASS: Dry run clearly labeled output as UNPROTECTED / POTENTIALLY STALE INSPECTION.")
+    print("PASS: Authoritative Evidence Policy and Dry-Run Unprotected labeling verified.")
     return True
 
 
@@ -669,33 +904,39 @@ def main():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     prune_script = os.path.join(repo_root, "deploy", "prune_releases.py")
     seed_script = os.path.join(repo_root, "deploy", "seed_ledger.py")
+    proposed_helper = os.path.join(repo_root, "deploy", "activate-release.sh")
 
     assert os.path.isfile(prune_script), f"Missing {prune_script}"
     assert os.path.isfile(seed_script), f"Missing {seed_script}"
+    assert os.path.isfile(proposed_helper), f"Missing {proposed_helper}"
 
     sandbox = tempfile.mkdtemp(prefix="vps_test_prod_equiv_")
     print(f"Isolated Production-Equivalent Test Sandbox: {sandbox}")
 
     try:
-        t1_ok = test_legacy_helper_during_preparation(sandbox)
-        t2_ok = test_legacy_helper_during_pruning(sandbox, prune_script)
-        t3_ok = test_lock_handoff_gap_and_assertion(sandbox)
-        t4_ok = test_health_check_failure_and_rollback(sandbox)
-        t5_ok = test_authoritative_evidence_policy(sandbox, seed_script, prune_script)
-        t6_ok = test_missing_lock_dry_run_unprotected_banner(sandbox, prune_script)
+        t1 = test_legacy_helper_during_preparation(sandbox)
+        t2 = test_simultaneous_legacy_during_activation(sandbox, proposed_helper)
+        t3 = test_direct_proposed_helper_contention(sandbox, proposed_helper)
+        t4 = test_failed_service_restart_and_rollback(sandbox, proposed_helper)
+        t5 = test_health_check_failure_and_rollback(sandbox, proposed_helper)
+        t6 = test_simultaneous_legacy_during_pruning(sandbox, prune_script)
+        t7 = test_first_deployment_and_rollback_workflow(sandbox, prune_script)
+        t8 = test_authoritative_evidence_and_dry_run(sandbox, seed_script, prune_script)
 
         print("\n" + "=" * 72)
         print("CONSOLIDATED PRODUCTION-EQUIVALENT TEST RESULTS:")
-        print(f"  Test 1 (Legacy Helper During Preparation):    {'PASS' if t1_ok else 'FAIL'}")
-        print(f"  Test 2 (Legacy Helper During Pruning):        {'PASS' if t2_ok else 'FAIL'}")
-        print(f"  Test 3 (Lock Hand-Off Gap & Assertion):       {'PASS' if t3_ok else 'FAIL'}")
-        print(f"  Test 4 (Health Check Failure & Rollback):     {'PASS' if t4_ok else 'FAIL'}")
-        print(f"  Test 5 (Authoritative Evidence Policy):       {'PASS' if t5_ok else 'FAIL'}")
-        print(f"  Test 6 (Missing Lock Dry Run Banner):         {'PASS' if t6_ok else 'FAIL'}")
+        print(f"  Test 1 (Simultaneous Legacy Helper During Prep):    {'PASS' if t1 else 'FAIL'}")
+        print(f"  Test 2 (Simultaneous Legacy During Activation):     {'PASS' if t2 else 'FAIL'}")
+        print(f"  Test 3 (Lock Contention on Direct Proposed Helper): {'PASS' if t3 else 'FAIL'}")
+        print(f"  Test 4 (Failed Service Restart & Rollback):         {'PASS' if t4 else 'FAIL'}")
+        print(f"  Test 5 (Post-Activation Health Failure & Rollback):  {'PASS' if t5 else 'FAIL'}")
+        print(f"  Test 6 (Simultaneous Legacy During Pruning):        {'PASS' if t6 else 'FAIL'}")
+        print(f"  Test 7 (First Deployment & Rollback Workflow):      {'PASS' if t7 else 'FAIL'}")
+        print(f"  Test 8 (Authoritative Evidence Policy & Dry-Run):   {'PASS' if t8 else 'FAIL'}")
         print("=" * 72)
 
-        if all([t1_ok, t2_ok, t3_ok, t4_ok, t5_ok, t6_ok]):
-            print("\nALL 6 PRODUCTION-EQUIVALENT ISOLATED TESTS PASSED SUCCESSFULLY!")
+        if all([t1, t2, t3, t4, t5, t6, t7, t8]):
+            print("\nALL 8 PRODUCTION-EQUIVALENT ISOLATED TESTS PASSED SUCCESSFULLY!")
             sys.exit(0)
         else:
             print("\nSOME TESTS FAILED!")

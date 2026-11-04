@@ -25,9 +25,10 @@ if ! flock -n 200; then
   exit 1
 fi
 
-# 2. Check if low-level activation lock is held by another process
+# 2. Acquire low-level activation lock continuously to prevent legacy concurrent helper invocations
 if [ -f "$ACTIVATION_LOCK" ]; then
-  if ! flock -n "$ACTIVATION_LOCK" true 2>/dev/null; then
+  exec 201<"$ACTIVATION_LOCK"
+  if ! flock -n 201; then
     echo "CRITICAL: Activation lock ($ACTIVATION_LOCK) is currently held. Aborting." >&2
     exit 1
   fi
@@ -69,21 +70,9 @@ if [ -L "$CURRENT_SYMLINK" ]; then
   fi
 fi
 
-# 5. Release activation via privileged helper
+# 5. Release activation via privileged helper (caller maintains continuous locks)
 echo ">>> [Phase 1/3] Activating Release: $RELEASE_NAME ($EXPECTED_SHA)"
-PIPELINE_TOKEN="${BUILDS_DIR}/.deploy-pipeline.token"
-echo "$$" > "$PIPELINE_TOKEN"
 sudo -n /usr/local/lib/royal-libas/activate-release.sh "$RELEASE_NAME" "$EXPECTED_SHA"
-rm -f "$PIPELINE_TOKEN"
-
-# Re-acquire activation lock immediately to prevent legacy direct-helper from running during health check/ledger/pruning
-if [ -f "$ACTIVATION_LOCK" ]; then
-  exec 201<"$ACTIVATION_LOCK"
-  if ! flock -n 201; then
-    echo "CRITICAL: Unable to re-acquire activation lock ($ACTIVATION_LOCK) post-activation." >&2
-    exit 1
-  fi
-fi
 
 # 6. Verify symlink target immediately matches intended release
 RESOLVED_TARGET="$(basename "$(readlink -f "$CURRENT_SYMLINK")")"
@@ -110,16 +99,7 @@ if [ "$HEALTH_OK" -ne 1 ]; then
   # Attempt automated rollback to previous release if valid
   if [ -n "$PREVIOUS_RELEASE" ] && [ "$PREVIOUS_RELEASE" != "$RELEASE_NAME" ] && [[ "$PREVIOUS_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
     echo ">>> [Rollback] Attempting automated rollback to previous release: $PREVIOUS_RELEASE ($PREVIOUS_COMMIT)..." >&2
-    if [ -f "$ACTIVATION_LOCK" ]; then
-      exec 201<&-
-    fi
-    echo "$$" > "$PIPELINE_TOKEN"
     if sudo -n /usr/local/lib/royal-libas/activate-release.sh "$PREVIOUS_RELEASE" "$PREVIOUS_COMMIT"; then
-      rm -f "$PIPELINE_TOKEN"
-      if [ -f "$ACTIVATION_LOCK" ]; then
-        exec 201<"$ACTIVATION_LOCK"
-        flock -n 201 || true
-      fi
       ROLLED_BACK_TARGET="$(basename "$(readlink -f "$CURRENT_SYMLINK")")"
       if [ "$ROLLED_BACK_TARGET" = "$PREVIOUS_RELEASE" ]; then
         echo ">>> [Rollback] Automated rollback succeeded. Site reverted to $PREVIOUS_RELEASE." >&2
@@ -127,7 +107,6 @@ if [ "$HEALTH_OK" -ne 1 ]; then
         echo ">>> [Rollback WARNING] Symlink target after rollback is '$ROLLED_BACK_TARGET', expected '$PREVIOUS_RELEASE'." >&2
       fi
     else
-      rm -f "$PIPELINE_TOKEN"
       echo ">>> [Rollback CRITICAL] Automated rollback failed to activate $PREVIOUS_RELEASE." >&2
     fi
   else
@@ -153,4 +132,3 @@ else
 fi
 
 echo "Manual activation and retention coordination completed successfully."
-
