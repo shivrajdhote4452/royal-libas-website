@@ -156,11 +156,11 @@ resolve_release_commit_sha() {
   local dir="$1"
   local sha=""
 
-  # 1. Primary: Git binary with explicit safe.directory configuration
-  # Passing safe.directory=* and safe.directory=$dir allows root to inspect
-  # repositories owned by royal-deploy without dubious ownership errors.
+  # 1. Primary: Git binary with targeted safe.directory configuration
+  # Passing safe.directory=$dir allows root to inspect the release directory
+  # owned by royal-deploy without broad wildcard trust or dubious ownership errors.
   if command -v git >/dev/null 2>&1; then
-    sha="$(git -c "safe.directory=*" -c "safe.directory=$dir" -C "$dir" rev-parse HEAD 2>/dev/null || true)"
+    sha="$(git -c "safe.directory=$dir" -C "$dir" rev-parse HEAD 2>/dev/null || true)"
     sha="$(echo "$sha" | tr -d '[:space:]')"
     if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
       echo "$sha"

@@ -268,7 +268,7 @@ def get_release_commit_sha(release_path: str) -> Optional[str]:
     # 1. Try git command directly if available
     try:
         res = subprocess.run(
-            ["git", "-c", "safe.directory=*", "-C", release_path, "rev-parse", "HEAD"],
+            ["git", "-c", f"safe.directory={release_path}", "-C", release_path, "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             timeout=5
