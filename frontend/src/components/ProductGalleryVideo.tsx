@@ -13,17 +13,19 @@ export interface ProductGalleryVideoProps {
  * Strict specifications:
  * 1. Zero visible controls: No Play/Pause buttons, no native video controls, no badges,
  *    no progress bars, no control overlays.
- * 2. Deterministic initialization: Reduced-motion preference and initial viewport visibility
- *    are verified before mounting or starting video playback, eliminating autoplay race conditions.
+ * 2. Confirmed IntersectionObserver visibility: Eliminates naive getBoundingClientRect vertical-only
+ *    checks. Accurately accounts for horizontal carousel offsets and ancestor overflow clipping
+ *    before mounting or playing video assets.
  * 3. Reduced-motion compliance: Detects `prefers-reduced-motion: reduce` synchronously on render.
- *    Renders the still poster image without ever mounting, requesting, or buffering the video.
- * 4. Deferred off-screen loading: Off-screen videos remain unmounted (rendering the poster only)
- *    until scrolled into view, conserving user data and system memory.
- * 5. Silent inline autoplay: Starts automatically only when visible on screen, muted, loop, playsinline.
- * 6. Visibility management: Automatically pauses when scrolled out of viewport or when browser
- *    tab becomes hidden; resumes seamlessly when visible again.
- * 7. Fallback on block or error: If autoplay is blocked by browser policy (e.g. low-power mode)
- *    or if video loading fails, cleanly displays the still poster image without broken UI or play buttons.
+ *    Renders the clean still poster frame without ever mounting, requesting, or buffering video data.
+ * 4. Deferred off-screen loading: Videos hidden horizontally (carousel slides) or vertically
+ *    (below the fold) remain unmounted (poster only) until confirmed visible by IntersectionObserver.
+ * 5. Avoid unconditional autoplay: Video playback is strictly conditioned on confirmed visibility.
+ * 6. Silent inline autoplay & looping: Muted by default, loops continuously, plays inline on mobile.
+ * 7. Visibility lifecycle: Automatically pauses when scrolled out of viewport, swiped away in carousel,
+ *    or when the browser tab is hidden; resumes seamlessly when visible again.
+ * 8. Fallback on block or error: If autoplay is blocked by browser policy or video fails to load,
+ *    cleanly displays the still poster image without broken UI or play buttons.
  */
 export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
   src,
@@ -44,7 +46,7 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
     }
   });
 
-  // Track if video has entered viewport (to defer mounting off-screen video assets)
+  // Confirmed visibility via IntersectionObserver (accounts for horizontal carousel & ancestor clipping)
   const [hasBeenVisible, setHasBeenVisible] = useState<boolean>(false);
   const [isInViewport, setIsInViewport] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
@@ -73,35 +75,26 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
     }
   }, []);
 
-  // 3. Track viewport entry and visibility via IntersectionObserver
+  // 3. Track confirmed visibility via IntersectionObserver
+  // (Accurately handles horizontal carousel positioning and ancestor overflow:hidden clipping)
   useEffect(() => {
-    // If user prefers reduced motion, never observe or mount video
     if (prefersReducedMotion) return;
 
     const target = containerRef.current;
     if (!target) return;
 
-    // Check immediate viewport intersection synchronously on mount
-    try {
-      const rect = target.getBoundingClientRect();
-      const inViewNow = rect.top < window.innerHeight && rect.bottom > 0 && rect.height > 0;
-      if (inViewNow) {
-        setHasBeenVisible(true);
-        setIsInViewport(true);
-      }
-    } catch { }
-
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          const visible = entry.isIntersecting;
-          setIsInViewport(visible);
-          if (visible) {
+          // Confirmed intersection against root viewport and all ancestor clipping containers
+          const isVisible = entry.isIntersecting;
+          setIsInViewport(isVisible);
+          if (isVisible) {
             setHasBeenVisible(true);
           }
         });
       },
-      { threshold: [0, 0.2, 0.5] }
+      { threshold: [0, 0.15, 0.5] }
     );
 
     observer.observe(target);
@@ -110,7 +103,6 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
 
   // 4. Autoplay & Viewport/Tab Visibility Pause/Resume Engine
   useEffect(() => {
-    // Do not attempt playback if not mounted, reduced motion, error, or blocked
     if (!hasBeenVisible || prefersReducedMotion || hasError || autoplayBlocked) return;
 
     const video = videoRef.current;
@@ -195,7 +187,7 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
     );
   }
 
-  // State 3: Off-screen video not yet visible -> Defer video mounting and buffering, show poster only
+  // State 3: Off-screen horizontally or vertically -> Defer video mounting and buffering, show poster only
   if (!hasBeenVisible) {
     return (
       <div
@@ -214,7 +206,7 @@ export const ProductGalleryVideo: React.FC<ProductGalleryVideoProps> = ({
     );
   }
 
-  // State 4: Verified in view -> Mount video with conditional autoplay and zero visible controls
+  // State 4: Confirmed visible -> Mount video with conditional autoplay and zero visible controls
   return (
     <div
       ref={containerRef}
