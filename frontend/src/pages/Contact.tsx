@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { submitContactInquiry } from '../lib/api';
 import { useStoreSettings } from '../lib/settings';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const Contact: React.FC = () => {
   const { settings, syncWithServer } = useStoreSettings();
@@ -36,7 +37,8 @@ export const Contact: React.FC = () => {
   });
 
   useEffect(() => {
-    document.title = 'Contact & Concierge | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/contact'].title;
+    setMetaDescription(ROUTE_METADATA['/contact'].description);
     syncWithServer();
 
     // If navigated with #boutique hash, smoothly route to the boutique section on Home

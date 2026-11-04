@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
 import { Scale, FileText, CheckCircle2 } from 'lucide-react';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const TermsOfService: React.FC = () => {
   useEffect(() => {
-    document.title = 'Terms of Service | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/terms-of-service'].title;
+    setMetaDescription(ROUTE_METADATA['/terms-of-service'].description);
     window.scrollTo(0, 0);
   }, []);
 

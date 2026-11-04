@@ -29,7 +29,7 @@ import { ProductCard } from '../components/ProductCard';
 import { ProductPlaceholder } from '../components/ProductPlaceholder';
 import { ProductGalleryVideo } from '../components/ProductGalleryVideo';
 import { useStoreSettings } from '../lib/settings';
-import { setCanonicalUrl } from '../lib/seo';
+import { setCanonicalUrl, setMetaDescription } from '../lib/seo';
 
 const RECENTLY_VIEWED_KEY = 'royal_libas_recently_viewed';
 
@@ -75,6 +75,8 @@ export const ProductPage: React.FC = () => {
           setProduct(data);
           document.title = `${data.name} | Royal Libas by Tanya`;
           setCanonicalUrl(`/product/${data.slug}`);
+          const effectiveDesc = data.description?.trim() || `${data.name} — Handcrafted luxury ${data.category || 'ethnic wear'} by Royal Libas by Tanya, Jhansi.`;
+          setMetaDescription(effectiveDesc);
           if (cleanId !== data.slug) {
             navigate(`/product/${data.slug}`, { replace: true });
           }

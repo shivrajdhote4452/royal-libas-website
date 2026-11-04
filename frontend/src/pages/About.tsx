@@ -2,13 +2,15 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { useStoreSettings } from '../lib/settings';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const About: React.FC = () => {
   const { settings } = useStoreSettings();
   const [imgFailed, setImgFailed] = React.useState(false);
 
   useEffect(() => {
-    document.title = 'About Us & Tanya’s Story | Royal Libas';
+    document.title = ROUTE_METADATA['/about'].title;
+    setMetaDescription(ROUTE_METADATA['/about'].description);
     window.scrollTo(0, 0);
   }, []);
 

@@ -15,6 +15,7 @@ import { fetchProducts, fetchCollections } from '../lib/api';
 import { ProductCard } from '../components/ProductCard';
 import { useWishlist } from '../context/WishlistContext';
 import { useStoreSettings } from '../lib/settings';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 // Verified palette color mappings for catalog variant swatches
 const COLOR_HEX_MAP: Record<string, string> = {
@@ -115,7 +116,8 @@ export const Shop: React.FC = () => {
 
   // Load collections and full catalog reference on mount
   useEffect(() => {
-    document.title = 'Shop Handcrafted Festive Silhouettes | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/shop'].title;
+    setMetaDescription(ROUTE_METADATA['/shop'].description);
     fetchCollections()
       .then(setCollections)
       .catch((e) => console.error('Failed to load collections:', e));

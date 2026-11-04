@@ -15,6 +15,7 @@ import { OrderResponse } from '../types/order';
 import { Product } from '../types/product';
 import { ProductCard } from '../components/ProductCard';
 import { BrandLogo } from '../components/BrandLogo';
+import { setMetaDescription } from '../lib/seo';
 
 export const OrderSuccess: React.FC = () => {
   const { orderCode } = useParams<{ orderCode: string }>();
@@ -83,10 +84,13 @@ export const OrderSuccess: React.FC = () => {
 
       if (data.status === 'CANCELLED') {
         document.title = `Order Cancelled: ${data.order_code} | Royal Libas`;
+        setMetaDescription(`Order ${data.order_code} cancellation details at Royal Libas by Tanya.`);
       } else if (data.payment_method === 'PREPAID' && data.payment_status !== 'PAID') {
         document.title = `Payment Pending: ${data.order_code} | Royal Libas`;
+        setMetaDescription(`Order ${data.order_code} payment status and verification at Royal Libas by Tanya.`);
       } else {
         document.title = `Order Confirmation: ${data.order_code} | Royal Libas`;
+        setMetaDescription(`Order confirmation and delivery tracking for order ${data.order_code} at Royal Libas by Tanya.`);
       }
     } catch (err: any) {
       setError(err.message || 'Unable to retrieve order details. Please try again.');

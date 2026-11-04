@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Truck, Clock, ShieldCheck, Search } from 'lucide-react';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const ShippingPolicy: React.FC = () => {
   useEffect(() => {
-    document.title = 'Shipping & Delivery Policy | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/shipping-policy'].title;
+    setMetaDescription(ROUTE_METADATA['/shipping-policy'].description);
     window.scrollTo(0, 0);
   }, []);
 

@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
 import { ShieldCheck, Lock, EyeOff } from 'lucide-react';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const PrivacyPolicy: React.FC = () => {
   useEffect(() => {
-    document.title = 'Privacy Policy | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/privacy-policy'].title;
+    setMetaDescription(ROUTE_METADATA['/privacy-policy'].description);
     window.scrollTo(0, 0);
   }, []);
 
