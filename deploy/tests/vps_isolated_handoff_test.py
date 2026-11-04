@@ -1078,22 +1078,23 @@ def test_release_sha_verification_modes(base_dir: str, proposed_helper_path: str
 
 
 # ------------------------------------------------------------------------------
-# TEST 12: Redesigned Root Helper Installation, Checksum & Rollback
+# TEST 12: Guarded Root Helper Installation Script, Checksum & Rollback
 # ------------------------------------------------------------------------------
-def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_helper_path: str) -> bool:
+def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_helper_path: str, install_script_path: str) -> bool:
     print("\n" + "=" * 72)
-    print("TEST 12: Redesigned Root Helper Installation, Checksum & Rollback")
+    print("TEST 12: Guarded Root Helper Installation Script, Checksum & Rollback")
     print("=" * 72)
 
+    import glob
     import hashlib
 
     install_root = os.path.join(base_dir, "test12_root_install")
     os.makedirs(install_root, exist_ok=True)
     live_helper = os.path.join(install_root, "activate-release.sh")
 
-    # Seed initial working installed helper
+    initial_content = "#!/bin/bash\necho INITIAL_WORKING_HELPER\n"
     with open(live_helper, "w") as f:
-        f.write("#!/bin/bash\necho INITIAL_WORKING_HELPER\n")
+        f.write(initial_content)
     os.chmod(live_helper, 0o700)
 
     # Compute expected hash of the proposed helper
@@ -1102,78 +1103,71 @@ def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_hel
 
     print(f"[Review Baseline] Reviewed Helper SHA-256: {expected_sha256}")
 
-    # Installation logic simulation:
-    def execute_installation(candidate_src: str, target_dest: str, expected_hash: str) -> Tuple[bool, str]:
-        # 1. Copy candidate to root-controlled temporary file
-        tmp_target = os.path.join(os.path.dirname(target_dest), f"tmp_install_{os.getpid()}_{time.time_ns()}.sh")
-        shutil.copy2(candidate_src, tmp_target)
-        os.chmod(tmp_target, 0o700)
+    env = os.environ.copy()
+    env["ALLOW_NON_ROOT_TEST"] = "1"
+    env["EXPECTED_SHA256"] = expected_sha256
 
-        # 2. Syntax check
-        res_syn = subprocess.run(["bash", "-n", tmp_target], capture_output=True, text=True)
-        if res_syn.returncode != 0:
-            if os.path.exists(tmp_target):
-                os.remove(tmp_target)
-            return False, f"Syntax verification failed: {res_syn.stderr.strip()}"
-
-        # 3. Checksum verification against reviewed commit
-        with open(tmp_target, "rb") as f:
-            actual_hash = hashlib.sha256(f.read()).hexdigest()
-        if actual_hash != expected_hash:
-            if os.path.exists(tmp_target):
-                os.remove(tmp_target)
-            return False, f"SHA-256 checksum mismatch: expected {expected_hash}, got {actual_hash}"
-
-        # 4. Create verified, non-empty backup of existing installed helper
-        backup_path = f"{target_dest}.bak-20261105-020000"
-        if os.path.isfile(target_dest):
-            shutil.copy2(target_dest, backup_path)
-            if not os.path.isfile(backup_path) or os.path.getsize(backup_path) == 0:
-                if os.path.exists(tmp_target):
-                    os.remove(tmp_target)
-                return False, "Failed to create verified non-empty backup"
-
-        # 5. Atomic move into place
-        os.replace(tmp_target, target_dest)
-        os.chmod(target_dest, 0o700)
-        return True, "Installation successful"
-
-    # Test Case 12a: Syntax error rejected
+    # Test Case 12a: Candidate with syntax error
     bad_syntax_candidate = os.path.join(base_dir, "bad_syntax.sh")
     with open(bad_syntax_candidate, "w") as f:
         f.write("#!/bin/bash\nif [ a == b ]; then echo incomplete\n")  # missing fi
 
-    print("[Case 12a] Testing candidate with syntax error...")
-    ok_12a, err_12a = execute_installation(bad_syntax_candidate, live_helper, expected_sha256)
-    if ok_12a:
-        print("FAIL: Installation succeeded with invalid syntax!")
+    print("[Case 12a] Testing guarded installer with syntax error...")
+    res_12a = subprocess.run([install_script_path, bad_syntax_candidate, live_helper], capture_output=True, text=True, env=env)
+    print(f"[Case 12a] Exit code: {res_12a.returncode}")
+
+    if res_12a.returncode == 0:
+        print("FAIL: Guarded installer succeeded with invalid syntax!")
         return False
+
+    # Assert no leftover temporary file in install_root
+    leftover_tmp_12a = glob.glob(os.path.join(install_root, "activate-release.tmp.*"))
+    if leftover_tmp_12a:
+        print(f"FAIL: Temporary file was not cleaned up! Found: {leftover_tmp_12a}")
+        return False
+
     with open(live_helper) as f:
-        if "INITIAL_WORKING_HELPER" not in f.read():
+        if f.read() != initial_content:
             print("FAIL: Live helper was modified despite syntax error!")
             return False
-    print(f"PASS 12a: Syntax error rejected ({err_12a}), live helper untouched.")
+    print("PASS 12a: Syntax error stopped installer, temp file cleaned up, live helper byte-for-byte unchanged.")
 
     # Test Case 12b: Checksum mismatch rejected
     tampered_candidate = os.path.join(base_dir, "tampered.sh")
     with open(tampered_candidate, "w") as f:
         f.write("#!/bin/bash\necho TAMPERED_HELPER\n")
-    print("[Case 12b] Testing candidate with checksum mismatch...")
-    ok_12b, err_12b = execute_installation(tampered_candidate, live_helper, expected_sha256)
-    if ok_12b:
-        print("FAIL: Installation succeeded with mismatched checksum!")
+
+    print("[Case 12b] Testing guarded installer with checksum mismatch...")
+    res_12b = subprocess.run([install_script_path, tampered_candidate, live_helper], capture_output=True, text=True, env=env)
+    print(f"[Case 12b] Exit code: {res_12b.returncode}")
+
+    if res_12b.returncode == 0:
+        print("FAIL: Guarded installer succeeded with mismatched checksum!")
         return False
+
+    leftover_tmp_12b = glob.glob(os.path.join(install_root, "activate-release.tmp.*"))
+    if leftover_tmp_12b:
+        print(f"FAIL: Temporary file was not cleaned up! Found: {leftover_tmp_12b}")
+        return False
+
     with open(live_helper) as f:
-        if "INITIAL_WORKING_HELPER" not in f.read():
+        if f.read() != initial_content:
             print("FAIL: Live helper was modified despite checksum mismatch!")
             return False
-    print(f"PASS 12b: Checksum mismatch rejected ({err_12b}), live helper untouched.")
+    print("PASS 12b: Checksum mismatch stopped installer, temp file cleaned up, live helper byte-for-byte unchanged.")
 
     # Test Case 12c: Successful installation with exact hash and backup
     print("[Case 12c] Testing valid installation with exact reviewed SHA-256...")
-    ok_12c, msg_12c = execute_installation(proposed_helper_path, live_helper, expected_sha256)
-    if not ok_12c:
-        print(f"FAIL 12c: Valid installation failed: {msg_12c}")
+    res_12c = subprocess.run([install_script_path, proposed_helper_path, live_helper], capture_output=True, text=True, env=env)
+    print(f"[Case 12c] Exit code: {res_12c.returncode}")
+
+    if res_12c.returncode != 0:
+        print(f"FAIL 12c: Valid installation failed:\n{res_12c.stderr}")
+        return False
+
+    leftover_tmp_12c = glob.glob(os.path.join(install_root, "activate-release.tmp.*"))
+    if leftover_tmp_12c:
+        print(f"FAIL: Temporary file was not cleaned up! Found: {leftover_tmp_12c}")
         return False
 
     with open(live_helper, "rb") as f:
@@ -1182,27 +1176,28 @@ def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_hel
         print("FAIL 12c: Installed helper hash does not match expected!")
         return False
 
-    backup_file = f"{live_helper}.bak-20261105-020000"
-    if not os.path.isfile(backup_file):
+    backups = glob.glob(os.path.join(install_root, "activate-release.sh.bak-*"))
+    if not backups:
         print("FAIL 12c: Backup file was not created!")
         return False
+    backup_file = backups[0]
     with open(backup_file) as f:
-        if "INITIAL_WORKING_HELPER" not in f.read():
-            print("FAIL 12c: Backup does not contain initial working helper!")
+        if f.read() != initial_content:
+            print("FAIL 12c: Backup does not match initial working helper byte-for-byte!")
             return False
-    print("PASS 12c: Helper successfully installed, exact checksum verified, backup created.")
+    print("PASS 12c: Guarded installer succeeded, exact checksum verified, byte-for-byte backup created.")
 
     # Test Case 12d: Rollback from backup
     print("[Case 12d] Testing rollback restoration from backup...")
     shutil.copy2(backup_file, live_helper)
     os.chmod(live_helper, 0o700)
     with open(live_helper) as f:
-        if "INITIAL_WORKING_HELPER" not in f.read():
+        if f.read() != initial_content:
             print("FAIL 12d: Rollback restoration failed!")
             return False
-    print("PASS 12d: Rollback procedure restored initial working helper cleanly.")
+    print("PASS 12d: Rollback procedure restored initial working helper cleanly byte-for-byte.")
 
-    print("PASS: Redesigned helper installation and reversible rollback procedure verified.")
+    print("PASS: Guarded root-helper installer stops immediately on any error and guarantees zero unintended replacements.")
     return True
 
 
@@ -1215,10 +1210,12 @@ def main():
     prune_script = os.path.join(repo_root, "deploy", "prune_releases.py")
     seed_script = os.path.join(repo_root, "deploy", "seed_ledger.py")
     proposed_helper = os.path.join(repo_root, "deploy", "activate-release.sh")
+    install_script = os.path.join(repo_root, "deploy", "install_root_helper.sh")
 
     assert os.path.isfile(prune_script), f"Missing {prune_script}"
     assert os.path.isfile(seed_script), f"Missing {seed_script}"
     assert os.path.isfile(proposed_helper), f"Missing {proposed_helper}"
+    assert os.path.isfile(install_script), f"Missing {install_script}"
 
     sandbox = tempfile.mkdtemp(prefix="vps_test_prod_equiv_")
     print(f"Isolated Production-Equivalent Test Sandbox: {sandbox}")
@@ -1235,7 +1232,7 @@ def main():
         t9 = test_safe_recovery_to_legacy_helper(sandbox)
         t10 = test_authoritative_evidence_and_dry_run(sandbox, seed_script, prune_script)
         t11 = test_release_sha_verification_modes(sandbox, proposed_helper)
-        t12 = test_redesigned_helper_installation_and_rollback(sandbox, proposed_helper)
+        t12 = test_redesigned_helper_installation_and_rollback(sandbox, proposed_helper, install_script)
 
         print("\n" + "=" * 72)
         print("CONSOLIDATED PRODUCTION-EQUIVALENT TEST RESULTS:")
