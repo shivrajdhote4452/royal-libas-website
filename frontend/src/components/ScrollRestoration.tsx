@@ -248,16 +248,15 @@ export const ScrollRestoration: React.FC = () => {
     const isKeyChanged = location.key !== prevKeyRef.current;
     const isPopNavigation = navigationType === 'POP';
 
-    // Parse search parameters for /shop filter detection
-    const prevParams = new URLSearchParams(prevSearchRef.current);
-    const currParams = new URLSearchParams(location.search);
-    const isShopFilterChanged =
+    // Detect in-page filter/category changes on /shop
+    // When a customer is already browsing /shop and changes category, subcategory, collection, etc.,
+    // we do NOT reset scroll all the way to top (0, 0). The Shop component handles positioning
+    // the page at the beginning of the results section after content renders.
+    const isShopInPageFilterChange =
+      !isPathnameChanged &&
+      !isPopNavigation &&
       location.pathname === '/shop' &&
-      (prevParams.get('category') !== currParams.get('category') ||
-        prevParams.get('subcategory') !== currParams.get('subcategory') ||
-        prevParams.get('collection') !== currParams.get('collection') ||
-        prevParams.get('search') !== currParams.get('search') ||
-        prevParams.get('sort') !== currParams.get('sort'));
+      prevSearchRef.current !== location.search;
 
     // CASE 1: Location contains an intentional section hash (#boutique, #reviews)
     // Applies on new hash, POP back/forward to hash, or re-navigation to hash
@@ -267,8 +266,13 @@ export const ScrollRestoration: React.FC = () => {
       }
     }
     // CASE 2: No hash in destination
-    // On route change, POP back/forward, shop filter change, or re-navigation
-    else if (isPathnameChanged || isPopNavigation || isShopFilterChanged || isKeyChanged) {
+    // In-page filter updates within /shop are handled specifically by the Shop component
+    // to position at the beginning of the results section below the sticky header.
+    else if (isShopInPageFilterChange) {
+      // Defer to Shop component for results section positioning after content render.
+    }
+    // On route change, POP back/forward, or re-navigation to the exact same page
+    else if (isPathnameChanged || isPopNavigation || (isKeyChanged && prevSearchRef.current === location.search)) {
       resetScrollToTop();
     }
 
