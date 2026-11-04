@@ -34,15 +34,6 @@ if ! flock -n 200; then
   exit 1
 fi
 
-# 2. Hold activation lock across preparation to prevent race with manual activation
-if [ -f "$ACTIVATION_LOCK" ]; then
-  exec 201<"$ACTIVATION_LOCK"
-  if ! flock -n 201; then
-    echo "CRITICAL: Existing activation lock ($ACTIVATION_LOCK) is currently held. Aborting." >&2
-    exit 1
-  fi
-fi
-
 # Record pre-deployment active release for potential rollback
 PREVIOUS_RELEASE=""
 PREVIOUS_COMMIT=""
@@ -125,10 +116,10 @@ echo ">>> [Phase 4/4] Updating Ledger & Managing Release Retention..."
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 printf '%s\t%s\t%s\t%s\n' "$TIMESTAMP" "$RELEASE_NAME" "$ACTUAL_SHA" "activated" >> "$LEDGER_FILE"
 
-# 7. Safe automatic release retention running under inherited pipeline and activation locks
+# 7. Safe automatic release retention running under pipeline lock
 PRUNE_SCRIPT="$CURRENT_SYMLINK/deploy/prune_releases.py"
 if [ -f "$PRUNE_SCRIPT" ]; then
-  python3 "$PRUNE_SCRIPT" --execute --pipeline-lock-fd 200 --activation-lock-fd 201 || {
+  python3 "$PRUNE_SCRIPT" --execute --pipeline-lock-fd 200 || {
     echo "WARNING: Automatic retention pruning encountered a safety warning. Site remains live." >&2
   }
 else

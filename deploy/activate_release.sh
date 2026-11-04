@@ -25,16 +25,7 @@ if ! flock -n 200; then
   exit 1
 fi
 
-# 2. Acquire low-level activation lock continuously to prevent legacy concurrent helper invocations
-if [ -f "$ACTIVATION_LOCK" ]; then
-  exec 201<"$ACTIVATION_LOCK"
-  if ! flock -n 201; then
-    echo "CRITICAL: Activation lock ($ACTIVATION_LOCK) is currently held. Aborting." >&2
-    exit 1
-  fi
-fi
-
-# 3. Validate release directory format and existence
+# 2. Validate release directory format and existence
 if [[ ! "$RELEASE_NAME" =~ ^release-[A-Za-z0-9]{8}$ ]]; then
   echo "CRITICAL: Invalid release name format: '$RELEASE_NAME'" >&2
   exit 1
@@ -121,10 +112,10 @@ echo ">>> [Phase 3/3] Updating Ledger & Managing Retention..."
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 printf '%s\t%s\t%s\t%s\n' "$TIMESTAMP" "$RELEASE_NAME" "$EXPECTED_SHA" "activated" >> "$LEDGER_FILE"
 
-# 9. Safe automatic release retention running under inherited pipeline and activation locks
+# 8. Safe automatic release retention running under pipeline lock
 PRUNE_SCRIPT="$CURRENT_SYMLINK/deploy/prune_releases.py"
 if [ -f "$PRUNE_SCRIPT" ]; then
-  python3 "$PRUNE_SCRIPT" --execute --pipeline-lock-fd 200 --activation-lock-fd 201 || {
+  python3 "$PRUNE_SCRIPT" --execute --pipeline-lock-fd 200 || {
     echo "WARNING: Automatic retention encountered a safety notice. Site remains live." >&2
   }
 else

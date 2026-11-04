@@ -57,15 +57,6 @@ jobs:
             exit 1
           fi
 
-          # 2. Hold activation lock across preparation to prevent race with manual activation
-          if [ -f "$activation_lock" ]; then
-            exec 201<"$activation_lock"
-            if ! flock -n 201; then
-              echo "CRITICAL: Activation lock ($activation_lock) is currently held. Aborting." >&2
-              exit 1
-            fi
-          fi
-
           # Record pre-deployment active release for potential rollback
           previous_release=""
           previous_commit=""
@@ -141,10 +132,10 @@ jobs:
           timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           printf '%s\t%s\t%s\t%s\n' "$timestamp" "$release" "$actual" "activated" >> "$ledger_file"
 
-          # 8. Safe automatic release retention running under inherited pipeline and activation locks
+          # 7. Safe automatic release retention running under pipeline lock
           retention_script="$current_symlink/deploy/prune_releases.py"
           if [ -f "$retention_script" ]; then
-            python3 "$retention_script" --execute --pipeline-lock-fd 200 --activation-lock-fd 201 || {
+            python3 "$retention_script" --execute --pipeline-lock-fd 200 || {
               echo "WARNING: Automatic retention encountered a safety notice. Site remains live." >&2
             }
           else
