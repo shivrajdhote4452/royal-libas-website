@@ -152,6 +152,68 @@ fi
 # 2. Release & Commit Validation
 # ------------------------------------------------------------------------------
 
+resolve_release_commit_sha() {
+  local dir="$1"
+  local sha=""
+
+  # 1. Primary: Git binary with explicit safe.directory configuration
+  # Passing safe.directory=* and safe.directory=$dir allows root to inspect
+  # repositories owned by royal-deploy without dubious ownership errors.
+  if command -v git >/dev/null 2>&1; then
+    sha="$(git -c "safe.directory=*" -c "safe.directory=$dir" -C "$dir" rev-parse HEAD 2>/dev/null || true)"
+    sha="$(echo "$sha" | tr -d '[:space:]')"
+    if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "$sha"
+      return 0
+    fi
+  fi
+
+  # 2. Secondary: Direct filesystem traversal of .git metadata
+  local git_head_file="$dir/.git/HEAD"
+  if [ -f "$git_head_file" ]; then
+    local head_content
+    head_content="$(cat "$git_head_file" 2>/dev/null || true)"
+    head_content="$(echo "$head_content" | tr -d '\r\n')"
+
+    # 2a. Detached HEAD checkout: file contains 40-character hexadecimal SHA directly
+    if [[ "$head_content" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "$head_content"
+      return 0
+    fi
+
+    # 2b. Symbolic reference (branch checkout): ref: refs/heads/...
+    if [[ "$head_content" =~ ^ref:[[:space:]]*(.+)$ ]]; then
+      local ref_path="${BASH_REMATCH[1]}"
+
+      # Check loose ref file
+      local loose_ref_file="$dir/.git/$ref_path"
+      if [ -f "$loose_ref_file" ]; then
+        local loose_sha
+        loose_sha="$(cat "$loose_ref_file" 2>/dev/null || true)"
+        loose_sha="$(echo "$loose_sha" | tr -d '[:space:]')"
+        if [[ "$loose_sha" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "$loose_sha"
+          return 0
+        fi
+      fi
+
+      # Check packed-refs file if loose ref has been packed
+      local packed_refs_file="$dir/.git/packed-refs"
+      if [ -f "$packed_refs_file" ]; then
+        local packed_sha
+        packed_sha="$(awk -v r="$ref_path" '$2 == r {print $1}' "$packed_refs_file" 2>/dev/null || true)"
+        packed_sha="$(echo "$packed_sha" | tr -d '[:space:]')"
+        if [[ "$packed_sha" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "$packed_sha"
+          return 0
+        fi
+      fi
+    fi
+  fi
+
+  return 1
+}
+
 if [[ ! "$RELEASE_NAME" =~ ^release-[A-Za-z0-9]{8}$ ]]; then
   echo "Invalid release name" >&2
   exit 1
@@ -168,9 +230,8 @@ if [ ! -d "$RELEASE_DIR" ]; then
   exit 1
 fi
 
-ACTUAL_SHA="$(git -C "$RELEASE_DIR" rev-parse HEAD 2>/dev/null || cat "$RELEASE_DIR/.git/HEAD" 2>/dev/null || true)"
-ACTUAL_SHA="$(echo "$ACTUAL_SHA" | tr -d '[:space:]')"
-if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+ACTUAL_SHA="$(resolve_release_commit_sha "$RELEASE_DIR" || true)"
+if [ -z "$ACTUAL_SHA" ] || [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
   echo "Release commit mismatch" >&2
   exit 1
 fi

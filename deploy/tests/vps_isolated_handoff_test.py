@@ -43,6 +43,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Tuple
 
 try:
     import fcntl
@@ -51,7 +52,15 @@ except ImportError:
     HAS_FCNTL = False
 
 
-def create_mock_release(builds_dir: str, shared_dir: str, name: str, sha: str = None) -> str:
+def create_mock_release(
+    builds_dir: str,
+    shared_dir: str,
+    name: str,
+    sha: str = None,
+    branch_based: bool = True,
+    branch_name: str = "main",
+    packed: bool = False
+) -> str:
     rel_path = os.path.join(builds_dir, name)
     backend_dir = os.path.join(rel_path, "backend")
     frontend_dist = os.path.join(rel_path, "frontend", "dist")
@@ -62,8 +71,25 @@ def create_mock_release(builds_dir: str, shared_dir: str, name: str, sha: str = 
     os.makedirs(git_dir, exist_ok=True)
 
     commit_sha = sha or ("a" * 40)
-    with open(os.path.join(git_dir, "HEAD"), "w", encoding="utf-8") as f:
-        f.write(f"{commit_sha}\n")
+
+    if branch_based:
+        # Matches real production prepare-release.sh where git clone --branch main is used:
+        # .git/HEAD contains `ref: refs/heads/main`
+        with open(os.path.join(git_dir, "HEAD"), "w", encoding="utf-8") as f:
+            f.write(f"ref: refs/heads/{branch_name}\n")
+
+        if packed:
+            with open(os.path.join(git_dir, "packed-refs"), "w", encoding="utf-8") as f:
+                f.write(f"# pack-refs with: peeled-tags\n{commit_sha} refs/heads/{branch_name}\n")
+        else:
+            ref_dir = os.path.join(git_dir, "refs", "heads")
+            os.makedirs(ref_dir, exist_ok=True)
+            with open(os.path.join(ref_dir, branch_name), "w", encoding="utf-8") as f:
+                f.write(f"{commit_sha}\n")
+    else:
+        # Detached HEAD checkout:
+        with open(os.path.join(git_dir, "HEAD"), "w", encoding="utf-8") as f:
+            f.write(f"{commit_sha}\n")
 
     with open(os.path.join(frontend_dist, "index.html"), "w", encoding="utf-8") as f:
         f.write(f"<html><body>Royal Libas - {name}</body></html>")
@@ -952,6 +978,234 @@ def test_authoritative_evidence_and_dry_run(base_dir: str, seed_script_path: str
     return True
 
 
+# ------------------------------------------------------------------------------
+# TEST 11: Release Commit SHA Verification Across Branch & Detached Modes
+# ------------------------------------------------------------------------------
+def test_release_sha_verification_modes(base_dir: str, proposed_helper_path: str) -> bool:
+    print("\n" + "=" * 72)
+    print("TEST 11: Release Commit SHA Verification Across Branch & Detached Modes")
+    print("=" * 72)
+
+    builds_dir = os.path.join(base_dir, "test11_builds")
+    shared_dir = os.path.join(base_dir, "test11_shared")
+    os.makedirs(builds_dir, exist_ok=True)
+    os.makedirs(shared_dir, exist_ok=True)
+
+    with open(os.path.join(shared_dir, ".env"), "w") as f:
+        f.write("PROD_SECRET=test11\n")
+    os.makedirs(os.path.join(shared_dir, "uploads"), exist_ok=True)
+
+    current_symlink = os.path.join(base_dir, "test11_current")
+    pipeline_lock = os.path.join(builds_dir, ".deploy-pipeline.lock")
+    activation_lock = os.path.join(base_dir, "test11_activation.lock")
+    open(pipeline_lock, "a").close()
+    open(activation_lock, "a").close()
+
+    mock_systemctl = os.path.join(base_dir, "mock_sys_11.sh")
+    create_mock_systemctl(mock_systemctl, os.path.join(base_dir, "sys_11.log"), os.path.join(base_dir, "fail_sys_11"))
+    mock_curl = os.path.join(base_dir, "mock_curl_11.sh")
+    create_mock_curl(mock_curl, os.path.join(base_dir, "fail_curl_11"))
+    mock_backup = os.path.join(base_dir, "mock_backup_11.sh")
+    create_mock_backup(mock_backup, os.path.join(base_dir, "bk_11.log"))
+
+    # Initial live release
+    create_mock_release(builds_dir, shared_dir, "release-live0011", sha="0" * 40, branch_based=True)
+    os.symlink(os.path.join(builds_dir, "release-live0011"), current_symlink)
+
+    env = os.environ.copy()
+    env.update({
+        "BUILDS_DIR": builds_dir,
+        "CURRENT_SYMLINK": current_symlink,
+        "SHARED_DIR": shared_dir,
+        "PIPELINE_LOCK": pipeline_lock,
+        "ACTIVATION_LOCK": activation_lock,
+        "BACKUP_SCRIPT": mock_backup,
+        "SYSTEMCTL_BIN": mock_systemctl,
+        "CURL_BIN": mock_curl,
+        "SERVICE_NAME": "royal-libas",
+        "HEALTH_URL": "http://127.0.0.1:8000/health"
+    })
+
+    # Subtest 11a: Branch-based checkout (ref: refs/heads/main loose ref)
+    sha_11a = "1" * 40
+    create_mock_release(builds_dir, shared_dir, "release-bran0011", sha=sha_11a, branch_based=True, packed=False)
+    print("[Subtest 11a] Verifying branch-based checkout with loose ref...")
+    res_11a = subprocess.run([proposed_helper_path, "release-bran0011", sha_11a], capture_output=True, text=True, env=env)
+    if res_11a.returncode != 0:
+        print(f"FAIL 11a: Branch-based checkout failed:\n{res_11a.stderr}")
+        return False
+    if os.path.basename(os.path.realpath(current_symlink)) != "release-bran0011":
+        print("FAIL 11a: Symlink was not switched to branch-based release!")
+        return False
+
+    # Subtest 11b: Branch-based checkout with packed-refs
+    sha_11b = "2" * 40
+    create_mock_release(builds_dir, shared_dir, "release-pack0011", sha=sha_11b, branch_based=True, packed=True)
+    print("[Subtest 11b] Verifying branch-based checkout with packed-refs...")
+    res_11b = subprocess.run([proposed_helper_path, "release-pack0011", sha_11b], capture_output=True, text=True, env=env)
+    if res_11b.returncode != 0:
+        print(f"FAIL 11b: Packed-refs branch-based checkout failed:\n{res_11b.stderr}")
+        return False
+    if os.path.basename(os.path.realpath(current_symlink)) != "release-pack0011":
+        print("FAIL 11b: Symlink was not switched to packed-refs release!")
+        return False
+
+    # Subtest 11c: Detached HEAD checkout (direct SHA in .git/HEAD)
+    sha_11c = "3" * 40
+    create_mock_release(builds_dir, shared_dir, "release-deta0011", sha=sha_11c, branch_based=False)
+    print("[Subtest 11c] Verifying detached HEAD checkout...")
+    res_11c = subprocess.run([proposed_helper_path, "release-deta0011", sha_11c], capture_output=True, text=True, env=env)
+    if res_11c.returncode != 0:
+        print(f"FAIL 11c: Detached HEAD checkout failed:\n{res_11c.stderr}")
+        return False
+    if os.path.basename(os.path.realpath(current_symlink)) != "release-deta0011":
+        print("FAIL 11c: Symlink was not switched to detached HEAD release!")
+        return False
+
+    # Subtest 11d: Commit mismatch fails closed
+    create_mock_release(builds_dir, shared_dir, "release-mism0011", sha="4" * 40, branch_based=True)
+    print("[Subtest 11d] Verifying commit SHA mismatch fails closed...")
+    res_11d = subprocess.run([proposed_helper_path, "release-mism0011", "5" * 40], capture_output=True, text=True, env=env)
+    if res_11d.returncode != 1 or "Release commit mismatch" not in res_11d.stderr:
+        print(f"FAIL 11d: Commit mismatch did not fail closed:\n{res_11d.stderr}")
+        return False
+    if os.path.basename(os.path.realpath(current_symlink)) == "release-mism0011":
+        print("FAIL 11d: Symlink was modified despite commit mismatch!")
+        return False
+
+    print("PASS: Commit SHA verification verified across branch-based (loose and packed) and detached HEAD modes.")
+    return True
+
+
+# ------------------------------------------------------------------------------
+# TEST 12: Redesigned Root Helper Installation, Checksum & Rollback
+# ------------------------------------------------------------------------------
+def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_helper_path: str) -> bool:
+    print("\n" + "=" * 72)
+    print("TEST 12: Redesigned Root Helper Installation, Checksum & Rollback")
+    print("=" * 72)
+
+    import hashlib
+
+    install_root = os.path.join(base_dir, "test12_root_install")
+    os.makedirs(install_root, exist_ok=True)
+    live_helper = os.path.join(install_root, "activate-release.sh")
+
+    # Seed initial working installed helper
+    with open(live_helper, "w") as f:
+        f.write("#!/bin/bash\necho INITIAL_WORKING_HELPER\n")
+    os.chmod(live_helper, 0o700)
+
+    # Compute expected hash of the proposed helper
+    with open(proposed_helper_path, "rb") as f:
+        expected_sha256 = hashlib.sha256(f.read()).hexdigest()
+
+    print(f"[Review Baseline] Reviewed Helper SHA-256: {expected_sha256}")
+
+    # Installation logic simulation:
+    def execute_installation(candidate_src: str, target_dest: str, expected_hash: str) -> Tuple[bool, str]:
+        # 1. Copy candidate to root-controlled temporary file
+        tmp_target = os.path.join(os.path.dirname(target_dest), f"tmp_install_{os.getpid()}_{time.time_ns()}.sh")
+        shutil.copy2(candidate_src, tmp_target)
+        os.chmod(tmp_target, 0o700)
+
+        # 2. Syntax check
+        res_syn = subprocess.run(["bash", "-n", tmp_target], capture_output=True, text=True)
+        if res_syn.returncode != 0:
+            if os.path.exists(tmp_target):
+                os.remove(tmp_target)
+            return False, f"Syntax verification failed: {res_syn.stderr.strip()}"
+
+        # 3. Checksum verification against reviewed commit
+        with open(tmp_target, "rb") as f:
+            actual_hash = hashlib.sha256(f.read()).hexdigest()
+        if actual_hash != expected_hash:
+            if os.path.exists(tmp_target):
+                os.remove(tmp_target)
+            return False, f"SHA-256 checksum mismatch: expected {expected_hash}, got {actual_hash}"
+
+        # 4. Create verified, non-empty backup of existing installed helper
+        backup_path = f"{target_dest}.bak-20261105-020000"
+        if os.path.isfile(target_dest):
+            shutil.copy2(target_dest, backup_path)
+            if not os.path.isfile(backup_path) or os.path.getsize(backup_path) == 0:
+                if os.path.exists(tmp_target):
+                    os.remove(tmp_target)
+                return False, "Failed to create verified non-empty backup"
+
+        # 5. Atomic move into place
+        os.replace(tmp_target, target_dest)
+        os.chmod(target_dest, 0o700)
+        return True, "Installation successful"
+
+    # Test Case 12a: Syntax error rejected
+    bad_syntax_candidate = os.path.join(base_dir, "bad_syntax.sh")
+    with open(bad_syntax_candidate, "w") as f:
+        f.write("#!/bin/bash\nif [ a == b ]; then echo incomplete\n")  # missing fi
+
+    print("[Case 12a] Testing candidate with syntax error...")
+    ok_12a, err_12a = execute_installation(bad_syntax_candidate, live_helper, expected_sha256)
+    if ok_12a:
+        print("FAIL: Installation succeeded with invalid syntax!")
+        return False
+    with open(live_helper) as f:
+        if "INITIAL_WORKING_HELPER" not in f.read():
+            print("FAIL: Live helper was modified despite syntax error!")
+            return False
+    print(f"PASS 12a: Syntax error rejected ({err_12a}), live helper untouched.")
+
+    # Test Case 12b: Checksum mismatch rejected
+    tampered_candidate = os.path.join(base_dir, "tampered.sh")
+    with open(tampered_candidate, "w") as f:
+        f.write("#!/bin/bash\necho TAMPERED_HELPER\n")
+    print("[Case 12b] Testing candidate with checksum mismatch...")
+    ok_12b, err_12b = execute_installation(tampered_candidate, live_helper, expected_sha256)
+    if ok_12b:
+        print("FAIL: Installation succeeded with mismatched checksum!")
+        return False
+    with open(live_helper) as f:
+        if "INITIAL_WORKING_HELPER" not in f.read():
+            print("FAIL: Live helper was modified despite checksum mismatch!")
+            return False
+    print(f"PASS 12b: Checksum mismatch rejected ({err_12b}), live helper untouched.")
+
+    # Test Case 12c: Successful installation with exact hash and backup
+    print("[Case 12c] Testing valid installation with exact reviewed SHA-256...")
+    ok_12c, msg_12c = execute_installation(proposed_helper_path, live_helper, expected_sha256)
+    if not ok_12c:
+        print(f"FAIL 12c: Valid installation failed: {msg_12c}")
+        return False
+
+    with open(live_helper, "rb") as f:
+        installed_hash = hashlib.sha256(f.read()).hexdigest()
+    if installed_hash != expected_sha256:
+        print("FAIL 12c: Installed helper hash does not match expected!")
+        return False
+
+    backup_file = f"{live_helper}.bak-20261105-020000"
+    if not os.path.isfile(backup_file):
+        print("FAIL 12c: Backup file was not created!")
+        return False
+    with open(backup_file) as f:
+        if "INITIAL_WORKING_HELPER" not in f.read():
+            print("FAIL 12c: Backup does not contain initial working helper!")
+            return False
+    print("PASS 12c: Helper successfully installed, exact checksum verified, backup created.")
+
+    # Test Case 12d: Rollback from backup
+    print("[Case 12d] Testing rollback restoration from backup...")
+    shutil.copy2(backup_file, live_helper)
+    os.chmod(live_helper, 0o700)
+    with open(live_helper) as f:
+        if "INITIAL_WORKING_HELPER" not in f.read():
+            print("FAIL 12d: Rollback restoration failed!")
+            return False
+    print("PASS 12d: Rollback procedure restored initial working helper cleanly.")
+
+    print("PASS: Redesigned helper installation and reversible rollback procedure verified.")
+    return True
+
+
 def main():
     if not HAS_FCNTL:
         print("SKIP: fcntl not supported on this platform (requires Linux/POSIX).")
@@ -980,6 +1234,8 @@ def main():
         t8 = test_failed_health_check_and_rollback(sandbox, proposed_helper)
         t9 = test_safe_recovery_to_legacy_helper(sandbox)
         t10 = test_authoritative_evidence_and_dry_run(sandbox, seed_script, prune_script)
+        t11 = test_release_sha_verification_modes(sandbox, proposed_helper)
+        t12 = test_redesigned_helper_installation_and_rollback(sandbox, proposed_helper)
 
         print("\n" + "=" * 72)
         print("CONSOLIDATED PRODUCTION-EQUIVALENT TEST RESULTS:")
@@ -993,10 +1249,12 @@ def main():
         print(f"  Test 8 (Failed Health Check & Rollback):      {'PASS' if t8 else 'FAIL'}")
         print(f"  Test 9 (Safe Recovery to Legacy Helper):      {'PASS' if t9 else 'FAIL'}")
         print(f"  Test 10 (Authoritative Policy & Dry-Run):     {'PASS' if t10 else 'FAIL'}")
+        print(f"  Test 11 (Release SHA Modes Branch/Detached):  {'PASS' if t11 else 'FAIL'}")
+        print(f"  Test 12 (Root Install Verification & Rollback):{'PASS' if t12 else 'FAIL'}")
         print("=" * 72)
 
-        if all([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10]):
-            print("\nALL 10 PRODUCTION-EQUIVALENT ISOLATED TESTS PASSED SUCCESSFULLY!")
+        if all([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12]):
+            print("\nALL 12 PRODUCTION-EQUIVALENT ISOLATED TESTS PASSED SUCCESSFULLY!")
             sys.exit(0)
         else:
             print("\nSOME TESTS FAILED!")

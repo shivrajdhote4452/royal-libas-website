@@ -268,7 +268,7 @@ def get_release_commit_sha(release_path: str) -> Optional[str]:
     # 1. Try git command directly if available
     try:
         res = subprocess.run(
-            ["git", "-C", release_path, "rev-parse", "HEAD"],
+            ["git", "-c", "safe.directory=*", "-C", release_path, "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             timeout=5
@@ -296,6 +296,14 @@ def get_release_commit_sha(release_path: str) -> Optional[str]:
                         ref_sha = rf.read().strip()
                     if COMMIT_SHA_RE.match(ref_sha):
                         return ref_sha
+                packed_path = os.path.join(git_dir, "packed-refs")
+                if os.path.isfile(packed_path):
+                    with open(packed_path, "r", encoding="utf-8") as pf:
+                        for line in pf:
+                            parts = line.strip().split()
+                            if len(parts) >= 2 and parts[1] == ref_subpath:
+                                if COMMIT_SHA_RE.match(parts[0]):
+                                    return parts[0]
     except Exception:
         pass
 
