@@ -44,9 +44,32 @@ jobs:
           set -euo pipefail
 
           expected="$1"
+          builds_dir="/var/www/royal-libas-releases/builds"
+          pipeline_lock="$builds_dir/.deploy-pipeline.lock"
+          activation_lock="/run/lock/royal-libas-deploy.lock"
+          ledger_file="$builds_dir/.deployments_ledger.tsv"
+          current_symlink="/var/www/royal-libas-releases/current"
+
+          # 1. Acquire unbroken exclusive lifecycle lock across entire deployment and retention
+          exec 200>"$pipeline_lock"
+          if ! flock -n 200; then
+            echo "CRITICAL: Another deployment or retention pipeline is in progress. Aborting." >&2
+            exit 1
+          fi
+
+          # 2. Verify existing activation lock is free
+          if [ -f "$activation_lock" ]; then
+            if ! flock -n "$activation_lock" true 2>/dev/null; then
+              echo "CRITICAL: Activation lock ($activation_lock) is currently held. Aborting." >&2
+              exit 1
+            fi
+          fi
+
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
 
+          # 3. Release preparation
+          echo ">>> [Phase 1/4] Preparing Release for SHA: $expected"
           bash /usr/local/lib/royal-libas/prepare-release.sh "$expected" | tee "$log"
 
           release="$(sed -n 's/^RELEASE_NAME=//p' "$log" | tail -n 1)"
@@ -55,5 +78,42 @@ jobs:
           [[ "$release" =~ ^release-[A-Za-z0-9]{8}$ ]]
           [[ "$actual" = "$expected" ]]
 
+          # 4. Release activation
+          echo ">>> [Phase 2/4] Activating Release: $release"
           sudo -n /usr/local/lib/royal-libas/activate-release.sh "$release" "$expected"
+
+          # 5. Post-activation health check verification
+          echo ">>> [Phase 3/4] Verifying Service Health..."
+          health_url="http://127.0.0.1:8000/health"
+          health_ok=0
+          for i in {1..20}; do
+            if curl -sf "$health_url" 2>/dev/null | grep -q '"status":"ok"'; then
+              health_ok=1
+              echo "Service health verified: $health_url reported ok"
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$health_ok" -ne 1 ]; then
+            echo "WARNING: Health check timed out after activation. Site is live; skipping release pruning." >&2
+            exit 0
+          fi
+
+          # 6. Record verified activation in ledger
+          echo ">>> [Phase 4/4] Updating Ledger & Managing Release Retention..."
+          timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          printf '%s\t%s\t%s\t%s\n' "$timestamp" "$release" "$actual" "activated" >> "$ledger_file"
+
+          # 7. Safe automatic release retention
+          retention_script="$current_symlink/deploy/prune_releases.py"
+          if [ -f "$retention_script" ]; then
+            python3 "$retention_script" --execute || {
+              echo "WARNING: Automatic retention encountered a safety notice. Site remains live." >&2
+            }
+          else
+            echo "Notice: Retention script not found at $retention_script; skipping pruning."
+          fi
+
+          echo "Deployment and retention coordination completed successfully."
           REMOTE
