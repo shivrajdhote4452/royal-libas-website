@@ -30,27 +30,27 @@ export const ROUTE_METADATA: Record<string, { title: string; description: string
   '/about': {
     title: 'About Us & Tanya’s Story | Royal Libas',
     description:
-      'Learn about Royal Libas by Tanya, our Jhansi flagship atelier, master craftsmanship, and the heritage behind our luxury handcrafted ethnic silhouettes.',
+      'Learn about Royal Libas by Tanya, our artisanal craftsmanship, and our collection of handcrafted Indian ethnic wear.',
   },
   '/contact': {
     title: 'Contact & Concierge | Royal Libas by Tanya',
     description:
-      'Get in touch with Royal Libas by Tanya. Visit our flagship boutique in Jhansi, reach our styling concierge, or connect via WhatsApp for bespoke assistance.',
+      'Contact Royal Libas by Tanya. Reach out for styling assistance, order inquiries, boutique visit details in Jhansi, or customer support.',
   },
   '/shipping-policy': {
     title: 'Shipping & Delivery Policy | Royal Libas by Tanya',
     description:
-      'Learn about Royal Libas shipping timelines, insured pan-India delivery, packaging standards, and order dispatch terms.',
+      'Learn about Royal Libas shipping timelines, pan-India courier delivery, tamper-proof packaging, and order dispatch terms.',
   },
   '/return-policy': {
     title: 'Returns & Exchange Policy | Royal Libas',
     description:
-      'Review the Royal Libas returns and exchange policy for luxury boutique ethnic wear and custom orders.',
+      'Review the Royal Libas policy regarding all-sales-final terms, size guidance, transit damages, and order cancellation guidelines.',
   },
   '/exchange-policy': {
     title: 'Returns & Exchange Policy | Royal Libas',
     description:
-      'Review the Royal Libas returns and exchange policy for luxury boutique ethnic wear and custom orders.',
+      'Review the Royal Libas policy regarding all-sales-final terms, size guidance, transit damages, and order cancellation guidelines.',
   },
   '/privacy-policy': {
     title: 'Privacy Policy | Royal Libas by Tanya',
@@ -65,17 +65,17 @@ export const ROUTE_METADATA: Record<string, { title: string; description: string
   '/track-order': {
     title: 'Track Your Order | Royal Libas by Tanya',
     description:
-      'Track your Royal Libas order status in real-time with your order code and phone number for verified delivery updates.',
+      'Track your Royal Libas order status in real time using your order code and registered phone number.',
   },
   '/cart': {
     title: 'Shopping Bag | Royal Libas by Tanya',
     description:
-      'Review the selected designer silhouettes and handcrafted ethnic ensembles in your Royal Libas shopping bag.',
+      'Review items in your Royal Libas shopping bag, check quantities, and proceed to checkout.',
   },
   '/checkout': {
     title: 'Secure Guest Checkout | Royal Libas by Tanya',
     description:
-      'Complete your purchase with encrypted, secure guest checkout and verified payment methods at Royal Libas by Tanya.',
+      'Complete your order with secure guest checkout, delivery details, and payment options at Royal Libas by Tanya.',
   },
 };
 
