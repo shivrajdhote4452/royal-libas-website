@@ -152,17 +152,20 @@ def seed_ledger(
     builds_dir: str = "/var/www/royal-libas-releases/builds",
     pipeline_lock_file: str = "/var/www/royal-libas-releases/builds/.deploy-pipeline.lock",
     evidence_file: Optional[str] = None,
-    mark_uncertain: bool = False,
+    mark_uncertain: bool = True,
     dry_run: bool = True
 ) -> int:
     """
-    Seed deployments ledger with trustworthy, verified historical releases.
+    Seed deployments ledger for audit/tracking while enforcing the Authoritative Evidence Policy.
     
     Invariants:
-    1. Matching commit SHA on disk alone does NOT authorize deletion.
-    2. Independent verifiable activation evidence is required to mark an entry as 'activated'.
-    3. If evidence is missing, automatic historical seeding/deletion is disabled.
-    4. Merges with any existing ledger entries and strictly sorts chronologically.
+    1. A release name appearing in an arbitrary evidence file or matching disk commits
+       is NOT authoritative proof of successful production activation.
+    2. Historical seeding for deletion purposes is STRICTLY DISABLED.
+    3. Historical releases are untrusted for rollback deletion lineage and are preserved
+       as uncertain ('uncertain_historical').
+    4. Only forward-running deployments verified live by the pipeline will be recorded
+       as 'activated'.
     """
     print("=" * 72)
     print("Royal Libas Deployments Ledger Seeding Utility")
@@ -170,28 +173,19 @@ def seed_ledger(
     print(f"Mode: {'DRY-RUN (Genuine Read-Only Inspection)' if dry_run else 'EXECUTE (Writing Ledger)'}")
     print(f"Target ledger file: {ledger_path}")
     print(f"Builds directory:  {builds_dir}")
-    print(f"Evidence file:     {evidence_file or 'None (Independent evidence missing)'}")
     print("=" * 72)
 
-    # Load independent activation evidence
-    evidence, evidence_warnings = load_independent_evidence(evidence_file)
-    for warn in evidence_warnings:
-        print(f"[Evidence Warning] {warn}")
-
-    if not evidence:
-        print("\n" + "=" * 72)
-        print("[SAFETY NOTICE: INDEPENDENT ACTIVATION EVIDENCE MISSING]")
-        print("Matching Git commit metadata on disk alone does NOT prove successful")
-        print("production activation. Releases without independent activation evidence")
-        print("CANNOT be marked as trusted 'activated' records for automatic deletion.")
-        print("Automatic historical seeding and deletion authorization are DISABLED.")
-        print("All historical releases will be preserved safely as uncertain.")
-        print("=" * 72)
-        if not mark_uncertain:
-            print("\nTo inspect existing ledger without seeding, no further action required.")
-            print("To record unverified releases explicitly as 'uncertain_historical' (preserving them),")
-            print("pass --mark-uncertain.")
-            return 0
+    print("\n" + "=" * 72)
+    print("[AUTHORITATIVE EVIDENCE POLICY: HISTORICAL DELETION DISABLED]")
+    print("A release name appearing in an arbitrary evidence file or matching disk Git")
+    print("commits does not constitute authoritative proof of successful activation.")
+    print("Because historical activations cannot be independently audited against an")
+    print("authoritative, tamper-proof system source, HISTORICAL SEEDING FOR DELETION")
+    print("PURPOSES IS DISABLED.")
+    print("All pre-existing releases will be preserved safely as uncertain releases.")
+    print("Automatic retention pruning operates strictly forward-only on new activations")
+    print("verified directly by the deployment pipeline.")
+    print("=" * 72)
 
     # 1. Parse existing ledger entries if present
     existing_records: List[Dict[str, any]] = []
@@ -244,30 +238,16 @@ def seed_ledger(
             )
             continue
 
-        # Check independent activation evidence
-        has_independent_evidence = rel in evidence
+        # Under Authoritative Evidence Policy, historical entries cannot be trusted as
+        # 'activated' for deletion purposes. They are strictly marked 'uncertain_historical'.
         parsed_ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
-
-        if has_independent_evidence:
-            verified_historical.append({
-                "timestamp": parsed_ts.isoformat(),
-                "parsed_ts": parsed_ts,
-                "release": rel,
-                "sha": expected_sha.lower(),
-                "status": "activated"
-            })
-        elif mark_uncertain:
-            verified_historical.append({
-                "timestamp": parsed_ts.isoformat(),
-                "parsed_ts": parsed_ts,
-                "release": rel,
-                "sha": expected_sha.lower(),
-                "status": "uncertain_historical"
-            })
-        else:
-            excluded_candidates.append(
-                (rel, "No independent verifiable activation evidence (commit match on disk alone is insufficient)")
-            )
+        verified_historical.append({
+            "timestamp": parsed_ts.isoformat(),
+            "parsed_ts": parsed_ts,
+            "release": rel,
+            "sha": expected_sha.lower(),
+            "status": "uncertain_historical"
+        })
 
     # 3. Combine and sort strictly in chronological order
     all_records = existing_records + verified_historical
@@ -276,7 +256,7 @@ def seed_ledger(
     print(f"\nExisting ledger records found:        {len(existing_records)}")
     print(f"Independently verified activations:   {sum(1 for r in verified_historical if r['status'] == 'activated')}")
     print(f"Uncertain historical records added:   {sum(1 for r in verified_historical if r['status'] != 'activated')}")
-    print(f"Excluded uncertain candidates:        {len(excluded_candidates)}")
+    print(f"Excluded candidates (mismatched/missing): {len(excluded_candidates)}")
     print(f"Total merged chronological count:     {len(all_records)}")
 
     if excluded_candidates:

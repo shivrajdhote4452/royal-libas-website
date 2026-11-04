@@ -79,12 +79,14 @@ class ContinuousLockManager:
         pipeline_lock_file: str,
         pipeline_lock_fd: Optional[int] = None,
         activation_lock_file: Optional[str] = None,
+        activation_lock_fd: Optional[int] = None,
         skip_locks: bool = False,
         dry_run: bool = False
     ):
         self.pipeline_lock_file = pipeline_lock_file
         self.pipeline_lock_fd = pipeline_lock_fd
         self.activation_lock_file = activation_lock_file
+        self.activation_lock_fd = activation_lock_fd
         self.skip_locks = skip_locks
         self.dry_run = dry_run
 
@@ -145,7 +147,23 @@ class ContinuousLockManager:
                         )
 
         # 2. Activation lock coordination
-        if self.activation_lock_file:
+        if self.activation_lock_fd is not None:
+            # Validate inherited activation lock FD
+            try:
+                if self.activation_lock_file and os.path.exists(self.activation_lock_file):
+                    fd_stat = os.fstat(self.activation_lock_fd)
+                    file_stat = os.stat(self.activation_lock_file)
+                    if (fd_stat.st_ino != file_stat.st_ino) or (fd_stat.st_dev != file_stat.st_dev):
+                        raise LockAcquisitionError(
+                            f"Inherited activation lock FD {self.activation_lock_fd} does not match '{self.activation_lock_file}'"
+                        )
+                fcntl.flock(self.activation_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.lock_details.append(f"Inherited activation lock FD {self.activation_lock_fd} active")
+            except (OSError, BlockingIOError) as exc:
+                raise LockAcquisitionError(
+                    f"Inherited activation lock FD {self.activation_lock_fd} invalid or busy: {exc}"
+                )
+        elif self.activation_lock_file:
             if not os.path.exists(self.activation_lock_file):
                 if self.dry_run:
                     if self.lock_status == "PENDING":
@@ -660,6 +678,7 @@ def prune_releases(
     pipeline_lock_file: str = "/var/www/royal-libas-releases/builds/.deploy-pipeline.lock",
     pipeline_lock_fd: Optional[int] = None,
     activation_lock_file: str = "/run/lock/royal-libas-deploy.lock",
+    activation_lock_fd: Optional[int] = None,
     shared_env: str = "/var/www/royal-libas/backend/.env",
     shared_uploads: str = "/var/www/royal-libas/backend/uploads",
     min_rollbacks: int = 3,
@@ -685,6 +704,7 @@ def prune_releases(
         pipeline_lock_file=pipeline_lock_file,
         pipeline_lock_fd=pipeline_lock_fd,
         activation_lock_file=activation_lock_file,
+        activation_lock_fd=activation_lock_fd,
         skip_locks=skip_locks,
         dry_run=dry_run
     )
@@ -896,6 +916,12 @@ def main():
         help="Path to release activation lock"
     )
     parser.add_argument(
+        "--activation-lock-fd",
+        type=int,
+        default=None,
+        help="Inherited activation lock file descriptor from deployment wrapper"
+    )
+    parser.add_argument(
         "--shared-env",
         default="/var/www/royal-libas/backend/.env",
         help="Path to production shared .env"
@@ -936,6 +962,7 @@ def main():
         pipeline_lock_file=args.pipeline_lock_file,
         pipeline_lock_fd=args.pipeline_lock_fd,
         activation_lock_file=args.activation_lock_file,
+        activation_lock_fd=args.activation_lock_fd,
         shared_env=args.shared_env,
         shared_uploads=args.shared_uploads,
         min_rollbacks=args.min_rollbacks,

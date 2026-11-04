@@ -542,54 +542,42 @@ class TestReleaseRetentionEngine(unittest.TestCase):
         )
         self.assertEqual(exit_code, 1)
 
-    def test_seed_ledger_missing_evidence_disables_seeding(self):
-        """Without independent activation evidence, seed_ledger refuses to mark historical entries as activated."""
+    def test_seed_ledger_authoritative_policy_marks_historical_uncertain(self):
+        """Under Authoritative Evidence Policy, historical entries cannot be seeded as activated."""
         self._create_release("release-huDNUmEb", sha="805e7a93091e8f073ad3d629fc4d952d46cd454b")
+        self._create_release("release-CPCGzuLG", sha="d9e7507cd1b8f820e44c9644fc460bb50902c6f1")
 
-        # Without evidence file, execution must not mark it as activated
+        # Existing ledger contains 1 active deployment
+        with open(self.ledger_file, "w", encoding="utf-8") as f:
+            f.write("2026-11-04T12:00:00Z\trelease-00000005\t0000000000000000000000000000000000000005\tactivated\n")
+
+        # Execute seed_ledger
         res = seed_ledger(
             self.ledger_file,
             builds_dir=self.builds_dir,
             pipeline_lock_file=self.pipeline_lock,
-            evidence_file=None,
             dry_run=False
         )
         self.assertEqual(res, 0)
-        # Ledger was not seeded with unverified activated records
-        recs, _ = parse_and_validate_ledger(self.ledger_file)
-        self.assertEqual(len(recs), 0)
 
-    def test_seed_ledger_with_independent_evidence(self):
-        """With independent activation evidence, seed_ledger verifies physical release directories, commits, and evidence."""
-        # Create 2 physical releases
-        self._create_release("release-huDNUmEb", sha="805e7a93091e8f073ad3d629fc4d952d46cd454b")
-        self._create_release("release-CPCGzuLG", sha="d9e7507cd1b8f820e44c9644fc460bb50902c6f1")
+        # In the ledger, historical entries must have status 'uncertain_historical', NOT 'activated'
+        with open(self.ledger_file, "r") as f:
+            lines = [l.strip().split("\t") for l in f if l.strip() and not l.startswith("#")]
 
-        # Independent evidence file containing proof for release-huDNUmEb only
-        evidence_file = os.path.join(self.test_dir, "evidence.tsv")
-        with open(evidence_file, "w", encoding="utf-8") as f:
-            f.write("release-huDNUmEb\t805e7a93091e8f073ad3d629fc4d952d46cd454b\tpostgres_backup_snapshot_1\n")
+        # Found 3 lines
+        self.assertEqual(len(lines), 3)
+        # Historical entries are marked uncertain_historical
+        self.assertEqual(lines[0][1], "release-huDNUmEb")
+        self.assertEqual(lines[0][3], "uncertain_historical")
+        self.assertEqual(lines[1][1], "release-CPCGzuLG")
+        self.assertEqual(lines[1][3], "uncertain_historical")
+        self.assertEqual(lines[2][1], "release-00000005")
+        self.assertEqual(lines[2][3], "activated")
 
-        # Existing ledger contains a newer deployment
-        with open(self.ledger_file, "w", encoding="utf-8") as f:
-            f.write("2026-11-04T12:00:00Z\trelease-00000005\t0000000000000000000000000000000000000005\tactivated\n")
-
-        # Execute merges and sorts chronologically
-        res_exec = seed_ledger(
-            self.ledger_file,
-            builds_dir=self.builds_dir,
-            pipeline_lock_file=self.pipeline_lock,
-            evidence_file=evidence_file,
-            dry_run=False
-        )
-        self.assertEqual(res_exec, 0)
-
-        recs, _ = parse_and_validate_ledger(self.ledger_file)
-        # Only release-huDNUmEb has independent evidence and is seeded as activated
-        self.assertEqual(len(recs), 2)
-        self.assertEqual(recs[0]["release"], "release-huDNUmEb")
-        self.assertEqual(recs[0]["status"], "activated")
-        self.assertEqual(recs[1]["release"], "release-00000005")
+        # When evaluated for retention, only release-00000005 is trusted
+        recs, warnings = parse_and_validate_ledger(self.ledger_file)
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["release"], "release-00000005")
 
     def test_uncertain_historical_releases_never_deleted(self):
         """Historical releases marked as uncertain_historical are strictly excluded from deletion."""
