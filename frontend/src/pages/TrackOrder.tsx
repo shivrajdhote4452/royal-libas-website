@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { trackOrder, formatPrice } from '../lib/api';
 import { OrderTrackResponse } from '../types/order';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const TrackOrder: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -27,7 +28,8 @@ export const TrackOrder: React.FC = () => {
   const tokenParam = searchParams.get('token') || '';
 
   useEffect(() => {
-    document.title = 'Track Your Order | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/track-order'].title;
+    setMetaDescription(ROUTE_METADATA['/track-order'].description);
   }, []);
 
   // Auto-search if query params are present in URL

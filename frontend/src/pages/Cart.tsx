@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { formatPrice, validateCart } from '../lib/api';
 import { CartValidateResponse } from '../types/order';
 import { useStoreSettings } from '../lib/settings';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const Cart: React.FC = () => {
   const navigate = useNavigate();
@@ -23,7 +24,8 @@ export const Cart: React.FC = () => {
   };
 
   useEffect(() => {
-    document.title = 'Shopping Bag | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/cart'].title;
+    setMetaDescription(ROUTE_METADATA['/cart'].description);
   }, []);
 
   // Validate cart line items against live database stock

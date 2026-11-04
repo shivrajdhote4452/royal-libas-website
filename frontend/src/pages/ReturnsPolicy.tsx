@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
 import { ShieldCheck, CheckCircle2, AlertCircle, MessageCircle } from 'lucide-react';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const ReturnsPolicy: React.FC = () => {
   useEffect(() => {
-    document.title = 'Returns & Exchange Policy | Royal Libas';
+    document.title = ROUTE_METADATA['/return-policy'].title;
+    setMetaDescription(ROUTE_METADATA['/return-policy'].description);
     window.scrollTo(0, 0);
   }, []);
 

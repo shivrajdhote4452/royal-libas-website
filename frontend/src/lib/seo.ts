@@ -13,6 +13,73 @@ export const DEFAULT_HOMEPAGE_DESCRIPTION =
   'Explore designer suit sets, co-ord sets and festive wear at Royal Libas by Tanya, Jhansi. Discover styles for everyday moments and special occasions.';
 
 /**
+ * Route-specific metadata mapping for all public storefront routes.
+ * Guarantees every route has its own title and description and prevents
+ * metadata inheritance from previously visited pages.
+ */
+export const ROUTE_METADATA: Record<string, { title: string; description: string }> = {
+  '/': {
+    title: DEFAULT_HOMEPAGE_TITLE,
+    description: DEFAULT_HOMEPAGE_DESCRIPTION,
+  },
+  '/shop': {
+    title: 'Shop Handcrafted Festive Silhouettes | Royal Libas by Tanya',
+    description:
+      'Browse our handcrafted collection of designer suit sets, co-ords, and festive silhouettes at Royal Libas by Tanya, Jhansi.',
+  },
+  '/about': {
+    title: 'About Us & Tanya’s Story | Royal Libas',
+    description:
+      'Learn about Royal Libas by Tanya, our Jhansi flagship atelier, master craftsmanship, and the heritage behind our luxury handcrafted ethnic silhouettes.',
+  },
+  '/contact': {
+    title: 'Contact & Concierge | Royal Libas by Tanya',
+    description:
+      'Get in touch with Royal Libas by Tanya. Visit our flagship boutique in Jhansi, reach our styling concierge, or connect via WhatsApp for bespoke assistance.',
+  },
+  '/shipping-policy': {
+    title: 'Shipping & Delivery Policy | Royal Libas by Tanya',
+    description:
+      'Learn about Royal Libas shipping timelines, insured pan-India delivery, packaging standards, and order dispatch terms.',
+  },
+  '/return-policy': {
+    title: 'Returns & Exchange Policy | Royal Libas',
+    description:
+      'Review the Royal Libas returns and exchange policy for luxury boutique ethnic wear and custom orders.',
+  },
+  '/exchange-policy': {
+    title: 'Returns & Exchange Policy | Royal Libas',
+    description:
+      'Review the Royal Libas returns and exchange policy for luxury boutique ethnic wear and custom orders.',
+  },
+  '/privacy-policy': {
+    title: 'Privacy Policy | Royal Libas by Tanya',
+    description:
+      'Read the privacy policy of Royal Libas by Tanya detailing our data protection standards, payment security, and customer privacy commitments.',
+  },
+  '/terms-of-service': {
+    title: 'Terms of Service | Royal Libas by Tanya',
+    description:
+      'Read the terms of service and conditions for purchasing handcrafted designer ethnic wear from Royal Libas by Tanya.',
+  },
+  '/track-order': {
+    title: 'Track Your Order | Royal Libas by Tanya',
+    description:
+      'Track your Royal Libas order status in real-time with your order code and phone number for verified delivery updates.',
+  },
+  '/cart': {
+    title: 'Shopping Bag | Royal Libas by Tanya',
+    description:
+      'Review the selected designer silhouettes and handcrafted ethnic ensembles in your Royal Libas shopping bag.',
+  },
+  '/checkout': {
+    title: 'Secure Guest Checkout | Royal Libas by Tanya',
+    description:
+      'Complete your purchase with encrypted, secure guest checkout and verified payment methods at Royal Libas by Tanya.',
+  },
+};
+
+/**
  * Dynamically sets or updates the <link rel="canonical"> element in document.head.
  * Accepts either a full URL or a relative path (e.g. '/shop', '/product/gulnaar-set').
  */

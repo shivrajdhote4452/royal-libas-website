@@ -45,16 +45,27 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { BackToTop } from './components/BackToTop';
 import { ScrollRestoration } from './components/ScrollRestoration';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { setCanonicalUrl } from './lib/seo';
+import { setCanonicalUrl, setMetaDescription, ROUTE_METADATA, DEFAULT_HOMEPAGE_DESCRIPTION } from './lib/seo';
 
 const StorefrontLayout: React.FC = () => {
   const location = useLocation();
   const hasBottomNav = !location.pathname.startsWith('/product/') && !location.pathname.startsWith('/checkout');
 
   useEffect(() => {
-    // Dynamically update canonical URL for storefront routes (ProductPage sets canonical with slug on load)
+    // Dynamically update canonical URL and route metadata for storefront routes
+    // (ProductPage sets its own canonical, title, and description dynamically when product data loads)
     if (!location.pathname.startsWith('/product/')) {
       setCanonicalUrl(location.pathname);
+      const meta = ROUTE_METADATA[location.pathname];
+      if (meta) {
+        document.title = meta.title;
+        setMetaDescription(meta.description);
+      } else if (location.pathname.startsWith('/order-success')) {
+        document.title = 'Order Confirmation | Royal Libas by Tanya';
+        setMetaDescription('View your Royal Libas order status, summary, and fulfillment details.');
+      } else {
+        setMetaDescription(DEFAULT_HOMEPAGE_DESCRIPTION);
+      }
     }
   }, [location.pathname]);
 

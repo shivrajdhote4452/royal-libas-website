@@ -23,6 +23,7 @@ import {
 } from '../lib/api';
 import { CouponValidateResponse, OrderCreatePayload, PaymentGatewayConfigResponse } from '../types/order';
 import { useStoreSettings } from '../lib/settings';
+import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const Checkout: React.FC = () => {
   const navigate = useNavigate();
@@ -54,7 +55,8 @@ export const Checkout: React.FC = () => {
 
   // Redirect if cart is empty & check gateway status
   useEffect(() => {
-    document.title = 'Secure Guest Checkout | Royal Libas by Tanya';
+    document.title = ROUTE_METADATA['/checkout'].title;
+    setMetaDescription(ROUTE_METADATA['/checkout'].description);
     if (items.length === 0) {
       navigate('/cart');
     }
