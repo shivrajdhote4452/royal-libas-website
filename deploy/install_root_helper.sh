@@ -35,23 +35,49 @@ set -euo pipefail
 #    If post-replacement validation fails, the pre-existing helper is immediately
 #    restored from the verified backup.
 #
-# Recommended Root Staging & Verification Procedure (Run as root):
+# Recommended Root Staging & Verification Procedure (Single Guarded Execution):
 # ------------------------------------------------------------------------------
+# Run as root via 'sudo bash -c' to guarantee atomic fail-closed execution
+# and prevent partial execution of subsequent commands if any check fails:
+#
+#   sudo bash -c '
+#   set -euo pipefail
+#   EXPECTED_INSTALLER_SHA="<sha256 of install_root_helper.sh>"
+#   EXPECTED_HELPER_SHA="328ea8543b5044bedfea82e94b4edc7bdb19bd8aabcd75e175de0bfee3efa93f"
+#   RELEASE_DIR="/var/www/royal-libas-releases/current/deploy"
+#
 #   STAGE_DIR="$(mktemp -d /root/rl-install-stage.XXXXXXXX)"
-#   trap 'rm -rf "$STAGE_DIR"' EXIT INT TERM
-#   cp /var/www/royal-libas-releases/current/deploy/install_root_helper.sh "$STAGE_DIR/"
-#   cp /var/www/royal-libas-releases/current/deploy/activate-release.sh "$STAGE_DIR/"
+#   trap '\''rm -rf "$STAGE_DIR"'\'' EXIT INT TERM
+#
+#   cp "$RELEASE_DIR/install_root_helper.sh" "$STAGE_DIR/install_root_helper.sh"
+#   cp "$RELEASE_DIR/activate-release.sh" "$STAGE_DIR/activate-release.sh"
 #   chown -R root:root "$STAGE_DIR"
 #   chmod 0700 "$STAGE_DIR" "$STAGE_DIR"/*
 #
-#   # Pre-execution verification of BOTH scripts:
-#   echo "$EXPECTED_INSTALLER_SHA  $STAGE_DIR/install_root_helper.sh" | sha256sum -c -
-#   echo "$EXPECTED_HELPER_SHA  $STAGE_DIR/activate-release.sh" | sha256sum -c -
-#   bash -n "$STAGE_DIR/install_root_helper.sh"
-#   bash -n "$STAGE_DIR/activate-release.sh"
+#   # Pre-execution independent verification of BOTH scripts:
+#   if ! bash -n "$STAGE_DIR/install_root_helper.sh"; then
+#     echo "CRITICAL: Installer syntax verification failed. Aborting without executing installer." >&2
+#     exit 1
+#   fi
 #
-#   # Execute installer from root-controlled staging directory:
+#   if ! bash -n "$STAGE_DIR/activate-release.sh"; then
+#     echo "CRITICAL: Helper candidate syntax verification failed. Aborting without executing installer." >&2
+#     exit 1
+#   fi
+#
+#   if ! echo "$EXPECTED_INSTALLER_SHA  $STAGE_DIR/install_root_helper.sh" | sha256sum -c -; then
+#     echo "CRITICAL: Installer checksum verification failed. Aborting without executing installer." >&2
+#     exit 1
+#   fi
+#
+#   if ! echo "$EXPECTED_HELPER_SHA  $STAGE_DIR/activate-release.sh" | sha256sum -c -; then
+#     echo "CRITICAL: Helper candidate checksum verification failed. Aborting without executing installer." >&2
+#     exit 1
+#   fi
+#
+#   # Execute guarded installer strictly from verified root staging directory:
 #   "$STAGE_DIR/install_root_helper.sh" "$STAGE_DIR/activate-release.sh" /usr/local/lib/royal-libas/activate-release.sh
+#   '
 # ==============================================================================
 
 SOURCE_HELPER="${1:-${SOURCE_HELPER:-/var/www/royal-libas-releases/current/deploy/activate-release.sh}}"

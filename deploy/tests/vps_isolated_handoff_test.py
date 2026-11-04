@@ -1175,24 +1175,41 @@ def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_hel
     os.makedirs(stage_dir, exist_ok=True)
     os.chmod(stage_dir, 0o700)
 
-    # Helper function simulating the root pre-execution verification command:
+    # Helper function simulating the single guarded root pre-execution verification command:
     def run_root_pre_verification_and_install(cand_installer: str, cand_helper: str) -> subprocess.CompletedProcess:
-        # Replicates the documented operator root bootstrap procedure
+        # Replicates the single guarded procedure: stops immediately before installer execution on any check failure
         cmd = f"""
+        bash -c '
         set -euo pipefail
         STAGE="{stage_dir}"
         cp "{cand_installer}" "$STAGE/install_root_helper.sh"
         cp "{cand_helper}" "$STAGE/activate-release.sh"
         chmod 0700 "$STAGE/install_root_helper.sh" "$STAGE/activate-release.sh"
         
-        # Pre-execution independent verification of BOTH files:
-        echo "{expected_installer_sha256}  $STAGE/install_root_helper.sh" | sha256sum -c -
-        echo "{expected_helper_sha256}  $STAGE/activate-release.sh" | sha256sum -c -
-        bash -n "$STAGE/install_root_helper.sh"
-        bash -n "$STAGE/activate-release.sh"
+        # Pre-execution independent verification of BOTH scripts with fail-closed stops:
+        if ! bash -n "$STAGE/install_root_helper.sh"; then
+          echo "CRITICAL: Installer syntax verification failed. Aborting without executing installer." >&2
+          exit 1
+        fi
         
-        # Execute installer from private staged directory:
+        if ! bash -n "$STAGE/activate-release.sh"; then
+          echo "CRITICAL: Helper candidate syntax verification failed. Aborting without executing installer." >&2
+          exit 1
+        fi
+
+        if ! echo "{expected_installer_sha256}  $STAGE/install_root_helper.sh" | sha256sum -c -; then
+          echo "CRITICAL: Installer checksum verification failed. Aborting without executing installer." >&2
+          exit 1
+        fi
+        
+        if ! echo "{expected_helper_sha256}  $STAGE/activate-release.sh" | sha256sum -c -; then
+          echo "CRITICAL: Helper candidate checksum verification failed. Aborting without executing installer." >&2
+          exit 1
+        fi
+        
+        # Execute installer strictly from private root staging directory:
         "$STAGE/install_root_helper.sh" "$STAGE/activate-release.sh" "{live_helper}"
+        '
         """
         env_test = os.environ.copy()
         env_test["ALLOW_NON_ROOT_TEST"] = "1"
@@ -1202,35 +1219,57 @@ def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_hel
 
     # Case 12e: Tampered installer checksum rejected BEFORE execution
     print("[Case 12e] Testing tampered installer checksum rejected BEFORE execution...")
+    canary_12e = os.path.join(base_dir, "canary_12e_installer_ran.txt")
+    if os.path.exists(canary_12e):
+        os.remove(canary_12e)
+
     tampered_installer = os.path.join(base_dir, "tampered_installer.sh")
     with open(tampered_installer, "w") as f:
-        f.write("#!/bin/bash\necho MALICIOUS_INSTALLER\n")
+        f.write(f"#!/bin/bash\ntouch '{canary_12e}'\necho CANARY_TAMPERED_INSTALLER_RAN >&2\nexit 0\n")
+    os.chmod(tampered_installer, 0o755)
+
     res_12e = run_root_pre_verification_and_install(tampered_installer, proposed_helper_path)
     print(f"[Case 12e] Exit code: {res_12e.returncode}")
     if res_12e.returncode == 0:
         print("FAIL 12e: Pre-execution check allowed tampered installer!")
         return False
+    if os.path.exists(canary_12e):
+        print("FAIL 12e: Tampered installer was executed despite checksum mismatch!")
+        return False
+    if "CANARY_TAMPERED_INSTALLER_RAN" in res_12e.stderr or "CANARY_TAMPERED_INSTALLER_RAN" in res_12e.stdout:
+        print("FAIL 12e: Tampered installer output detected!")
+        return False
+    assert "Installer checksum verification failed" in res_12e.stderr
     with open(live_helper) as f:
         if f.read() != initial_content:
             print("FAIL 12e: Live helper was modified!")
             return False
-    print("PASS 12e: Tampered installer rejected before execution; live helper unchanged.")
+    print("PASS 12e: Tampered installer rejected before execution; installer NEVER executed and live helper unchanged.")
 
     # Case 12f: Syntax error in installer rejected BEFORE execution
     print("[Case 12f] Testing syntax error in installer rejected BEFORE execution...")
+    canary_12f = os.path.join(base_dir, "canary_12f_installer_ran.txt")
+    if os.path.exists(canary_12f):
+        os.remove(canary_12f)
+
     syntax_bad_installer = os.path.join(base_dir, "syntax_bad_installer.sh")
     with open(syntax_bad_installer, "w") as f:
-        f.write("#!/bin/bash\nif [ a == b ]; then echo incomplete\n")
+        f.write(f"#!/bin/bash\ntouch '{canary_12f}'\nif [ a == b ]; then echo incomplete\n")
+    os.chmod(syntax_bad_installer, 0o755)
+
     res_12f = run_root_pre_verification_and_install(syntax_bad_installer, proposed_helper_path)
     print(f"[Case 12f] Exit code: {res_12f.returncode}")
     if res_12f.returncode == 0:
         print("FAIL 12f: Pre-execution check allowed syntax error in installer!")
         return False
+    if os.path.exists(canary_12f):
+        print("FAIL 12f: Syntax-broken installer was executed!")
+        return False
     with open(live_helper) as f:
         if f.read() != initial_content:
             print("FAIL 12f: Live helper was modified!")
             return False
-    print("PASS 12f: Syntax error in installer rejected before execution; live helper unchanged.")
+    print("PASS 12f: Syntax error in installer rejected before execution; installer NEVER executed and live helper unchanged.")
 
     # Case 12g: Tampered helper candidate checksum rejected BEFORE execution
     print("[Case 12g] Testing tampered helper candidate checksum rejected BEFORE execution...")
@@ -1242,11 +1281,15 @@ def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_hel
     if res_12g.returncode == 0:
         print("FAIL 12g: Pre-execution check allowed tampered helper!")
         return False
+    if "Royal Libas Root Activation Helper Guarded Installer" in res_12g.stdout:
+        print("FAIL 12g: Installer executed despite candidate checksum mismatch!")
+        return False
+    assert "Helper candidate checksum verification failed" in res_12g.stderr
     with open(live_helper) as f:
         if f.read() != initial_content:
             print("FAIL 12g: Live helper was modified!")
             return False
-    print("PASS 12g: Tampered helper candidate rejected before execution; live helper unchanged.")
+    print("PASS 12g: Tampered helper candidate rejected before execution; installer NEVER executed and live helper unchanged.")
 
     # Case 12h: Syntax error in helper candidate rejected BEFORE execution
     print("[Case 12h] Testing syntax error in helper candidate rejected BEFORE execution...")
@@ -1258,11 +1301,15 @@ def test_redesigned_helper_installation_and_rollback(base_dir: str, proposed_hel
     if res_12h.returncode == 0:
         print("FAIL 12h: Pre-execution check allowed syntax error in helper!")
         return False
+    if "Royal Libas Root Activation Helper Guarded Installer" in res_12h.stdout:
+        print("FAIL 12h: Installer executed despite candidate syntax error!")
+        return False
+    assert "Helper candidate syntax verification failed" in res_12h.stderr
     with open(live_helper) as f:
         if f.read() != initial_content:
             print("FAIL 12h: Live helper was modified!")
             return False
-    print("PASS 12h: Syntax error in helper rejected before execution; live helper unchanged.")
+    print("PASS 12h: Syntax error in helper rejected before execution; installer NEVER executed and live helper unchanged.")
 
     # Case 12i: Staged into private root directory, both pre-execution checks pass -> successful installation
     print("[Case 12i] Testing valid root-staged installation with verified checksums and syntax...")
