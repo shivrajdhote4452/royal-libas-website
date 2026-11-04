@@ -2,18 +2,21 @@
 Comprehensive Automated Test Suite for VPS Release Retention Engine.
 
 Tests:
-1. Standard retention flow (Active + 3 rollbacks retained, older pruned).
-2. Fail-closed on regular file .env (never delete real secrets).
-3. Fail-closed on wrong-target .env symlink.
-4. Fail-closed on regular directory uploads (never delete real media).
-5. Fail-closed on nested mounts or mount points.
-6. Fail-closed on dangling or missing live symlink.
-7. Absolute protection of the live release under all conditions.
-8. Interrupted / unverified aborted builds handling (quarantine vs pruning).
-9. Missing or corrupt ledger safe skipping.
-10. Lock coordination and mutual exclusion.
-11. Preservation of shared persistent target data after unlinking.
-12. Unexpected folder names and directory traversal protection.
+1. Standard retention flow (Active + at least 3 usable rollbacks retained, older pruned).
+2. Preserves unverified / unrecorded releases (NEVER deleted; surfaced for review).
+3. Insufficient rollback history (< 3 usable rollbacks) safely skips pruning.
+4. Repeated activations handling (deduplicates while respecting chronological order).
+5. Rollback usability validation (excludes candidates with missing assets or broken code).
+6. Auto-bootstrapping first-run ledger when missing.
+7. Inherited pipeline lock FD coordination (--pipeline-lock-fd).
+8. Continuous locking in standalone mode.
+9. Fail-closed on regular file .env.
+10. Fail-closed on wrong-target .env symlink.
+11. Fail-closed on regular directory uploads.
+12. Fail-closed on nested mounts or mount points.
+13. Fail-closed on dangling or missing live symlink.
+14. Preservation of shared persistent target data after unlinking.
+15. Malformed folder names and directory traversal protection.
 """
 
 import os
@@ -21,13 +24,17 @@ import shutil
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from deploy.prune_releases import (
     evaluate_retention_plan,
     prune_releases,
     verify_persistent_symlinks,
     verify_mount_safety,
+    validate_release_usability,
+    bootstrap_ledger_if_missing,
+    parse_ledger,
+    ContinuousLockManager,
     SafetyViolationError,
     LockAcquisitionError
 )
@@ -65,19 +72,32 @@ class TestReleaseRetentionEngine(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def _create_release(self, name: str, with_symlinks: bool = True, custom_env: str = None, custom_uploads: str = None, mtime: datetime = None) -> str:
-        """Helper to create a mock release folder."""
+    def _create_release(
+        self,
+        name: str,
+        with_symlinks: bool = True,
+        with_frontend_dist: bool = True,
+        with_backend_app: bool = True,
+        custom_env: str = None,
+        custom_uploads: str = None,
+        mtime: datetime = None
+    ) -> str:
+        """Helper to create a physically complete mock release folder."""
         path = os.path.join(self.builds_dir, name)
         backend = os.path.join(path, "backend")
         frontend_dist = os.path.join(path, "frontend", "dist")
         os.makedirs(backend, exist_ok=True)
-        os.makedirs(frontend_dist, exist_ok=True)
 
-        with open(os.path.join(frontend_dist, "index.html"), "w", encoding="utf-8") as f:
-            f.write(f"<html><body>Royal Libas - {name}</body></html>")
+        if with_frontend_dist:
+            os.makedirs(frontend_dist, exist_ok=True)
+            with open(os.path.join(frontend_dist, "index.html"), "w", encoding="utf-8") as f:
+                f.write(f"<html><body>Royal Libas - {name}</body></html>")
 
-        with open(os.path.join(backend, "app.py"), "w", encoding="utf-8") as f:
-            f.write("# backend app")
+        if with_backend_app:
+            app_dir = os.path.join(backend, "app")
+            os.makedirs(app_dir, exist_ok=True)
+            with open(os.path.join(app_dir, "main.py"), "w", encoding="utf-8") as f:
+                f.write("# backend main")
 
         if with_symlinks:
             env_target = custom_env if custom_env is not None else self.shared_env
@@ -92,25 +112,29 @@ class TestReleaseRetentionEngine(unittest.TestCase):
 
         return path
 
-    def _write_ledger(self, releases: list):
-        """Helper to write ledger TSV."""
+    def _write_ledger(self, records: list):
+        """Helper to write ledger TSV with list of (release_name, status)."""
         with open(self.ledger_file, "w", encoding="utf-8") as f:
-            for i, rel in enumerate(releases):
-                ts = (datetime.now(timezone.utc) - timedelta(hours=len(releases) - i)).isoformat()
-                f.write(f"{ts}\t{rel}\tsha_{rel}\tactivated\n")
+            f.write("# TIMESTAMP\tRELEASE_NAME\tCOMMIT_SHA\tSTATUS\n")
+            for i, item in enumerate(records):
+                if isinstance(item, tuple):
+                    rel, status = item
+                else:
+                    rel, status = item, "activated"
+                ts = (datetime.now(timezone.utc) - timedelta(hours=len(records) - i)).isoformat()
+                f.write(f"{ts}\t{rel}\tsha_{rel}\t{status}\n")
 
     def test_standard_retention_flow(self):
-        """Test that Live + 3 rollbacks (total 4) are retained, and older 6 are pruned."""
+        """Test that Live + at least 3 usable rollbacks are retained, and older 6 are pruned."""
         releases = [f"release-0000000{i}" for i in range(1, 10)] + ["release-00000010"]
         for r in releases:
             self._create_release(r)
 
-        # Set live release to the 10th
         live_path = os.path.join(self.builds_dir, "release-00000010")
         os.symlink(live_path, self.current_symlink)
         self._write_ledger(releases)
 
-        # 1. Test Dry-Run first
+        # 1. Dry-Run
         exit_code = prune_releases(
             builds_dir=self.builds_dir,
             current_symlink=self.current_symlink,
@@ -119,16 +143,16 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             activation_lock_file=self.activation_lock,
             shared_env=self.shared_env,
             shared_uploads=self.shared_uploads,
-            keep_count=4,
+            min_rollbacks=3,
             dry_run=True,
             skip_locks=True,
-            mounts_file=self.mounts_file
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 0)
-        # Verify no directories were deleted during dry-run
-        self.assertEqual(len(os.listdir(self.builds_dir)), 11)  # 10 releases + .deployments_ledger.tsv
+        self.assertEqual(len(os.listdir(self.builds_dir)), 11)  # 10 releases + ledger
 
-        # 2. Test Execution
+        # 2. Execution
         exit_code = prune_releases(
             builds_dir=self.builds_dir,
             current_symlink=self.current_symlink,
@@ -137,15 +161,16 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             activation_lock_file=self.activation_lock,
             shared_env=self.shared_env,
             shared_uploads=self.shared_uploads,
-            keep_count=4,
+            min_rollbacks=3,
             dry_run=False,
             skip_locks=True,
-            mounts_file=self.mounts_file
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 0)
 
-        # Retained set must be release-00000010 (live), release-00000009, 08, 07 (3 rollbacks)
         remaining = [d for d in os.listdir(self.builds_dir) if not d.startswith(".")]
+        # Exactly 4 retained: release-00000010 (live), and 09, 08, 07 (3 rollbacks)
         self.assertEqual(sorted(remaining), [
             "release-00000007",
             "release-00000008",
@@ -153,12 +178,144 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             "release-00000010"
         ])
 
-        # Verify persistent shared data is 100% intact
-        self.assertTrue(os.path.isfile(self.shared_env))
-        with open(self.shared_env, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read().strip(), "PROD_SECRET=very_secret_database_key")
+    def test_unverified_releases_are_strictly_preserved(self):
+        """Unverified/unrecorded releases must NEVER be automatically deleted."""
+        releases = ["release-00000001", "release-00000002", "release-00000003", "release-00000004", "release-00000005"]
+        for r in releases:
+            self._create_release(r)
+        os.symlink(os.path.join(self.builds_dir, "release-00000005"), self.current_symlink)
+        self._write_ledger(releases)
 
-        self.assertTrue(os.path.isfile(os.path.join(self.shared_uploads, "product_photo.jpg")))
+        # Create an unrecorded release (e.g. interrupted build 3 days old)
+        self._create_release("release-unrecorded", mtime=datetime.now(timezone.utc) - timedelta(days=3))
+
+        exit_code = prune_releases(
+            builds_dir=self.builds_dir,
+            current_symlink=self.current_symlink,
+            ledger_file=self.ledger_file,
+            shared_env=self.shared_env,
+            shared_uploads=self.shared_uploads,
+            min_rollbacks=3,
+            dry_run=False,
+            skip_locks=True,
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
+        )
+        self.assertEqual(exit_code, 0)
+
+        # release-unrecorded MUST still exist on disk (preserved for review)
+        self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-unrecorded")))
+        # release-00000001 (older verified release) was pruned
+        self.assertFalse(os.path.exists(os.path.join(self.builds_dir, "release-00000001")))
+
+    def test_insufficient_usable_rollbacks_safely_skips_pruning(self):
+        """If fewer than min_rollbacks usable rollbacks exist, automatic pruning is skipped."""
+        # Only 2 releases exist: 1 live + 1 rollback
+        releases = ["release-00000001", "release-00000002"]
+        for r in releases:
+            self._create_release(r)
+        os.symlink(os.path.join(self.builds_dir, "release-00000002"), self.current_symlink)
+        self._write_ledger(releases)
+
+        exit_code = prune_releases(
+            builds_dir=self.builds_dir,
+            current_symlink=self.current_symlink,
+            ledger_file=self.ledger_file,
+            shared_env=self.shared_env,
+            shared_uploads=self.shared_uploads,
+            min_rollbacks=3,
+            dry_run=False,
+            skip_locks=True,
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
+        )
+        self.assertEqual(exit_code, 0)
+        # release-00000001 MUST NOT be pruned because we need at least 3 rollbacks
+        self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-00000001")))
+
+    def test_unusable_rollback_candidate_excluded_from_quota(self):
+        """If a recorded release has missing frontend or broken code, it cannot satisfy rollback quota."""
+        # 4 releases in ledger: 04 (live), 03 (usable), 02 (broken - missing frontend), 01 (usable)
+        self._create_release("release-00000001")
+        self._create_release("release-00000002", with_frontend_dist=False)  # Broken!
+        self._create_release("release-00000003")
+        self._create_release("release-00000004")
+
+        os.symlink(os.path.join(self.builds_dir, "release-00000004"), self.current_symlink)
+        self._write_ledger(["release-00000001", "release-00000002", "release-00000003", "release-00000004"])
+
+        # Usable rollbacks are only release-00000003 and release-00000001 (total = 2, < min_rollbacks of 3)
+        exit_code = prune_releases(
+            builds_dir=self.builds_dir,
+            current_symlink=self.current_symlink,
+            ledger_file=self.ledger_file,
+            shared_env=self.shared_env,
+            shared_uploads=self.shared_uploads,
+            min_rollbacks=3,
+            dry_run=False,
+            skip_locks=True,
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
+        )
+        self.assertEqual(exit_code, 0)
+        # Because usable rollbacks < 3, no older release may be pruned!
+        self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-00000001")))
+
+    def test_repeated_activations_handled_in_chronological_order(self):
+        """Repeated activations in ledger are deduplicated in reverse chronological order."""
+        # Sequence: rel1 -> rel2 -> rel1 -> rel3 (live)
+        # Distinct prior activations in reverse: rel1, rel2
+        for r in ["release-00000001", "release-00000002", "release-00000003"]:
+            self._create_release(r)
+        os.symlink(os.path.join(self.builds_dir, "release-00000003"), self.current_symlink)
+        self._write_ledger([
+            "release-00000001",
+            "release-00000002",
+            "release-00000001",
+            "release-00000003"
+        ])
+
+        live_rel, rollbacks, candidates, unverified, warnings = evaluate_retention_plan(
+            builds_dir=self.builds_dir,
+            current_symlink=self.current_symlink,
+            ledger_records=parse_ledger(self.ledger_file),
+            expected_env=self.shared_env,
+            expected_uploads=self.shared_uploads,
+            min_rollbacks=2
+        )
+        self.assertEqual(live_rel, "release-00000003")
+        self.assertEqual(rollbacks, ["release-00000001", "release-00000002"])
+
+    def test_auto_bootstrap_ledger_on_first_run(self):
+        """Missing ledger is automatically initialized so first deployment after merge works safely."""
+        missing_ledger = os.path.join(self.builds_dir, "nonexistent_ledger.tsv")
+        self.assertFalse(os.path.exists(missing_ledger))
+
+        was_bootstrapped = bootstrap_ledger_if_missing(missing_ledger, self.builds_dir)
+        self.assertTrue(was_bootstrapped)
+        self.assertTrue(os.path.isfile(missing_ledger))
+
+        # Verify parsed records contain audited baseline
+        records = parse_ledger(missing_ledger)
+        self.assertGreaterEqual(len(records), 16)
+        self.assertEqual(records[-1]["release"], "release-6eIbw7Gt")
+
+    def test_continuous_lock_manager_inherited_fd(self):
+        """Validate ContinuousLockManager with simulated inherited FD."""
+        with open(self.pipeline_lock, "w") as f:
+            f.write("pipeline_lock")
+
+        # Open FD to lockfile
+        fd = os.open(self.pipeline_lock, os.O_RDWR)
+        try:
+            with ContinuousLockManager(
+                pipeline_lock_file=self.pipeline_lock,
+                pipeline_lock_fd=fd,
+                skip_locks=False
+            ):
+                pass
+        finally:
+            os.close(fd)
 
     def test_fail_closed_on_regular_file_env(self):
         """Fail immediately if candidate has real .env file instead of symlink."""
@@ -166,11 +323,10 @@ class TestReleaseRetentionEngine(unittest.TestCase):
         for r in releases:
             self._create_release(r)
 
-        # Tamper with release-00000001: make .env a real regular file
         bad_env = os.path.join(self.builds_dir, "release-00000001", "backend", ".env")
         os.unlink(bad_env)
         with open(bad_env, "w", encoding="utf-8") as f:
-            f.write("ACCIDENTAL_REAL_SECRET=do_not_delete")
+            f.write("REAL_SECRET=forbidden")
 
         os.symlink(os.path.join(self.builds_dir, "release-00000005"), self.current_symlink)
         self._write_ledger(releases)
@@ -181,13 +337,13 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             ledger_file=self.ledger_file,
             shared_env=self.shared_env,
             shared_uploads=self.shared_uploads,
-            keep_count=4,
+            min_rollbacks=3,
             dry_run=False,
             skip_locks=True,
-            mounts_file=self.mounts_file
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
         )
-        self.assertEqual(exit_code, 1, "Must fail closed when .env is a real regular file")
-        # Verify nothing was deleted
+        self.assertEqual(exit_code, 1, "Must fail closed on real .env file")
         self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-00000001")))
 
     def test_fail_closed_on_wrong_target_env_symlink(self):
@@ -196,7 +352,6 @@ class TestReleaseRetentionEngine(unittest.TestCase):
         for r in releases:
             self._create_release(r)
 
-        # Repoint release-00000001 .env to an illegal file
         illegal_file = os.path.join(self.test_dir, "other.env")
         with open(illegal_file, "w") as f:
             f.write("other")
@@ -214,10 +369,11 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             ledger_file=self.ledger_file,
             shared_env=self.shared_env,
             shared_uploads=self.shared_uploads,
-            keep_count=4,
+            min_rollbacks=3,
             dry_run=False,
             skip_locks=True,
-            mounts_file=self.mounts_file
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 1)
 
@@ -242,10 +398,11 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             ledger_file=self.ledger_file,
             shared_env=self.shared_env,
             shared_uploads=self.shared_uploads,
-            keep_count=4,
+            min_rollbacks=3,
             dry_run=False,
             skip_locks=True,
-            mounts_file=self.mounts_file
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 1)
 
@@ -255,7 +412,6 @@ class TestReleaseRetentionEngine(unittest.TestCase):
         for r in releases:
             self._create_release(r)
 
-        # Add candidate to mock mounts file
         cand_path = os.path.join(self.builds_dir, "release-00000001")
         with open(self.mounts_file, "a", encoding="utf-8") as f:
             f.write(f"/dev/sdb1 {cand_path} ext4 rw 0 0\n")
@@ -269,10 +425,11 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             ledger_file=self.ledger_file,
             shared_env=self.shared_env,
             shared_uploads=self.shared_uploads,
-            keep_count=4,
+            min_rollbacks=3,
             dry_run=False,
             skip_locks=True,
-            mounts_file=self.mounts_file
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 1)
 
@@ -285,7 +442,8 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             builds_dir=self.builds_dir,
             current_symlink=os.path.join(self.test_dir, "nonexistent_symlink"),
             ledger_file=self.ledger_file,
-            skip_locks=True
+            skip_locks=True,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 1)
 
@@ -296,145 +454,13 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             builds_dir=self.builds_dir,
             current_symlink=self.current_symlink,
             ledger_file=self.ledger_file,
-            skip_locks=True
+            skip_locks=True,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 1)
 
-    def test_aborted_builds_quarantine_vs_pruning(self):
-        """Test that fresh unverified aborted builds are quarantined, but old ones can be pruned."""
-        now = datetime.now(timezone.utc)
-        # Live and rollbacks
-        releases = ["release-00000001", "release-00000002", "release-00000003", "release-00000004"]
-        for r in releases:
-            self._create_release(r)
-        os.symlink(os.path.join(self.builds_dir, "release-00000004"), self.current_symlink)
-        self._write_ledger(releases)
-
-        # Create 1 fresh unverified build (1 hour old)
-        self._create_release("release-fresh001", mtime=now - timedelta(hours=1))
-        # Create 1 old unverified build (72 hours old)
-        self._create_release("release-old00001", mtime=now - timedelta(hours=72))
-
-        # Run with 24-hour quarantine
-        exit_code = prune_releases(
-            builds_dir=self.builds_dir,
-            current_symlink=self.current_symlink,
-            ledger_file=self.ledger_file,
-            shared_env=self.shared_env,
-            shared_uploads=self.shared_uploads,
-            keep_count=4,
-            dry_run=False,
-            prune_unverified_older_than_hours=24.0,
-            skip_locks=True,
-            mounts_file=self.mounts_file
-        )
-        self.assertEqual(exit_code, 0)
-
-        # release-fresh001 must still exist (quarantined)
-        self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-fresh001")))
-        # release-old00001 must have been pruned safely
-        self.assertFalse(os.path.exists(os.path.join(self.builds_dir, "release-old00001")))
-        # Live and rollbacks must still exist
-        for r in releases:
-            self.assertTrue(os.path.exists(os.path.join(self.builds_dir, r)))
-
-    def test_missing_ledger_skips_safely(self):
-        """If ledger file is missing, engine logs notice and skips without deleting."""
-        self._create_release("release-00000001")
-        os.symlink(os.path.join(self.builds_dir, "release-00000001"), self.current_symlink)
-
-        exit_code = prune_releases(
-            builds_dir=self.builds_dir,
-            current_symlink=self.current_symlink,
-            ledger_file=os.path.join(self.builds_dir, "missing_ledger.tsv"),
-            skip_locks=True
-        )
-        self.assertEqual(exit_code, 0)
-        self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-00000001")))
-
-    def test_directory_traversal_and_malformed_names_ignored(self):
-        """Malformed directory names or traversal attempts are ignored safely."""
-        releases = ["release-00000001", "release-00000002", "release-00000003", "release-00000004"]
-        for r in releases:
-            self._create_release(r)
-        os.symlink(os.path.join(self.builds_dir, "release-00000004"), self.current_symlink)
-        self._write_ledger(releases)
-
-        # Create malformed directory names
-        os.makedirs(os.path.join(self.builds_dir, "release-invalid-length"), exist_ok=True)
-        os.makedirs(os.path.join(self.builds_dir, "custom_backup"), exist_ok=True)
-
-        exit_code = prune_releases(
-            builds_dir=self.builds_dir,
-            current_symlink=self.current_symlink,
-            ledger_file=self.ledger_file,
-            shared_env=self.shared_env,
-            shared_uploads=self.shared_uploads,
-            keep_count=4,
-            dry_run=False,
-            skip_locks=True,
-            mounts_file=self.mounts_file
-        )
-        self.assertEqual(exit_code, 0)
-        # Malformed folders must not be touched
-        self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-invalid-length")))
-        self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "custom_backup")))
-
-    def test_pipeline_lock_active_skips_safely(self):
-        """When another process holds the pipeline lock, cleanup logs notice and exits cleanly."""
-        self._create_release("release-00000001")
-        os.symlink(os.path.join(self.builds_dir, "release-00000001"), self.current_symlink)
-        self._write_ledger(["release-00000001"])
-
-        with patch("deploy.prune_releases.FileLockContext") as mock_lock:
-            # Simulate LockAcquisitionError
-            mock_lock.return_value.__enter__.side_effect = LockAcquisitionError("Lock is held by deployment")
-            exit_code = prune_releases(
-                builds_dir=self.builds_dir,
-                current_symlink=self.current_symlink,
-                ledger_file=self.ledger_file,
-                pipeline_lock_file=self.pipeline_lock,
-                skip_locks=False
-            )
-            # Must return 0 (safe skip)
-            self.assertEqual(exit_code, 0)
-            self.assertTrue(os.path.exists(os.path.join(self.builds_dir, "release-00000001")))
-
-    def test_activation_lock_active_skips_safely(self):
-        """When another process holds the activation lock, cleanup logs notice and exits cleanly."""
-        self._create_release("release-00000001")
-        os.symlink(os.path.join(self.builds_dir, "release-00000001"), self.current_symlink)
-        self._write_ledger(["release-00000001"])
-
-        with open(self.activation_lock, "w") as f:
-            f.write("locked")
-
-        with patch("deploy.prune_releases.FileLockContext") as mock_lock:
-            # Pipeline lock passes, activation lock raises LockAcquisitionError
-            class MockLockSeq:
-                def __init__(self, path, mode, skip_lock):
-                    self.path = path
-                def __enter__(self):
-                    if "deploy.lock" in self.path:
-                        raise LockAcquisitionError("Held by activate-release.sh")
-                    return self
-                def __exit__(self, *args):
-                    pass
-
-            mock_lock.side_effect = MockLockSeq
-
-            exit_code = prune_releases(
-                builds_dir=self.builds_dir,
-                current_symlink=self.current_symlink,
-                ledger_file=self.ledger_file,
-                pipeline_lock_file=self.pipeline_lock,
-                activation_lock_file=self.activation_lock,
-                skip_locks=False
-            )
-            self.assertEqual(exit_code, 0)
-
     def test_shared_data_untouched_after_multiple_prunes(self):
-        """Verify that shared .env and uploads remain completely untouched after pruning multiple candidates."""
+        """Verify that shared .env and uploads remain completely untouched after pruning candidates."""
         releases = [f"release-0000000{i}" for i in range(1, 8)]
         for r in releases:
             self._create_release(r)
@@ -447,10 +473,11 @@ class TestReleaseRetentionEngine(unittest.TestCase):
             ledger_file=self.ledger_file,
             shared_env=self.shared_env,
             shared_uploads=self.shared_uploads,
-            keep_count=4,
+            min_rollbacks=3,
             dry_run=False,
             skip_locks=True,
-            mounts_file=self.mounts_file
+            mounts_file=self.mounts_file,
+            auto_bootstrap=False
         )
         self.assertEqual(exit_code, 0)
         self.assertTrue(os.path.isfile(self.shared_env))

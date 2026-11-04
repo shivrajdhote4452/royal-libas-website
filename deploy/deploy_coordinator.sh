@@ -89,10 +89,10 @@ echo ">>> [Phase 4/4] Updating Ledger & Managing Release Retention..."
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 printf '%s\t%s\t%s\t%s\n' "$TIMESTAMP" "$RELEASE_NAME" "$ACTUAL_SHA" "activated" >> "$LEDGER_FILE"
 
-# 7. Safe automatic release retention
+# 7. Safe automatic release retention running under inherited pipeline lock
 PRUNE_SCRIPT="$CURRENT_SYMLINK/deploy/prune_releases.py"
 if [ -f "$PRUNE_SCRIPT" ]; then
-  python3 "$PRUNE_SCRIPT" --execute || {
+  python3 "$PRUNE_SCRIPT" --execute --pipeline-lock-fd 200 || {
     echo "WARNING: Automatic retention pruning encountered a safety warning. Site remains live." >&2
   }
 else
