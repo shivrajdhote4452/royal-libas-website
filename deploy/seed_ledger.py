@@ -27,7 +27,7 @@ VERIFIED_PRODUCTION_LINEAGE = [
     ("2026-11-04T07:57:19Z", "release-RTuyby3U", "ab04b86ec82e0a1224574a9a0ed78bdff2ca742d", "activated"),
     ("2026-11-04T08:56:51Z", "release-uYOraQbp", "78ffebe8f4e8d276eb722a85f8f5fda1d9a6db17", "activated"),
     ("2026-11-04T10:23:26Z", "release-Uf7UYjUy", "d82eae0a3cf59294cbd5edcdfa0888f9bbc2e033", "activated"),
-    ("2026-11-04T11:51:06Z", "release-6eIbw7Gt", "19e78593c4013aaef2e43fa7c67b48442d8f531a", "active"),
+    ("2026-11-04T11:51:06Z", "release-6eIbw7Gt", "19e78593c4013aaef2e43fa7c67b48442d8f531a", "activated"),
 ]
 
 

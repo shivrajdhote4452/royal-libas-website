@@ -2,7 +2,7 @@
 """
 Royal Libas VPS Release Retention and Pruning Engine
 
-Safely retains the active production release and at least three verified
+Safely retains the active production release and at least three verified,
 usable rollback releases. Prunes only verified older releases from recorded
 deployment history after fail-closed safety assertions.
 
@@ -11,17 +11,20 @@ Safety Invariants:
    - In deployment pipeline: validates and holds inherited pipeline lock (FD 200).
    - In standalone cleanup: acquires and continuously holds both pipeline lock
      and activation lock from evaluation through completion.
-2. Unbroken execution: Avoids lock conflict when invoked by deployment workflow.
-3. Usability-verified rollback releases: Validates each rollback candidate
-   (backend code, frontend dist, .env symlink, uploads symlink). Requires >= 3.
-4. Preserves unverified releases: Never automatically deletes unrecorded builds;
+2. Genuine read-only dry run: Never creates, touches, or mutates ledger or
+   filesystem assets when running in dry-run mode.
+3. Strict rollback usability: Requires backend .env symlink, uploads symlink,
+   executable virtualenv, backend app code, and frontend dist/index.html to exist
+   and resolve to valid shared targets.
+4. Ledger record validation: Validates ISO 8601 timestamps, release naming,
+   40-char commit SHAs, and 'activated' status. Rejects invalid records.
+5. Preserves unverified releases: Never automatically deletes unrecorded builds;
    surfaces them for operator review.
-5. Self-bootstrapping first-run: Automatically initializes historical ledger if
-   missing so first deployment after merge works without manual commands.
-6. Fail-closed safety: Validates symlinks, real paths, mount points, and unlinks
-   safely before removing candidate directories.
-7. Safe skipping: If lock contention, missing history, or safety violations occur,
-   skips deletion safely without failing active deployment.
+6. Safe first deployment: Never assumes or hardcodes deletion rights; preserves
+   all unrecorded releases and skips deletion until at least 3 verified usable
+   rollbacks have accumulated in the ledger.
+7. Fail-closed safety: Validates real paths, rejects nested mounts, and unlinks
+   safe symlinks before directory deletion.
 """
 
 import argparse
@@ -41,26 +44,7 @@ except ImportError:
     HAS_FCNTL = False
 
 RELEASE_NAME_RE = re.compile(r"^release-[A-Za-z0-9]{8}$")
-
-# Audited historical production releases in exact chronological order
-VERIFIED_PRODUCTION_LINEAGE = [
-    ("2026-11-01T14:28:52Z", "release-huDNUmEb", "805e7a93091e8f073ad3d629fc4d952d46cd454b", "activated"),
-    ("2026-11-01T14:36:34Z", "release-CPCGzuLG", "d9e7507cd1b8f820e44c9644fc460bb50902c6f1", "activated"),
-    ("2026-11-01T17:46:46Z", "release-tHmKpYTN", "e2bd0a4c27d23574c3ac323edf7c4070c576eb20", "activated"),
-    ("2026-11-02T08:16:09Z", "release-WF0rJVqS", "8a71c821deb6cb36cee868e535b2c0924ee114c7", "activated"),
-    ("2026-11-02T10:27:55Z", "release-nhKRvmAd", "9c41227852571ba8b2d47e605821ddc3200f801a", "activated"),
-    ("2026-11-02T10:51:09Z", "release-uXFXM8EL", "57352a3e3da16f023e3dd7d90f5ade1eb21c104e", "activated"),
-    ("2026-11-02T13:00:46Z", "release-E66XdkE0", "1cfa9d693f1d4cc6a70652653f77d2a7ced4ac36", "activated"),
-    ("2026-11-02T20:09:08Z", "release-ZRTuDbQi", "4d173af0bec121bb701d0cb64dba268bb4800e35", "activated"),
-    ("2026-11-03T08:21:13Z", "release-5j4xvcke", "1be2722ae23f20f4707b237b31cdc37ec649147b", "activated"),
-    ("2026-11-03T11:57:12Z", "release-SWr5ReQx", "564741fd8576cb3df9a4b6f6f6aeb908baf068d8", "activated"),
-    ("2026-11-03T19:47:41Z", "release-GyuopHsQ", "3644fb8cc4cf8a7b52436ed24cba1df3b9726e2f", "activated"),
-    ("2026-11-04T06:13:59Z", "release-boHz00xc", "5c685c1a7e406c2d97fd5532cea40aab964f24a4", "activated"),
-    ("2026-11-04T07:57:19Z", "release-RTuyby3U", "ab04b86ec82e0a1224574a9a0ed78bdff2ca742d", "activated"),
-    ("2026-11-04T08:56:51Z", "release-uYOraQbp", "78ffebe8f4e8d276eb722a85f8f5fda1d9a6db17", "activated"),
-    ("2026-11-04T10:23:26Z", "release-Uf7UYjUy", "d82eae0a3cf59294cbd5edcdfa0888f9bbc2e033", "activated"),
-    ("2026-11-04T11:51:06Z", "release-6eIbw7Gt", "19e78593c4013aaef2e43fa7c67b48442d8f531a", "active"),
-]
+COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 class LockAcquisitionError(Exception):
@@ -198,52 +182,72 @@ def format_bytes(bytes_count: int) -> str:
     return f"{bytes_count:.1f} PB"
 
 
-def bootstrap_ledger_if_missing(ledger_path: str, builds_dir: str) -> bool:
+def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, str]], List[str]]:
     """
-    Self-bootstraps deployments ledger if it does not exist yet.
-    Ensures safe first deployment after merge without requiring manual setup commands.
-    Returns True if bootstrapped, False if already existed.
-    """
-    if os.path.isfile(ledger_path):
-        return False
-
-    os.makedirs(os.path.dirname(os.path.abspath(ledger_path)), exist_ok=True)
-    temp_ledger = f"{ledger_path}.tmp.{os.getpid()}"
-
-    with open(temp_ledger, "w", encoding="utf-8") as f:
-        f.write("# Royal Libas Deployments Ledger (Append-Only)\n")
-        f.write("# TIMESTAMP\tRELEASE_NAME\tCOMMIT_SHA\tSTATUS\n")
-        for ts, rel, sha, status in VERIFIED_PRODUCTION_LINEAGE:
-            f.write(f"{ts}\t{rel}\t{sha}\t{status}\n")
-
-    os.replace(temp_ledger, ledger_path)
-    return True
-
-
-def parse_ledger(ledger_path: str) -> List[Dict[str, str]]:
-    """
-    Parse append-only deployments ledger.
-    Format per line: TIMESTAMP\tRELEASE_NAME\tCOMMIT_SHA\tSTATUS
-    Returns list of records ordered from oldest to newest.
+    Parse append-only deployments ledger and strictly validate records.
+    
+    Validations:
+    - 4 tab-separated fields: TIMESTAMP, RELEASE_NAME, COMMIT_SHA, STATUS
+    - Valid ISO 8601 UTC timestamp
+    - Valid release name format
+    - Valid 40-character hex commit SHA
+    - STATUS == 'activated'
+    
+    Returns:
+        (valid_records_chronological, validation_warnings)
     """
     if not os.path.isfile(ledger_path):
-        return []
+        return [], [f"Ledger file '{ledger_path}' does not exist."]
 
-    records = []
+    valid_records: List[Dict[str, str]] = []
+    warnings: List[str] = []
+
     with open(ledger_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
+        for line_no, raw_line in enumerate(f, 1):
+            line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
+
             parts = line.split("\t")
-            if len(parts) >= 3:
-                records.append({
-                    "timestamp": parts[0].strip(),
-                    "release": parts[1].strip(),
-                    "sha": parts[2].strip(),
-                    "status": parts[3].strip() if len(parts) > 3 else "activated"
-                })
-    return records
+            if len(parts) < 4:
+                warnings.append(f"Line {line_no}: Malformed ledger entry (expected 4 fields, got {len(parts)}): '{line}'")
+                continue
+
+            ts_raw, rel_raw, sha_raw, status_raw = parts[0].strip(), parts[1].strip(), parts[2].strip(), parts[3].strip()
+
+            # 1. Timestamp validation
+            try:
+                # Support timestamps ending in Z or with offset
+                ts_clean = ts_raw.replace("Z", "+00:00")
+                parsed_ts = datetime.fromisoformat(ts_clean)
+            except Exception:
+                warnings.append(f"Line {line_no}: Invalid timestamp format '{ts_raw}' in ledger.")
+                continue
+
+            # 2. Release format validation
+            if not RELEASE_NAME_RE.match(rel_raw):
+                warnings.append(f"Line {line_no}: Invalid release format '{rel_raw}' in ledger.")
+                continue
+
+            # 3. Commit SHA validation
+            if not COMMIT_SHA_RE.match(sha_raw):
+                warnings.append(f"Line {line_no}: Invalid commit SHA format '{sha_raw}' in ledger.")
+                continue
+
+            # 4. Activation status validation
+            if status_raw.lower() != "activated" and status_raw.lower() != "active":
+                warnings.append(f"Line {line_no}: Release '{rel_raw}' has non-activated status '{status_raw}'; ignored.")
+                continue
+
+            valid_records.append({
+                "line": line_no,
+                "timestamp": parsed_ts.isoformat(),
+                "release": rel_raw,
+                "sha": sha_raw,
+                "status": "activated"
+            })
+
+    return valid_records, warnings
 
 
 def verify_mount_safety(candidate_path: str, mounts_file: str = "/proc/mounts") -> None:
@@ -268,44 +272,45 @@ def verify_mount_safety(candidate_path: str, mounts_file: str = "/proc/mounts") 
 
 def verify_persistent_symlinks(candidate_path: str, expected_env: str, expected_uploads: str) -> None:
     """
-    Ensure .env and uploads inside candidate directory are strictly valid symlinks.
-    Fail closed immediately if they are regular files or point to unexpected targets.
+    Ensure .env and uploads inside candidate directory strictly exist as valid symlinks
+    pointing directly to the intended persistent production paths.
+    Fail closed immediately if missing, regular files, or pointing elsewhere.
     """
     backend_dir = os.path.join(candidate_path, "backend")
     if not os.path.isdir(backend_dir):
-        return
+        raise SafetyViolationError(f"FAIL-CLOSED: Candidate missing backend directory: '{candidate_path}'")
 
+    # .env verification
     env_path = os.path.join(backend_dir, ".env")
-    if os.path.exists(env_path) or os.path.islink(env_path):
-        if not os.path.islink(env_path):
-            raise SafetyViolationError(
-                f"FAIL-CLOSED: '{env_path}' is a regular file/directory, NOT a symlink. Secrets could be destroyed!"
-            )
-        target = os.readlink(env_path)
-        target_norm = os.path.normpath(target)
-        expected_norm = os.path.normpath(expected_env)
-        if target_norm != expected_norm and os.path.realpath(env_path) != os.path.realpath(expected_env):
-            raise SafetyViolationError(
-                f"FAIL-CLOSED: '{env_path}' points to unexpected target: '{target}' (expected '{expected_env}')"
-            )
+    if not os.path.islink(env_path):
+        raise SafetyViolationError(
+            f"FAIL-CLOSED: '{env_path}' must exist strictly as a symlink pointing to production .env!"
+        )
+    target_env = os.readlink(env_path)
+    target_env_real = os.path.realpath(env_path)
+    expected_env_real = os.path.realpath(expected_env)
+    if target_env_real != expected_env_real:
+        raise SafetyViolationError(
+            f"FAIL-CLOSED: '{env_path}' points to unexpected target: '{target_env}' (expected '{expected_env}')"
+        )
 
+    # uploads verification
     uploads_path = os.path.join(backend_dir, "uploads")
-    if os.path.exists(uploads_path) or os.path.islink(uploads_path):
-        if not os.path.islink(uploads_path):
-            raise SafetyViolationError(
-                f"FAIL-CLOSED: '{uploads_path}' is a regular directory! User media could be destroyed!"
-            )
-        target = os.readlink(uploads_path)
-        target_norm = os.path.normpath(target)
-        expected_norm = os.path.normpath(expected_uploads)
-        if target_norm != expected_norm and os.path.realpath(uploads_path) != os.path.realpath(expected_uploads):
-            raise SafetyViolationError(
-                f"FAIL-CLOSED: '{uploads_path}' points to unexpected target: '{target}' (expected '{expected_uploads}')"
-            )
+    if not os.path.islink(uploads_path):
+        raise SafetyViolationError(
+            f"FAIL-CLOSED: '{uploads_path}' must exist strictly as a symlink pointing to production uploads!"
+        )
+    target_uploads = os.readlink(uploads_path)
+    target_uploads_real = os.path.realpath(uploads_path)
+    expected_uploads_real = os.path.realpath(expected_uploads)
+    if target_uploads_real != expected_uploads_real:
+        raise SafetyViolationError(
+            f"FAIL-CLOSED: '{uploads_path}' points to unexpected target: '{target_uploads}' (expected '{expected_uploads}')"
+        )
 
 
 def safe_unlink_persistent_symlinks(candidate_path: str) -> None:
-    """Safely unlink known symlinks before directory deletion."""
+    """Safely unlink known symlinks before directory deletion to avoid following symlinks."""
     for rel_link in [os.path.join("backend", ".env"), os.path.join("backend", "uploads")]:
         link_path = os.path.join(candidate_path, rel_link)
         if os.path.islink(link_path):
@@ -317,40 +322,60 @@ def safe_unlink_persistent_symlinks(candidate_path: str) -> None:
 
 def validate_release_usability(
     release_path: str,
+    builds_dir: str,
     expected_env: str,
     expected_uploads: str
 ) -> Tuple[bool, str]:
     """
-    Validate that a release directory is physically sound and usable as a rollback target.
+    Validate that a release directory is structurally complete and usable as a rollback target.
     
     Verifies:
-    1. Directory exists and matches format.
-    2. Frontend production build exists (frontend/dist/index.html).
-    3. Backend code or virtualenv exists (backend/app or backend/.venv).
-    4. Backend .env is a symlink pointing to expected persistent .env.
-    5. Backend uploads is a symlink pointing to expected persistent uploads.
+    1. Real directory physically under intended builds directory.
+    2. Shared .env link exists and resolves to real existing shared .env.
+    3. Shared uploads link exists and resolves to real existing shared uploads.
+    4. Backend virtualenv python exists and is an executable file.
+    5. Backend application code exists (backend/app or backend/app.py).
+    6. Frontend production build exists and is non-empty (frontend/dist/index.html).
     """
-    if not os.path.isdir(release_path):
-        return False, "Directory does not exist on disk"
+    # 1. Directory containment
+    if not os.path.isdir(release_path) or os.path.islink(release_path):
+        return False, "Not a physical directory"
 
-    # Frontend dist check
-    dist_index = os.path.join(release_path, "frontend", "dist", "index.html")
-    if not os.path.isfile(dist_index):
-        return False, "Missing frontend/dist/index.html"
+    real_rel = os.path.realpath(release_path)
+    real_builds = os.path.realpath(builds_dir)
+    if os.path.dirname(real_rel) != real_builds:
+        return False, f"Release path '{real_rel}' is not directly under builds directory '{real_builds}'"
 
-    # Backend code check
-    backend_app = os.path.join(release_path, "backend", "app")
-    backend_py = os.path.join(release_path, "backend", "app.py")
-    if not (os.path.isdir(backend_app) or os.path.isfile(backend_py)):
-        return False, "Missing backend application code"
+    # 2. Shared persistent storage checks
+    if not os.path.isfile(expected_env):
+        return False, f"Shared production .env file missing at '{expected_env}'"
+    if not os.path.isdir(expected_uploads):
+        return False, f"Shared production uploads directory missing at '{expected_uploads}'"
 
-    # Symlink checks
     try:
         verify_persistent_symlinks(release_path, expected_env, expected_uploads)
     except SafetyViolationError as err:
         return False, str(err)
 
-    return True, "OK"
+    # 3. Backend virtualenv and code checks
+    venv_python_unix = os.path.join(release_path, "backend", ".venv", "bin", "python")
+    venv_python_win = os.path.join(release_path, "backend", ".venv", "Scripts", "python.exe")
+    if not (os.path.isfile(venv_python_unix) or os.path.isfile(venv_python_win)):
+        return False, "Missing backend Python virtual environment (.venv)"
+
+    backend_app = os.path.join(release_path, "backend", "app")
+    backend_py = os.path.join(release_path, "backend", "app.py")
+    if not (os.path.isdir(backend_app) or os.path.isfile(backend_py)):
+        return False, "Missing backend application code"
+
+    # 4. Frontend dist check
+    dist_index = os.path.join(release_path, "frontend", "dist", "index.html")
+    if not os.path.isfile(dist_index):
+        return False, "Missing frontend/dist/index.html"
+    if os.path.getsize(dist_index) == 0:
+        return False, "frontend/dist/index.html is empty (0 bytes)"
+
+    return True, "OK [Structurally usable]"
 
 
 def evaluate_retention_plan(
@@ -383,25 +408,26 @@ def evaluate_retention_plan(
     if not RELEASE_NAME_RE.match(live_release_name):
         raise SafetyViolationError(f"Live release name '{live_release_name}' does not match expected format.")
 
-    # 1. Resolve chronological sequence of activations from ledger
-    # Handle repeated activations: traverse records in reverse to identify the most recent distinct activations
-    verified_lineage_rev: List[str] = []
+    # 1. Resolve chronological sequence of activations from validated ledger
+    # Deduplicate repeated activations while preserving reverse chronological order
+    verified_lineage_rev: List[Dict[str, str]] = []
     seen_in_ledger: Set[str] = set()
 
     for rec in reversed(ledger_records):
         rel = rec["release"]
-        if RELEASE_NAME_RE.match(rel) and rel not in seen_in_ledger:
+        if rel not in seen_in_ledger:
             seen_in_ledger.add(rel)
-            verified_lineage_rev.append(rel)
+            verified_lineage_rev.append(rec)
 
     # 2. Select and validate rollback candidates (excluding live release)
     retained_rollbacks: List[str] = []
-    for rel in verified_lineage_rev:
+    for rec in verified_lineage_rev:
+        rel = rec["release"]
         if rel == live_release_name:
             continue
 
         rel_path = os.path.join(builds_dir, rel)
-        is_usable, reason = validate_release_usability(rel_path, expected_env, expected_uploads)
+        is_usable, reason = validate_release_usability(rel_path, builds_dir, expected_env, expected_uploads)
 
         if is_usable:
             retained_rollbacks.append(rel)
@@ -414,7 +440,7 @@ def evaluate_retention_plan(
     if len(retained_rollbacks) < min_rollbacks:
         warnings.append(
             f"INSUFFICIENT ROLLBACK HISTORY: Only {len(retained_rollbacks)} usable rollback releases "
-            f"found on disk (minimum {min_rollbacks} required). Skipping automatic deletion."
+            f"found on disk (minimum {min_rollbacks} required). Automatic deletion is skipped."
         )
 
     protected_set: Set[str] = {live_release_name}.union(retained_rollbacks)
@@ -484,19 +510,19 @@ def prune_releases(
     min_rollbacks: int = 3,
     dry_run: bool = True,
     skip_locks: bool = False,
-    mounts_file: str = "/proc/mounts",
-    auto_bootstrap: bool = True
+    mounts_file: str = "/proc/mounts"
 ) -> int:
     """
     Main entry point for release retention and pruning.
     
     Locks are acquired and held continuously throughout the entire evaluation and deletion run.
+    In dry-run mode, NO files are created or modified on disk.
     Returns 0 on success or safe skip; 1 on critical safety assertion failure.
     """
     print("=" * 72)
     print("Royal Libas VPS Release Retention & Pruning Engine")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
-    print(f"Mode: {'DRY-RUN (Inspection Only)' if dry_run else 'EXECUTE (Deletion Enabled)'}")
+    print(f"Mode: {'DRY-RUN (Genuine Read-Only Inspection)' if dry_run else 'EXECUTE (Deletion Enabled)'}")
     print("=" * 72)
 
     # 1. Acquire and continuously hold lifecycle locks
@@ -509,23 +535,42 @@ def prune_releases(
 
     try:
         with lock_mgr:
-            print("[Lock Manager] Continuous lifecycle locks acquired and active.")
+            if not skip_locks:
+                print("[Lock Manager] Continuous lifecycle locks acquired and active.")
 
-            # 2. Bootstrap ledger if missing (ensures safe first deployment)
-            if auto_bootstrap:
-                if bootstrap_ledger_if_missing(ledger_file, builds_dir):
-                    print(f"[Ledger] Self-bootstrapped initial verified historical records in '{ledger_file}'.")
+            # 2. Validate builds_dir and current symlink early (fail-closed invariant)
+            if not os.path.isdir(builds_dir):
+                print(f"CRITICAL SAFETY VIOLATION: Builds directory '{builds_dir}' does not exist.")
+                return 1
 
-            # 3. Parse deployments ledger
+            if not os.path.islink(current_symlink):
+                print(f"CRITICAL SAFETY VIOLATION: Current release pointer '{current_symlink}' is not a symlink.")
+                return 1
+
+            current_real = os.path.realpath(current_symlink)
+            if not os.path.isdir(current_real):
+                print(f"CRITICAL SAFETY VIOLATION: Current release target '{current_real}' is not a valid directory.")
+                return 1
+
+            live_release_name = os.path.basename(current_real)
+            if not RELEASE_NAME_RE.match(live_release_name):
+                print(f"CRITICAL SAFETY VIOLATION: Live release name '{live_release_name}' does not match expected format.")
+                return 1
+
+            # 3. Parse and validate deployments ledger (GENUINE READ-ONLY: never writes ledger)
             if not os.path.isfile(ledger_file):
-                print(f"WARNING: Deployments ledger '{ledger_file}' does not exist.")
-                print("Cannot verify release lineage without evidence. Safely skipping cleanup.")
+                print(f"NOTICE: Deployments ledger '{ledger_file}' does not exist.")
+                print("In dry-run or first-run mode, no ledger is created. No releases will be deleted.")
+                print("All existing releases are preserved safely.")
                 return 0
 
-            ledger_records = parse_ledger(ledger_file)
+            ledger_records, ledger_warnings = parse_and_validate_ledger(ledger_file)
+            for lw in ledger_warnings:
+                print(f"[Ledger Warning] {lw}")
+
             if not ledger_records:
-                print(f"WARNING: Deployments ledger '{ledger_file}' contains no valid records.")
-                print("Safely skipping cleanup to protect rollback capability.")
+                print(f"NOTICE: Deployments ledger '{ledger_file}' contains no valid activation records.")
+                print("Cannot establish verified lineage. Safely skipping cleanup to preserve all releases.")
                 return 0
 
             # 4. Evaluate retention plan
@@ -562,7 +607,7 @@ def prune_releases(
 
             # Safety check on rollback availability
             if len(rollbacks) < min_rollbacks:
-                print(f"\nSAFETY GUARD: Fewer than {min_rollbacks} usable rollback releases available.")
+                print(f"\nSAFETY GUARD: Fewer than {min_rollbacks} verified usable rollback releases available.")
                 print("Skipping automatic pruning to preserve system recoverability.")
                 return 0
 
@@ -576,7 +621,7 @@ def prune_releases(
                 print(f" - {c['name']} [{c['size_formatted']}] (Age: {c['age_hours']:.1f}h, Status: {c['status']})")
             print(f"\nTotal Space to Reclaim: {format_bytes(total_reclaimable)}")
 
-            # 5. Fail-closed structural assertions on every candidate
+            # 4. Fail-closed structural assertions on every candidate
             print("\n--- [FAIL-CLOSED SAFETY VERIFICATION] ---")
             for c in candidates:
                 cand_path = c["path"]
@@ -591,9 +636,9 @@ def prune_releases(
                     print("ABORTING ENTIRE CLEANUP OPERATION. No files were deleted.")
                     return 1
 
-            # 6. Execute or Dry-Run
+            # 5. Execute or Dry-Run
             if dry_run:
-                print("\n[DRY-RUN COMPLETE] All safety checks passed. No files were removed.")
+                print("\n[DRY-RUN COMPLETE] All safety checks passed. GENUINE READ-ONLY: No files were touched or removed.")
                 print("To execute real deletions, run with --execute.")
                 return 0
 
@@ -638,7 +683,6 @@ def main():
     parser.add_argument("--min-rollbacks", type=int, default=3, help="Minimum verified rollback releases to retain (default 3)")
     parser.add_argument("--execute", action="store_true", help="Actually perform deletion (default is dry-run)")
     parser.add_argument("--skip-locks", action="store_true", help="Skip file locking checks (for testing)")
-    parser.add_argument("--no-auto-bootstrap", action="store_true", help="Do not auto-bootstrap missing ledger")
     parser.add_argument("--mounts-file", default="/proc/mounts", help="Path to mounts table file")
 
     args = parser.parse_args()
@@ -655,8 +699,7 @@ def main():
         min_rollbacks=args.min_rollbacks,
         dry_run=not args.execute,
         skip_locks=args.skip_locks,
-        mounts_file=args.mounts_file,
-        auto_bootstrap=not args.no_auto_bootstrap
+        mounts_file=args.mounts_file
     )
     sys.exit(exit_code)
 
