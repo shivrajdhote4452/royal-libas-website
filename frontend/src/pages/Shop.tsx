@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigationType, Link } from 'react-router-dom';
 import {
   SlidersHorizontal,
@@ -913,245 +914,268 @@ export const Shop: React.FC = () => {
       {/* ========================================================
           MOBILE FILTER BOTTOM SHEET (Point 13)
           ======================================================== */}
-      {mobileFilterOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden font-sans">
+      {mobileFilterOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[60] lg:hidden font-sans flex flex-col justify-end"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setMobileFilterOpen(false);
+            }
+          }}
+        >
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 cursor-pointer"
             onClick={() => setMobileFilterOpen(false)}
+            aria-hidden="true"
           />
           <div
-            className="fixed inset-x-0 bottom-0 bg-[#FCF8F0] rounded-t-xl max-h-[85vh] overflow-y-auto p-6 space-y-6 shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out"
-            style={{
-              transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
+            className="relative z-10 w-full bg-[#FCF8F0] rounded-t-2xl shadow-2xl flex flex-col max-h-[85dvh] max-h-[85vh] overflow-hidden animate-sheet-up"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filter Catalogue"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8DFD0]">
+            {/* Pinned Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E8DFD0] bg-[#FCF8F0] shrink-0">
               <h3 className="font-serif font-bold text-lg text-gray-900">Filter Catalogue</h3>
               <button
                 type="button"
                 onClick={() => setMobileFilterOpen(false)}
-                className="p-1 rounded-full text-gray-500 hover:text-gray-900"
+                className="p-2 -mr-1.5 rounded-full text-gray-500 hover:text-gray-900 hover:bg-[#F3E9DA]/60 transition-colors focus:outline-none"
+                aria-label="Close filter drawer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Categories & Subcategories on Mobile Sheet */}
-            <div className="space-y-3">
-              <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Categories & Silhouettes</h4>
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
+              {/* Categories & Subcategories on Mobile Sheet */}
               <div className="space-y-3">
-                {MAIN_CATEGORIES_CONFIG.map((group) => {
-                  const isSelected = currentCategory.toUpperCase() === group.name;
-                  return (
-                    <div key={group.name} className="space-y-1.5 border-b border-gray-100 pb-2">
+                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Categories & Silhouettes</h4>
+                <div className="space-y-3">
+                  {MAIN_CATEGORIES_CONFIG.map((group) => {
+                    const isSelected = currentCategory.toUpperCase() === group.name;
+                    return (
+                      <div key={group.name} className="space-y-1.5 border-b border-gray-100 pb-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = new URLSearchParams(searchParams);
+                            if (isSelected && !currentSubcategory) {
+                              next.delete('category');
+                            } else {
+                              next.set('category', group.name);
+                              next.delete('subcategory');
+                            }
+                            setSearchParams(next);
+                          }}
+                          className={`w-full text-left text-xs font-bold tracking-wide flex items-center justify-between py-1 ${
+                            isSelected ? 'text-[#5E1224]' : 'text-gray-800'
+                          }`}
+                        >
+                          <span>{group.name}</span>
+                          <span className="text-[10px] text-gray-400">
+                            {catalogReference.filter(p => p.category?.toUpperCase() === group.name).length}
+                          </span>
+                        </button>
+
+                        {(isSelected || !currentCategory) && (
+                          <div className="pl-3 space-y-1.5 border-l-2 border-[#D4AF67]/50 ml-1 mt-1 animate-in fade-in duration-150">
+                            {group.subcategories.map((sub) => {
+                              const isSubSelected = isSelected && currentSubcategory === sub;
+                              return (
+                                <button
+                                  key={sub}
+                                  type="button"
+                                  onClick={() => {
+                                    const next = new URLSearchParams(searchParams);
+                                    if (isSubSelected) {
+                                      next.delete('subcategory');
+                                    } else {
+                                      next.set('category', group.name);
+                                      next.set('subcategory', sub);
+                                    }
+                                    setSearchParams(next);
+                                    setMobileFilterOpen(false);
+                                  }}
+                                  className={`w-full text-left text-xs py-1 flex items-center justify-between ${
+                                    isSubSelected ? 'text-[#5E1224] font-bold' : 'text-gray-600'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    {isSubSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#5E1224]" />}
+                                    {sub}
+                                  </span>
+                                  <span className="text-gray-400 text-[10px]">
+                                    ({catalogReference.filter(p => p.category?.toUpperCase() === group.name && p.subcategory === sub).length})
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Curated Collections */}
+              {collections.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-gray-200">
+                  <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Curated Edits</h4>
+                  {collections.map((col) => (
+                    <label key={col.slug} className="flex items-center justify-between text-xs text-gray-700 py-1 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={currentCollection === col.slug}
+                          onChange={() => updateParam('collection', currentCollection === col.slug ? '' : col.slug)}
+                          className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
+                        />
+                        <span>{col.name}</span>
+                      </div>
+                      <span className="text-gray-400">({col.product_count})</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* Size */}
+              {availableSizes.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-gray-200">
+                  <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
+                  <div className="grid grid-cols-4 gap-2">
+                    {availableSizes.map((sz) => (
                       <button
+                        key={sz}
                         type="button"
-                        onClick={() => {
-                          const next = new URLSearchParams(searchParams);
-                          if (isSelected && !currentSubcategory) {
-                            next.delete('category');
-                          } else {
-                            next.set('category', group.name);
-                            next.delete('subcategory');
-                          }
-                          setSearchParams(next);
-                        }}
-                        className={`w-full text-left text-xs font-bold tracking-wide flex items-center justify-between py-1 ${
-                          isSelected ? 'text-[#5E1224]' : 'text-gray-800'
+                        onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
+                        className={`h-10 rounded-none border text-xs font-semibold ${
+                          currentSize === sz
+                            ? 'bg-[#5E1224] text-white border-[#5E1224]'
+                            : 'bg-white text-gray-700 border-[#E8DFD0]'
                         }`}
                       >
-                        <span>{group.name}</span>
-                        <span className="text-[10px] text-gray-400">
-                          {catalogReference.filter(p => p.category?.toUpperCase() === group.name).length}
-                        </span>
+                        {sz}
                       </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                      {(isSelected || !currentCategory) && (
-                        <div className="pl-3 space-y-1.5 border-l-2 border-[#D4AF67]/50 ml-1 mt-1 animate-in fade-in duration-150">
-                          {group.subcategories.map((sub) => {
-                            const isSubSelected = isSelected && currentSubcategory === sub;
-                            return (
-                              <button
-                                key={sub}
-                                type="button"
-                                onClick={() => {
-                                  const next = new URLSearchParams(searchParams);
-                                  if (isSubSelected) {
-                                    next.delete('subcategory');
-                                  } else {
-                                    next.set('category', group.name);
-                                    next.set('subcategory', sub);
-                                  }
-                                  setSearchParams(next);
-                                  setMobileFilterOpen(false);
-                                }}
-                                className={`w-full text-left text-xs py-1 flex items-center justify-between ${
-                                  isSubSelected ? 'text-[#5E1224] font-bold' : 'text-gray-600'
-                                }`}
-                              >
-                                <span className="flex items-center gap-1.5">
-                                  {isSubSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#5E1224]" />}
-                                  {sub}
-                                </span>
-                                <span className="text-gray-400 text-[10px]">
-                                  ({catalogReference.filter(p => p.category?.toUpperCase() === group.name && p.subcategory === sub).length})
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Curated Collections */}
-            {collections.length > 0 && (
-              <div className="space-y-2 pt-3 border-t border-gray-200">
-                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Curated Edits</h4>
-                {collections.map((col) => (
-                  <label key={col.slug} className="flex items-center justify-between text-xs text-gray-700 py-1 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={currentCollection === col.slug}
-                        onChange={() => updateParam('collection', currentCollection === col.slug ? '' : col.slug)}
-                        className="rounded-none border-gray-300 text-[#5E1224] focus:ring-[#B58A3C]"
+              {/* Colors */}
+              {availableColours.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-gray-200">
+                  <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Color Palette</h4>
+                  <div className="flex flex-wrap gap-2.5">
+                    {availableColours.map((c) => (
+                      <button
+                        key={c.name}
+                        type="button"
+                        onClick={() => updateParam('color', currentColor === c.name ? '' : c.name)}
+                        style={{ backgroundColor: c.hex }}
+                        className={`w-8 h-8 rounded-full border ${
+                          currentColor === c.name ? 'ring-2 ring-[#5E1224] ring-offset-2' : 'border-black/20'
+                        }`}
+                        title={c.name}
                       />
-                      <span>{col.name}</span>
-                    </div>
-                    <span className="text-gray-400">({col.product_count})</span>
-                  </label>
-                ))}
-              </div>
-            )}
-
-            {/* Size */}
-            {availableSizes.length > 0 && (
-              <div className="space-y-2 pt-3 border-t border-gray-200">
-                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
-                <div className="grid grid-cols-4 gap-2">
-                  {availableSizes.map((sz) => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
-                      className={`h-10 rounded-none border text-xs font-semibold ${
-                        currentSize === sz
-                          ? 'bg-[#5E1224] text-white border-[#5E1224]'
-                          : 'bg-white text-gray-700 border-[#E8DFD0]'
-                      }`}
-                    >
-                      {sz}
-                    </button>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Colors */}
-            {availableColours.length > 0 && (
+              {/* Price Filter */}
               <div className="space-y-2 pt-3 border-t border-gray-200">
-                <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Color Palette</h4>
-                <div className="flex flex-wrap gap-2.5">
-                  {availableColours.map((c) => (
-                    <button
-                      key={c.name}
-                      type="button"
-                      onClick={() => updateParam('color', currentColor === c.name ? '' : c.name)}
-                      style={{ backgroundColor: c.hex }}
-                      className={`w-8 h-8 rounded-full border ${
-                        currentColor === c.name ? 'ring-2 ring-[#5E1224] ring-offset-2' : 'border-black/20'
-                      }`}
-                      title={c.name}
-                    />
-                  ))}
+                <div className="flex justify-between items-center text-xs">
+                  <span className="uppercase tracking-wider font-bold text-gray-800">Max Price</span>
+                  <span className="font-bold text-[#5E1224]">
+                    {activeUserMaxPrice !== null
+                      ? `₹${sliderPrice.toLocaleString('en-IN')}`
+                      : 'All Prices'}
+                  </span>
                 </div>
+                <input
+                  type="range"
+                  min={catalogMinPrice}
+                  max={catalogMaxPrice}
+                  step="250"
+                  value={sliderPrice}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setSliderPrice(val);
+                  }}
+                  onMouseUp={() => updateParam('max_price', sliderPrice.toString())}
+                  onTouchEnd={() => updateParam('max_price', sliderPrice.toString())}
+                  onKeyUp={(e) => {
+                    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+                      updateParam('max_price', sliderPrice.toString());
+                    }
+                  }}
+                  aria-label="Filter catalogue by maximum price"
+                  className="w-full accent-[#5E1224] cursor-pointer"
+                />
               </div>
-            )}
-
-            {/* Price Filter */}
-            <div className="space-y-2 pt-3 border-t border-gray-200">
-              <div className="flex justify-between items-center text-xs">
-                <span className="uppercase tracking-wider font-bold text-gray-800">Max Price</span>
-                <span className="font-bold text-[#5E1224]">
-                  {activeUserMaxPrice !== null
-                    ? `₹${sliderPrice.toLocaleString('en-IN')}`
-                    : 'All Prices'}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={catalogMinPrice}
-                max={catalogMaxPrice}
-                step="250"
-                value={sliderPrice}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setSliderPrice(val);
-                }}
-                onMouseUp={() => updateParam('max_price', sliderPrice.toString())}
-                onTouchEnd={() => updateParam('max_price', sliderPrice.toString())}
-                onKeyUp={(e) => {
-                  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
-                    updateParam('max_price', sliderPrice.toString());
-                  }
-                }}
-                aria-label="Filter catalogue by maximum price"
-                className="w-full accent-[#5E1224] cursor-pointer"
-              />
             </div>
 
-            {/* Footer Buttons */}
-            <div className="pt-4 border-t border-[#E8DFD0] flex gap-3">
+            {/* Pinned Footer Action Bar */}
+            <div className="px-5 py-3.5 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-[#E8DFD0] bg-[#FCF8F0] flex gap-3 shrink-0 shadow-[0_-4px_12px_rgba(43,27,30,0.04)]">
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="flex-1 py-3 bg-white border border-[#E8DFD0] rounded-none text-xs font-semibold text-gray-800 hover:bg-gray-100"
+                className="flex-1 py-3 bg-white border border-[#E8DFD0] rounded-none text-xs font-semibold text-gray-800 hover:bg-gray-100 transition-colors"
               >
                 Clear All
               </button>
               <button
                 type="button"
                 onClick={() => setMobileFilterOpen(false)}
-                className="flex-1 py-3 bg-[#5E1224] text-white rounded-none text-xs font-semibold uppercase tracking-wider shadow"
+                className="flex-1 py-3 bg-[#5E1224] text-white rounded-none text-xs font-semibold uppercase tracking-wider shadow hover:bg-[#3A080F] transition-colors"
               >
                 Apply Filters
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================
           MOBILE SORT BOTTOM SHEET (Point 13)
           ======================================================== */}
-      {mobileSortOpen && (
-        <div className="fixed inset-0 z-50 sm:hidden font-sans">
+      {mobileSortOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[60] sm:hidden font-sans flex flex-col justify-end"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setMobileSortOpen(false);
+            }
+          }}
+        >
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 cursor-pointer"
             onClick={() => setMobileSortOpen(false)}
+            aria-hidden="true"
           />
           <div
-            className="fixed inset-x-0 bottom-0 bg-[#FCF8F0] rounded-t-xl p-6 space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out"
-            style={{
-              transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
+            className="relative z-10 w-full bg-[#FCF8F0] rounded-t-2xl shadow-2xl flex flex-col max-h-[85dvh] max-h-[85vh] overflow-hidden animate-sheet-up"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sort Products"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8DFD0]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E8DFD0] bg-[#FCF8F0] shrink-0">
               <h3 className="font-serif font-bold text-lg text-gray-900">Sort Products</h3>
               <button
                 type="button"
                 onClick={() => setMobileSortOpen(false)}
-                className="p-1 rounded-full text-gray-500 hover:text-gray-900"
+                className="p-2 -mr-1.5 rounded-full text-gray-500 hover:text-gray-900 hover:bg-[#F3E9DA]/60 transition-colors focus:outline-none"
+                aria-label="Close sort drawer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] space-y-2">
               {sortOptions.map((opt) => (
                 <button
                   key={opt.value}
@@ -1172,7 +1196,8 @@ export const Shop: React.FC = () => {
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

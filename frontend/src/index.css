@@ -73,7 +73,7 @@ button:active:not(:disabled),
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -89,13 +89,33 @@ button:active:not(:disabled),
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
 .card-stagger {
   opacity: 0;
   animation: cardStagger 360ms var(--ease-royal) forwards;
+}
+
+/* Bottom sheet slide-up animation */
+@keyframes bottomSheetSlideUp {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.animate-sheet-up {
+  animation: bottomSheetSlideUp 280ms var(--ease-royal) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheet-up {
+    animation: none;
+  }
 }
 
 /* Dropdown Slide Animation */

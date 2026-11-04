@@ -71,87 +71,90 @@ export const Footer: React.FC = () => {
             </div>
           </div>
 
-          {/* Shop Column (Col 5-6) */}
-          <div className="md:col-span-2">
-            <h4 className="font-serif font-semibold text-[#B58A3C] text-xs uppercase tracking-[0.2em] mb-4">
-              SHOP
-            </h4>
-            <ul className="space-y-2.5 text-xs text-[#FCF8F0]/85">
-              <li>
-                <Link to="/shop?sort=newest" className="hover:text-[#B58A3C] transition-colors">
-                  New In
-                </Link>
-              </li>
-              <li>
-                <Link to="/shop?category=Kurti+Sets" className="hover:text-[#B58A3C] transition-colors">
-                  Kurti Sets
-                </Link>
-              </li>
-              <li>
-                <Link to="/shop?category=Festive+Sets" className="hover:text-[#B58A3C] transition-colors">
-                  Festive Sets
-                </Link>
-              </li>
-              <li>
-                <Link to="/shop?category=Co-ord+Sets" className="hover:text-[#B58A3C] transition-colors">
-                  Co-ord Sets
-                </Link>
-              </li>
-              <li>
-                <Link to="/shop?collection=festive-edit" className="hover:text-[#B58A3C] transition-colors">
-                  Festive Edit
-                </Link>
-              </li>
-              <li>
-                <Link to="/shop?collection=bestsellers" className="hover:text-[#B58A3C] transition-colors">
-                  Bestsellers
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {/* Shop & Company Columns (Side by side in 2 columns on mobile, 4 cols on desktop) */}
+          <div className="md:col-span-4 grid grid-cols-2 gap-6 sm:gap-8 md:gap-10 lg:gap-12">
+            {/* Shop Column (Left) */}
+            <div className="min-w-0">
+              <h4 className="font-serif font-semibold text-[#B58A3C] text-xs uppercase tracking-[0.2em] mb-4">
+                SHOP
+              </h4>
+              <ul className="space-y-2.5 text-xs text-[#FCF8F0]/85">
+                <li>
+                  <Link to="/shop?sort=newest" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    New In
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/shop?category=Kurti+Sets" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Kurti Sets
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/shop?category=Festive+Sets" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Festive Sets
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/shop?category=Co-ord+Sets" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Co-ord Sets
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/shop?collection=festive-edit" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Festive Edit
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/shop?collection=bestsellers" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Bestsellers
+                  </Link>
+                </li>
+              </ul>
+            </div>
 
-          {/* Company Column (Col 7-8) */}
-          <div className="md:col-span-2">
-            <h4 className="font-serif font-semibold text-[#B58A3C] text-xs uppercase tracking-[0.2em] mb-4">
-              COMPANY
-            </h4>
-            <ul className="space-y-2.5 text-xs text-[#FCF8F0]/85">
-              <li>
-                <Link to="/about" className="hover:text-[#B58A3C] transition-colors">
-                  Our Story
-                </Link>
-              </li>
-              <li>
-                <Link to="/about" className="hover:text-[#B58A3C] transition-colors">
-                  Craftsmanship
-                </Link>
-              </li>
-              <li>
-                <Link to="/#boutique" className="hover:text-[#B58A3C] transition-colors">
-                  Visit Our Boutique
-                </Link>
-              </li>
-              <li>
-                <Link to="/track-order" className="hover:text-[#B58A3C] transition-colors">
-                  Track Your Order
-                </Link>
-              </li>
-              <li>
-                <Link to="/shipping-policy" className="hover:text-[#B58A3C] transition-colors">
-                  Shipping & Delivery
-                </Link>
-              </li>
-              <li>
-                <Link to="/return-policy" className="hover:text-[#B58A3C] transition-colors">
-                  Returns &amp; Exchange Policy
-                </Link>
-              </li>
-              <li>
-                <Link to="/contact" className="hover:text-[#B58A3C] transition-colors">
-                  Contact Us
-                </Link>
-              </li>
-            </ul>
+            {/* Company Column (Right) */}
+            <div className="min-w-0">
+              <h4 className="font-serif font-semibold text-[#B58A3C] text-xs uppercase tracking-[0.2em] mb-4">
+                COMPANY
+              </h4>
+              <ul className="space-y-2.5 text-xs text-[#FCF8F0]/85">
+                <li>
+                  <Link to="/about" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Our Story
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/about" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Craftsmanship
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/#boutique" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Visit Our Boutique
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/track-order" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Track Your Order
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/shipping-policy" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Shipping & Delivery
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/return-policy" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Returns &amp; Exchange Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/contact" className="hover:text-[#B58A3C] transition-colors inline-block py-0.5 leading-snug break-words">
+                    Contact Us
+                  </Link>
+                </li>
+              </ul>
+            </div>
           </div>
 
           {/* Newsletter Column (Col 9-12) (PDF Page 3) */}
@@ -206,7 +209,7 @@ export const Footer: React.FC = () => {
         {/* Bottom Credits & Legal Links */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-[#FCF8F0]/60 gap-4 text-center sm:text-left">
           <p>© {new Date().getFullYear()} Royal Libas by Tanya. Handcrafted with pride in India. All rights reserved.</p>
-          <div className="flex items-center gap-4 text-xs text-[#FCF8F0]/70">
+          <div className="flex flex-wrap justify-center sm:justify-end items-center gap-x-4 gap-y-1.5 text-xs text-[#FCF8F0]/70">
             <Link to="/privacy-policy" className="hover:text-[#B58A3C] transition-colors">Privacy Policy</Link>
             <span>•</span>
             <Link to="/terms-of-service" className="hover:text-[#B58A3C] transition-colors">Terms of Service</Link>
