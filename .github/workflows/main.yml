@@ -57,9 +57,10 @@ jobs:
             exit 1
           fi
 
-          # 2. Verify existing activation lock is free before beginning preparation
+          # 2. Hold activation lock across preparation to prevent race with manual activation
           if [ -f "$activation_lock" ]; then
-            if ! flock -n "$activation_lock" true 2>/dev/null; then
+            exec 201<"$activation_lock"
+            if ! flock -n 201; then
               echo "CRITICAL: Activation lock ($activation_lock) is currently held. Aborting." >&2
               exit 1
             fi
@@ -78,8 +79,11 @@ jobs:
           [[ "$release" =~ ^release-[A-Za-z0-9]{8}$ ]]
           [[ "$actual" = "$expected" ]]
 
-          # 4. Release activation
+          # 4. Release activation (release preparation hold on activation lock so activate-release.sh can lock it)
           echo ">>> [Phase 2/4] Activating Release: $release"
+          if [ -f "$activation_lock" ]; then
+            exec 201<&-
+          fi
           sudo -n /usr/local/lib/royal-libas/activate-release.sh "$release" "$expected"
 
           # 5. Post-activation health check verification

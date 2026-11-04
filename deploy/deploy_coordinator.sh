@@ -34,9 +34,10 @@ if ! flock -n 200; then
   exit 1
 fi
 
-# 2. Check if existing activation lock is held by another process
+# 2. Hold activation lock across preparation to prevent race with manual activation
 if [ -f "$ACTIVATION_LOCK" ]; then
-  if ! flock -n "$ACTIVATION_LOCK" true 2>/dev/null; then
+  exec 201<"$ACTIVATION_LOCK"
+  if ! flock -n 201; then
     echo "CRITICAL: Existing activation lock ($ACTIVATION_LOCK) is currently held. Aborting." >&2
     exit 1
   fi
@@ -62,8 +63,11 @@ if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
   exit 1
 fi
 
-# 4. Activation phase
+# 4. Activation phase (release preparation hold on activation lock so activate-release.sh can lock it)
 echo ">>> [Phase 2/4] Activating Release: $RELEASE_NAME"
+if [ -f "$ACTIVATION_LOCK" ]; then
+  exec 201<&-
+fi
 sudo -n /usr/local/lib/royal-libas/activate-release.sh "$RELEASE_NAME" "$EXPECTED_SHA"
 
 # 5. Post-activation health check verification

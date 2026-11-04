@@ -3,26 +3,30 @@
 Royal Libas VPS Release Retention and Pruning Engine
 
 Safely retains the active production release and at least three verified,
-usable rollback releases. Prunes only verified older releases from recorded
-deployment history after fail-closed safety assertions.
+usable rollback releases (preserving a minimum of 4 releases total).
+Prunes only verified older releases from recorded deployment history after
+strict cryptographic commit verification and fail-closed safety assertions.
 
 Safety Invariants:
 1. Continuous lifecycle locking:
    - In deployment pipeline: validates and holds inherited pipeline lock (FD 200).
    - In standalone cleanup: acquires and continuously holds both pipeline lock
      and activation lock from evaluation through completion.
-2. Genuine read-only dry run: Never creates, touches, or mutates ledger or
-   filesystem assets when running in dry-run mode.
-3. Strict rollback usability: Requires backend .env symlink, uploads symlink,
-   executable virtualenv, backend app code, and frontend dist/index.html to exist
-   and resolve to valid shared targets.
-4. Ledger record validation: Validates ISO 8601 timestamps, release naming,
-   40-char commit SHAs, and 'activated' status. Rejects invalid records.
-5. Preserves unverified releases: Never automatically deletes unrecorded builds;
-   surfaces them for operator review.
-6. Safe first deployment: Never assumes or hardcodes deletion rights; preserves
-   all unrecorded releases and skips deletion until at least 3 verified usable
-   rollbacks have accumulated in the ledger.
+   - If a required lock is missing, inaccessible, or busy, skips deletion safely.
+2. Genuine read-only dry run: Never creates, touches, or mutates lock files,
+   ledger files, or filesystem assets when running in dry-run mode.
+3. Cryptographic commit verification: Verifies each candidate directory against
+   its actual git commit on disk. Never authorizes deletion merely because a
+   release name or SHA appears in the ledger. Preserves uncertain releases.
+4. Strict rollback usability: Requires backend .env symlink, uploads symlink,
+   executable virtualenv, backend app code, frontend dist/index.html to exist
+   and resolve to valid shared targets, with matching commit metadata.
+5. Chronological ledger validation: Validates ISO 8601 timestamps, release naming,
+   40-char commit SHAs, and 'activated' status. Orders records chronologically
+   by timestamp regardless of line append order. Rejects invalid records.
+6. Safe first deployment & retention quota: Preserves current + at least 3
+   independently validated rollback releases. The first eligible deletion normally
+   requires a 5th recorded successful release.
 7. Fail-closed safety: Validates real paths, rejects nested mounts, and unlinks
    safe symlinks before directory deletion.
 """
@@ -31,6 +35,7 @@ import argparse
 import os
 import re
 import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -72,12 +77,14 @@ class ContinuousLockManager:
         pipeline_lock_file: str,
         pipeline_lock_fd: Optional[int] = None,
         activation_lock_file: Optional[str] = None,
-        skip_locks: bool = False
+        skip_locks: bool = False,
+        dry_run: bool = False
     ):
         self.pipeline_lock_file = pipeline_lock_file
         self.pipeline_lock_fd = pipeline_lock_fd
         self.activation_lock_file = activation_lock_file
         self.skip_locks = skip_locks
+        self.dry_run = dry_run
 
         self._pipeline_file_obj = None
         self._activation_file_obj = None
@@ -96,7 +103,6 @@ class ContinuousLockManager:
                     raise LockAcquisitionError(
                         f"Inherited lock FD {self.pipeline_lock_fd} does not match '{self.pipeline_lock_file}'"
                     )
-                # Verify lock on inherited FD without closing it
                 fcntl.flock(self.pipeline_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except (OSError, BlockingIOError) as exc:
                 raise LockAcquisitionError(
@@ -104,26 +110,49 @@ class ContinuousLockManager:
                 )
         else:
             # Standalone mode: acquire pipeline lock directly
-            try:
-                self._pipeline_file_obj = open(self.pipeline_lock_file, "a+")
-                fcntl.flock(self._pipeline_file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except (BlockingIOError, PermissionError, OSError) as exc:
-                self._cleanup_locks()
-                raise LockAcquisitionError(
-                    f"Cannot acquire exclusive pipeline lock on '{self.pipeline_lock_file}': {exc}"
-                )
+            if not os.path.exists(self.pipeline_lock_file):
+                if self.dry_run:
+                    print(
+                        f"[Lock Manager] NOTICE: Pipeline lock file '{self.pipeline_lock_file}' does not exist. "
+                        f"In genuine read-only dry-run, lock files are never created. Skipping pipeline lock check."
+                    )
+                else:
+                    raise LockAcquisitionError(
+                        f"Required pipeline lock file '{self.pipeline_lock_file}' does not exist. Skipping deletion safely."
+                    )
+            else:
+                try:
+                    # Open read-only to never mutate filesystem or create file
+                    self._pipeline_file_obj = open(self.pipeline_lock_file, "r")
+                    fcntl.flock(self._pipeline_file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except (BlockingIOError, PermissionError, OSError) as exc:
+                    self._cleanup_locks()
+                    raise LockAcquisitionError(
+                        f"Cannot acquire exclusive pipeline lock on '{self.pipeline_lock_file}': {exc}"
+                    )
 
         # 2. Activation lock coordination
-        if self.activation_lock_file and os.path.exists(self.activation_lock_file):
-            try:
-                # Open read-only to allow unprivileged royal-deploy user to lock 0644 file
-                self._activation_file_obj = open(self.activation_lock_file, "r")
-                fcntl.flock(self._activation_file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except (BlockingIOError, PermissionError, OSError) as exc:
-                self._cleanup_locks()
-                raise LockAcquisitionError(
-                    f"Cannot acquire exclusive activation lock on '{self.activation_lock_file}': {exc}"
-                )
+        if self.activation_lock_file:
+            if not os.path.exists(self.activation_lock_file):
+                if self.dry_run:
+                    print(
+                        f"[Lock Manager] NOTICE: Activation lock file '{self.activation_lock_file}' does not exist. "
+                        f"In genuine read-only dry-run, lock files are never created. Skipping activation lock check."
+                    )
+                else:
+                    raise LockAcquisitionError(
+                        f"Required activation lock file '{self.activation_lock_file}' does not exist. Skipping deletion safely."
+                    )
+            else:
+                try:
+                    # Open read-only to allow unprivileged royal-deploy user to lock 0644 file
+                    self._activation_file_obj = open(self.activation_lock_file, "r")
+                    fcntl.flock(self._activation_file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except (BlockingIOError, PermissionError, OSError) as exc:
+                    self._cleanup_locks()
+                    raise LockAcquisitionError(
+                        f"Cannot acquire exclusive activation lock on '{self.activation_lock_file}': {exc}"
+                    )
 
         return self
 
@@ -182,7 +211,56 @@ def format_bytes(bytes_count: int) -> str:
     return f"{bytes_count:.1f} PB"
 
 
-def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, str]], List[str]]:
+def get_release_commit_sha(release_path: str) -> Optional[str]:
+    """
+    Retrieve actual git commit SHA from the release directory on disk.
+    
+    Inspects git repository inside the release directory via git rev-parse HEAD,
+    or falls back to parsing .git/HEAD for detached/ref states.
+    Returns 40-character commit SHA, or None if unavailable.
+    """
+    git_dir = os.path.join(release_path, ".git")
+    if not os.path.isdir(git_dir):
+        return None
+
+    # 1. Try git command directly if available
+    try:
+        res = subprocess.run(
+            ["git", "-C", release_path, "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if res.returncode == 0:
+            sha = res.stdout.strip()
+            if COMMIT_SHA_RE.match(sha):
+                return sha
+    except Exception:
+        pass
+
+    # 2. Filesystem fallback: read .git/HEAD directly
+    try:
+        head_file = os.path.join(git_dir, "HEAD")
+        if os.path.isfile(head_file):
+            with open(head_file, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            if COMMIT_SHA_RE.match(content):
+                return content
+            if content.startswith("ref: "):
+                ref_subpath = content[5:].strip()
+                ref_path = os.path.join(git_dir, ref_subpath)
+                if os.path.isfile(ref_path):
+                    with open(ref_path, "r", encoding="utf-8") as rf:
+                        ref_sha = rf.read().strip()
+                    if COMMIT_SHA_RE.match(ref_sha):
+                        return ref_sha
+    except Exception:
+        pass
+
+    return None
+
+
+def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, any]], List[str]]:
     """
     Parse append-only deployments ledger and strictly validate records.
     
@@ -191,7 +269,7 @@ def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, str]], L
     - Valid ISO 8601 UTC timestamp
     - Valid release name format
     - Valid 40-character hex commit SHA
-    - STATUS == 'activated'
+    - STATUS == 'activated' or 'active'
     
     Returns:
         (valid_records_chronological, validation_warnings)
@@ -199,7 +277,7 @@ def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, str]], L
     if not os.path.isfile(ledger_path):
         return [], [f"Ledger file '{ledger_path}' does not exist."]
 
-    valid_records: List[Dict[str, str]] = []
+    valid_records: List[Dict[str, any]] = []
     warnings: List[str] = []
 
     with open(ledger_path, "r", encoding="utf-8") as f:
@@ -217,7 +295,6 @@ def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, str]], L
 
             # 1. Timestamp validation
             try:
-                # Support timestamps ending in Z or with offset
                 ts_clean = ts_raw.replace("Z", "+00:00")
                 parsed_ts = datetime.fromisoformat(ts_clean)
             except Exception:
@@ -235,17 +312,21 @@ def parse_and_validate_ledger(ledger_path: str) -> Tuple[List[Dict[str, str]], L
                 continue
 
             # 4. Activation status validation
-            if status_raw.lower() != "activated" and status_raw.lower() != "active":
+            if status_raw.lower() not in ("activated", "active"):
                 warnings.append(f"Line {line_no}: Release '{rel_raw}' has non-activated status '{status_raw}'; ignored.")
                 continue
 
             valid_records.append({
                 "line": line_no,
                 "timestamp": parsed_ts.isoformat(),
+                "parsed_ts": parsed_ts,
                 "release": rel_raw,
-                "sha": sha_raw,
+                "sha": sha_raw.lower(),
                 "status": "activated"
             })
+
+    # Sort strictly chronologically by parsed timestamp
+    valid_records.sort(key=lambda r: r["parsed_ts"])
 
     return valid_records, warnings
 
@@ -324,10 +405,12 @@ def validate_release_usability(
     release_path: str,
     builds_dir: str,
     expected_env: str,
-    expected_uploads: str
+    expected_uploads: str,
+    expected_sha: Optional[str] = None
 ) -> Tuple[bool, str]:
     """
-    Validate that a release directory is structurally complete and usable as a rollback target.
+    Validate that a release directory is structurally complete, usable as a rollback target,
+    and matches its recorded commit SHA.
     
     Verifies:
     1. Real directory physically under intended builds directory.
@@ -336,6 +419,7 @@ def validate_release_usability(
     4. Backend virtualenv python exists and is an executable file.
     5. Backend application code exists (backend/app or backend/app.py).
     6. Frontend production build exists and is non-empty (frontend/dist/index.html).
+    7. Commit SHA on disk matches expected recorded commit SHA.
     """
     # 1. Directory containment
     if not os.path.isdir(release_path) or os.path.islink(release_path):
@@ -375,13 +459,21 @@ def validate_release_usability(
     if os.path.getsize(dist_index) == 0:
         return False, "frontend/dist/index.html is empty (0 bytes)"
 
-    return True, "OK [Structurally usable]"
+    # 5. Cryptographic commit verification
+    if expected_sha:
+        actual_sha = get_release_commit_sha(release_path)
+        if actual_sha is None:
+            return False, f"Missing git commit metadata on disk for '{os.path.basename(release_path)}'"
+        if actual_sha.lower() != expected_sha.lower():
+            return False, f"Commit mismatch on disk: expected '{expected_sha}', found '{actual_sha}'"
+
+    return True, "OK [Structurally usable & commit verified]"
 
 
 def evaluate_retention_plan(
     builds_dir: str,
     current_symlink: str,
-    ledger_records: List[Dict[str, str]],
+    ledger_records: List[Dict[str, any]],
     expected_env: str,
     expected_uploads: str,
     min_rollbacks: int = 3
@@ -408,9 +500,20 @@ def evaluate_retention_plan(
     if not RELEASE_NAME_RE.match(live_release_name):
         raise SafetyViolationError(f"Live release name '{live_release_name}' does not match expected format.")
 
-    # 1. Resolve chronological sequence of activations from validated ledger
+    if not ledger_records:
+        raise SafetyViolationError("Deployments ledger contains no valid activation records.")
+
+    # 1. Verify chronological sequence of activations from validated ledger
+    # The records are chronologically sorted ascending; the newest activation is the last entry.
+    latest_activation = ledger_records[-1]["release"]
+    if latest_activation != live_release_name:
+        raise SafetyViolationError(
+            f"Inconsistent deployment history: current active symlink points to '{live_release_name}', "
+            f"but latest recorded activation in ledger is '{latest_activation}'. Lineage is ambiguous; failing closed."
+        )
+
     # Deduplicate repeated activations while preserving reverse chronological order
-    verified_lineage_rev: List[Dict[str, str]] = []
+    verified_lineage_rev: List[Dict[str, any]] = []
     seen_in_ledger: Set[str] = set()
 
     for rec in reversed(ledger_records):
@@ -427,7 +530,13 @@ def evaluate_retention_plan(
             continue
 
         rel_path = os.path.join(builds_dir, rel)
-        is_usable, reason = validate_release_usability(rel_path, builds_dir, expected_env, expected_uploads)
+        is_usable, reason = validate_release_usability(
+            rel_path,
+            builds_dir,
+            expected_env,
+            expected_uploads,
+            expected_sha=rec["sha"]
+        )
 
         if is_usable:
             retained_rollbacks.append(rel)
@@ -449,6 +558,7 @@ def evaluate_retention_plan(
     prune_candidates: List[Dict[str, any]] = []
     unverified_releases: List[Dict[str, any]] = []
     now = datetime.now(timezone.utc)
+    verified_record_map = {r["release"]: r for r in verified_lineage_rev}
 
     with os.scandir(builds_dir) as it:
         for entry in it:
@@ -471,17 +581,34 @@ def evaluate_retention_plan(
             mtime = datetime.fromtimestamp(os.path.getmtime(entry_path), tz=timezone.utc)
             age_hours = (now - mtime).total_seconds() / 3600.0
 
-            if entry_name in seen_in_ledger:
-                # Verified older historical release
-                prune_candidates.append({
-                    "name": entry_name,
-                    "path": entry_path,
-                    "size_bytes": entry_size,
-                    "size_formatted": format_bytes(entry_size),
-                    "mtime": mtime.isoformat(),
-                    "age_hours": age_hours,
-                    "status": "verified_historical_release"
-                })
+            if entry_name in verified_record_map:
+                # Validate commit SHA before admitting as prune candidate
+                rec = verified_record_map[entry_name]
+                actual_sha = get_release_commit_sha(entry_path)
+                if actual_sha is None or actual_sha.lower() != rec["sha"].lower():
+                    warnings.append(
+                        f"Release '{entry_name}' recorded with SHA '{rec['sha']}', but disk has '{actual_sha}'. "
+                        f"Marked uncertain and preserved."
+                    )
+                    unverified_releases.append({
+                        "name": entry_name,
+                        "path": entry_path,
+                        "size_bytes": entry_size,
+                        "size_formatted": format_bytes(entry_size),
+                        "mtime": mtime.isoformat(),
+                        "age_hours": age_hours,
+                        "status": "uncertain_commit_mismatch"
+                    })
+                else:
+                    prune_candidates.append({
+                        "name": entry_name,
+                        "path": entry_path,
+                        "size_bytes": entry_size,
+                        "size_formatted": format_bytes(entry_size),
+                        "mtime": mtime.isoformat(),
+                        "age_hours": age_hours,
+                        "status": "verified_historical_release"
+                    })
             else:
                 # Unverified / unrecorded release (e.g. aborted build, test directory)
                 # PRESERVED: NEVER automatically deleted!
@@ -530,7 +657,8 @@ def prune_releases(
         pipeline_lock_file=pipeline_lock_file,
         pipeline_lock_fd=pipeline_lock_fd,
         activation_lock_file=activation_lock_file,
-        skip_locks=skip_locks
+        skip_locks=skip_locks,
+        dry_run=dry_run
     )
 
     try:
@@ -587,7 +715,7 @@ def prune_releases(
                 print(f"CRITICAL SAFETY VIOLATION during evaluation: {exc}")
                 return 1
 
-            # Output inventory & classification
+            # Display plan summary
             print("\n--- [RELEASE INVENTORY & CLASSIFICATION] ---")
             print(f"Live Active Target (Preserved):  {live_rel}")
             print(f"Retained Rollback Targets:      {', '.join(rollbacks) if rollbacks else 'None'}")
@@ -605,7 +733,7 @@ def prune_releases(
                 for u in unverified:
                     print(f" - {u['name']} [{u['size_formatted']}] (Age: {u['age_hours']:.1f}h) -> Preserved")
 
-            # Safety check on rollback availability
+            # Check rollback quota: must retain at least min_rollbacks verified usable releases
             if len(rollbacks) < min_rollbacks:
                 print(f"\nSAFETY GUARD: Fewer than {min_rollbacks} verified usable rollback releases available.")
                 print("Skipping automatic pruning to preserve system recoverability.")
@@ -615,75 +743,138 @@ def prune_releases(
                 print("\nNo older verified candidates eligible for pruning. Release quota is in balance.")
                 return 0
 
+            total_reclaim_bytes = sum(c["size_bytes"] for c in candidates)
             print("\n--- [VERIFIED PRUNING CANDIDATES] ---")
-            total_reclaimable = sum(c["size_bytes"] for c in candidates)
             for c in candidates:
                 print(f" - {c['name']} [{c['size_formatted']}] (Age: {c['age_hours']:.1f}h, Status: {c['status']})")
-            print(f"\nTotal Space to Reclaim: {format_bytes(total_reclaimable)}")
+            print(f"\nTotal Space to Reclaim: {format_bytes(total_reclaim_bytes)}")
 
-            # 4. Fail-closed structural assertions on every candidate
-            print("\n--- [FAIL-CLOSED SAFETY VERIFICATION] ---")
-            for c in candidates:
-                cand_path = c["path"]
-                print(f"Verifying candidate: {c['name']} ...", end=" ")
-                try:
-                    verify_mount_safety(cand_path, mounts_file=mounts_file)
-                    verify_persistent_symlinks(cand_path, expected_env=shared_env, expected_uploads=shared_uploads)
-                    print("OK [Symlinks & Mounts Safe]")
-                except SafetyViolationError as exc:
-                    print("FAILED!")
-                    print(f"CRITICAL SAFETY ERROR on '{c['name']}': {exc}")
-                    print("ABORTING ENTIRE CLEANUP OPERATION. No files were deleted.")
-                    return 1
-
-            # 5. Execute or Dry-Run
+            # Dry-run vs Execution path
             if dry_run:
+                # In dry-run mode, perform non-destructive safety checks
+                print("\n--- [FAIL-CLOSED SAFETY VERIFICATION] ---")
+                for c in candidates:
+                    try:
+                        verify_mount_safety(c["path"], mounts_file)
+                        verify_persistent_symlinks(c["path"], shared_env, shared_uploads)
+                        print(f"Verifying candidate: {c['name']} ... OK [Symlinks & Mounts Safe]")
+                    except SafetyViolationError as exc:
+                        print(f"Verifying candidate: {c['name']} ... FAILED!")
+                        print(f"CRITICAL SAFETY ERROR on '{c['name']}': {exc}")
+                        return 1
+
                 print("\n[DRY-RUN COMPLETE] All safety checks passed. GENUINE READ-ONLY: No files were touched or removed.")
                 print("To execute real deletions, run with --execute.")
                 return 0
 
-            print("\n--- [EXECUTING SAFE PRUNING (WHILE HOLDING CONTINUOUS LOCKS)] ---")
-            deleted_count = 0
-            reclaimed_bytes = 0
+            # EXECUTE MODE: Deletion path
+            print("\n--- [FAIL-CLOSED SAFETY VERIFICATION] ---")
+            for c in candidates:
+                try:
+                    verify_mount_safety(c["path"], mounts_file)
+                    verify_persistent_symlinks(c["path"], shared_env, shared_uploads)
+                    print(f"Verifying candidate: {c['name']} ... OK [Symlinks & Mounts Safe]")
+                except SafetyViolationError as exc:
+                    print(f"Verifying candidate: {c['name']} ... FAILED!")
+                    print(f"CRITICAL SAFETY ERROR on '{c['name']}': {exc}")
+                    print("ABORTING ENTIRE CLEANUP OPERATION. No files were deleted.")
+                    return 1
 
+            print("\n--- [EXECUTING SAFE PRUNING (WHILE HOLDING CONTINUOUS LOCKS)] ---")
+            pruned_count = 0
             for c in candidates:
                 cand_path = c["path"]
                 print(f"Pruning {c['name']} ({c['size_formatted']}) ...")
+
+                # Re-verify path safety immediately prior to removal
+                if not os.path.isdir(cand_path) or os.path.islink(cand_path):
+                    print(f"Candidate {c['name']} is no longer a valid directory; skipping.")
+                    continue
+
+                if os.path.realpath(cand_path) == current_real:
+                    print(f"CRITICAL: Candidate {c['name']} resolved to live release; aborting!")
+                    return 1
+
                 try:
                     safe_unlink_persistent_symlinks(cand_path)
                     shutil.rmtree(cand_path)
-                    deleted_count += 1
-                    reclaimed_bytes += c["size_bytes"]
                     print(f" Successfully pruned {c['name']}.")
+                    pruned_count += 1
                 except Exception as exc:
-                    print(f"CRITICAL ERROR removing {c['name']}: {exc}")
-                    print("Halting further pruning. Remaining candidates left untouched.")
+                    print(f"ERROR: Failed to remove '{c['name']}': {exc}")
                     return 1
 
-            print(f"\n[EXECUTION COMPLETE] Successfully pruned {deleted_count} release folders.")
-            print(f"Reclaimed Disk Space: {format_bytes(reclaimed_bytes)}.")
+            print(f"\n[EXECUTION COMPLETE] Successfully pruned {pruned_count} release folders.")
+            print(f"Reclaimed Disk Space: {format_bytes(total_reclaim_bytes)}.")
             return 0
 
-    except LockAcquisitionError as err:
-        print(f"NOTICE: {err}")
-        print("Concurrent deployment or activation in progress. Release retention skipped safely.")
+    except LockAcquisitionError as lock_err:
+        print(f"NOTICE: {lock_err}")
+        print("Concurrent deployment or activation in progress, or lock unavailable. Release retention skipped safely.")
         return 0
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Royal Libas VPS Release Retention & Pruning Engine")
-    parser.add_argument("--builds-dir", default="/var/www/royal-libas-releases/builds", help="Builds directory path")
-    parser.add_argument("--current-symlink", default="/var/www/royal-libas-releases/current", help="Current release symlink path")
-    parser.add_argument("--ledger-file", default="/var/www/royal-libas-releases/builds/.deployments_ledger.tsv", help="Deployments ledger TSV")
-    parser.add_argument("--pipeline-lock-file", default="/var/www/royal-libas-releases/builds/.deploy-pipeline.lock", help="Pipeline lock file")
-    parser.add_argument("--pipeline-lock-fd", type=int, default=None, help="Inherited pipeline lock file descriptor (e.g. 200)")
-    parser.add_argument("--activation-lock-file", default="/run/lock/royal-libas-deploy.lock", help="Activation lock file")
-    parser.add_argument("--shared-env", default="/var/www/royal-libas/backend/.env", help="Expected production .env path")
-    parser.add_argument("--shared-uploads", default="/var/www/royal-libas/backend/uploads", help="Expected production uploads path")
-    parser.add_argument("--min-rollbacks", type=int, default=3, help="Minimum verified rollback releases to retain (default 3)")
-    parser.add_argument("--execute", action="store_true", help="Actually perform deletion (default is dry-run)")
-    parser.add_argument("--skip-locks", action="store_true", help="Skip file locking checks (for testing)")
-    parser.add_argument("--mounts-file", default="/proc/mounts", help="Path to mounts table file")
+    parser = argparse.ArgumentParser(
+        description="Royal Libas VPS Release Retention & Pruning Engine"
+    )
+    parser.add_argument(
+        "--builds-dir",
+        default="/var/www/royal-libas-releases/builds",
+        help="Directory containing release folders"
+    )
+    parser.add_argument(
+        "--current-symlink",
+        default="/var/www/royal-libas-releases/current",
+        help="Path to symlink pointing to active release"
+    )
+    parser.add_argument(
+        "--ledger-file",
+        default="/var/www/royal-libas-releases/builds/.deployments_ledger.tsv",
+        help="Path to deployments ledger TSV"
+    )
+    parser.add_argument(
+        "--pipeline-lock-file",
+        default="/var/www/royal-libas-releases/builds/.deploy-pipeline.lock",
+        help="Path to deployment pipeline lock"
+    )
+    parser.add_argument(
+        "--pipeline-lock-fd",
+        type=int,
+        default=None,
+        help="Inherited pipeline lock file descriptor from deployment wrapper"
+    )
+    parser.add_argument(
+        "--activation-lock-file",
+        default="/run/lock/royal-libas-deploy.lock",
+        help="Path to release activation lock"
+    )
+    parser.add_argument(
+        "--shared-env",
+        default="/var/www/royal-libas/backend/.env",
+        help="Path to production shared .env"
+    )
+    parser.add_argument(
+        "--shared-uploads",
+        default="/var/www/royal-libas/backend/uploads",
+        help="Path to production shared uploads directory"
+    )
+    parser.add_argument(
+        "--min-rollbacks",
+        type=int,
+        default=3,
+        help="Minimum verified usable rollback releases to retain (default: 3)"
+    )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Execute real directory removal (default is genuine read-only dry-run)"
+    )
+    parser.add_argument(
+        "--skip-locks",
+        action="store_true",
+        help="Skip lock acquisition (TEST HARNESS ONLY)"
+    )
 
     args = parser.parse_args()
 
@@ -698,8 +889,7 @@ def main():
         shared_uploads=args.shared_uploads,
         min_rollbacks=args.min_rollbacks,
         dry_run=not args.execute,
-        skip_locks=args.skip_locks,
-        mounts_file=args.mounts_file
+        skip_locks=args.skip_locks
     )
     sys.exit(exit_code)
 
