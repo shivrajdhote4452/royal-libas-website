@@ -44,9 +44,35 @@ jobs:
           set -euo pipefail
 
           expected="$1"
+          builds_dir="/var/www/royal-libas-releases/builds"
+          pipeline_lock="$builds_dir/.deploy-pipeline.lock"
+          activation_lock="/run/lock/royal-libas-deploy.lock"
+          ledger_file="$builds_dir/.deployments_ledger.tsv"
+          current_symlink="/var/www/royal-libas-releases/current"
+
+          # 1. Acquire unbroken exclusive lifecycle lock across entire deployment and retention
+          exec 200>"$pipeline_lock"
+          if ! flock -n 200; then
+            echo "CRITICAL: Another deployment or retention pipeline is in progress. Aborting." >&2
+            exit 1
+          fi
+
+          # Record pre-deployment active release for potential rollback
+          previous_release=""
+          previous_commit=""
+          if [ -L "$current_symlink" ]; then
+            previous_release="$(basename "$(readlink -f "$current_symlink")")"
+            if [ -d "$builds_dir/$previous_release" ]; then
+              previous_commit="$(git -C "$builds_dir/$previous_release" rev-parse HEAD 2>/dev/null || cat "$builds_dir/$previous_release/.git/HEAD" 2>/dev/null || true)"
+              previous_commit="$(echo "$previous_commit" | tr -d '[:space:]')"
+            fi
+          fi
+
           log="$(mktemp)"
           trap 'rm -f "$log"' EXIT
 
+          # 3. Release preparation
+          echo ">>> [Phase 1/4] Preparing Release for SHA: $expected"
           bash /usr/local/lib/royal-libas/prepare-release.sh "$expected" | tee "$log"
 
           release="$(sed -n 's/^RELEASE_NAME=//p' "$log" | tail -n 1)"
@@ -55,5 +81,66 @@ jobs:
           [[ "$release" =~ ^release-[A-Za-z0-9]{8}$ ]]
           [[ "$actual" = "$expected" ]]
 
+          # 4. Release activation (caller maintains continuous lifecycle locks)
+          echo ">>> [Phase 2/4] Activating Release: $release"
           sudo -n /usr/local/lib/royal-libas/activate-release.sh "$release" "$expected"
+
+          # 5. Immediate post-activation verification
+          resolved="$(basename "$(readlink -f "$current_symlink")")"
+          if [ "$resolved" != "$release" ]; then
+            echo "CRITICAL: Activation verification failed: expected '$release', found '$resolved'." >&2
+            exit 1
+          fi
+
+          # 6. Post-activation health check verification
+          echo ">>> [Phase 3/4] Verifying Service Health..."
+          health_url="http://127.0.0.1:8000/health"
+          health_ok=0
+          for i in {1..20}; do
+            if curl -sf "$health_url" 2>/dev/null | grep -q '"status":"ok"'; then
+              health_ok=1
+              echo "Service health verified: $health_url reported ok"
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$health_ok" -ne 1 ]; then
+            echo "CRITICAL: Service health check failed after activation: $health_url did not return '{\"status\":\"ok\"}' within 20s." >&2
+            # Attempt automated rollback to previous release if valid
+            if [ -n "$previous_release" ] && [ "$previous_release" != "$release" ] && [[ "$previous_commit" =~ ^[0-9a-f]{40}$ ]]; then
+              echo ">>> [Rollback] Attempting automated rollback to previous release: $previous_release ($previous_commit)..." >&2
+              if sudo -n /usr/local/lib/royal-libas/activate-release.sh "$previous_release" "$previous_commit"; then
+                rolled_back_target="$(basename "$(readlink -f "$current_symlink")")"
+                if [ "$rolled_back_target" = "$previous_release" ]; then
+                  echo ">>> [Rollback] Automated rollback succeeded. Site reverted to $previous_release." >&2
+                else
+                  echo ">>> [Rollback WARNING] Symlink target after rollback is '$rolled_back_target', expected '$previous_release'." >&2
+                fi
+              else
+                echo ">>> [Rollback CRITICAL] Automated rollback failed to activate $previous_release." >&2
+              fi
+            else
+              echo ">>> [Rollback NOTICE] No valid previous release ($previous_release) available for automated rollback." >&2
+            fi
+            echo "CRITICAL: Deployment failed health verification. Skipping ledger update and release pruning." >&2
+            exit 1
+          fi
+
+          # 7. Record verified activation in ledger
+          echo ">>> [Phase 4/4] Updating Ledger & Managing Release Retention..."
+          timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          printf '%s\t%s\t%s\t%s\n' "$timestamp" "$release" "$actual" "activated" >> "$ledger_file"
+
+          # 7. Safe automatic release retention running under pipeline lock
+          retention_script="$current_symlink/deploy/prune_releases.py"
+          if [ -f "$retention_script" ]; then
+            python3 "$retention_script" --execute --pipeline-lock-fd 200 || {
+              echo "WARNING: Automatic retention encountered a safety notice. Site remains live." >&2
+            }
+          else
+            echo "Notice: Retention script not found at $retention_script; skipping pruning."
+          fi
+
+          echo "Deployment and retention coordination completed successfully."
           REMOTE
