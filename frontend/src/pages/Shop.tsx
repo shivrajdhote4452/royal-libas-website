@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useSearchParams, useNavigationType, Link } from 'react-router-dom';
 import {
   SlidersHorizontal,
   X,
@@ -83,6 +83,92 @@ export const Shop: React.FC = () => {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
 
+  // In-page results section scroll controller
+  const navigationType = useNavigationType();
+  const resultsSectionRef = useRef<HTMLDivElement>(null);
+  const isInitialMountRef = useRef<boolean>(true);
+  const prevCategoryRef = useRef<string>(currentCategory);
+  const prevSubcategoryRef = useRef<string>(currentSubcategory);
+  const prevCollectionRef = useRef<string>(currentCollection);
+  const prevSearchRef = useRef<string>(currentSearch);
+  const prevParamsStrRef = useRef<string>(searchParams.toString());
+  const pendingResultsScrollRef = useRef<boolean>(false);
+  const isUserInteractingRef = useRef<boolean>(false);
+  const scrollRafIdRef = useRef<number | null>(null);
+  const scrollTimerIdRef = useRef<number | null>(null);
+
+  // Helper: Clear pending scroll tasks
+  const clearPendingScrollTasks = () => {
+    if (scrollRafIdRef.current !== null) {
+      cancelAnimationFrame(scrollRafIdRef.current);
+      scrollRafIdRef.current = null;
+    }
+    if (scrollTimerIdRef.current !== null) {
+      clearTimeout(scrollTimerIdRef.current);
+      scrollTimerIdRef.current = null;
+    }
+  };
+
+  // Helper: Scroll to the beginning of the Shop results section below the sticky header
+  const scrollToResultsSection = () => {
+    if (isUserInteractingRef.current) return;
+    const target = resultsSectionRef.current || document.getElementById('shop-results-section');
+    if (!target) return;
+
+    const header = document.querySelector('header');
+    const headerHeight = header ? header.getBoundingClientRect().height : 80;
+    const targetRect = target.getBoundingClientRect();
+    const absoluteTop = targetRect.top + window.pageYOffset;
+    // Position comfortably below the sticky header (with 12px margin so header does not cover heading)
+    const targetOffset = Math.max(0, Math.round(absoluteTop - headerHeight - 12));
+
+    if (Math.abs(window.pageYOffset - targetOffset) > 4) {
+      window.scrollTo({
+        top: targetOffset,
+        left: 0,
+        behavior: 'instant' as ScrollBehavior,
+      });
+    }
+  };
+
+  const triggerResultsScroll = () => {
+    if (!pendingResultsScrollRef.current || isUserInteractingRef.current) return;
+    pendingResultsScrollRef.current = false;
+    clearPendingScrollTasks();
+    scrollRafIdRef.current = requestAnimationFrame(() => {
+      scrollRafIdRef.current = requestAnimationFrame(() => {
+        scrollRafIdRef.current = null;
+        scrollToResultsSection();
+      });
+    });
+  };
+
+  // Cancel pending results positioning if the user manually scrolls (mouse wheel, touch swipe, scroll keys)
+  useEffect(() => {
+    const handleUserScrollInteraction = (e: Event) => {
+      if (e.type === 'keydown') {
+        const key = (e as KeyboardEvent).key;
+        if (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(key)) {
+          return;
+        }
+      }
+      isUserInteractingRef.current = true;
+      pendingResultsScrollRef.current = false;
+      clearPendingScrollTasks();
+    };
+
+    window.addEventListener('wheel', handleUserScrollInteraction, { passive: true });
+    window.addEventListener('touchmove', handleUserScrollInteraction, { passive: true });
+    window.addEventListener('keydown', handleUserScrollInteraction, { passive: true });
+
+    return () => {
+      window.removeEventListener('wheel', handleUserScrollInteraction);
+      window.removeEventListener('touchmove', handleUserScrollInteraction);
+      window.removeEventListener('keydown', handleUserScrollInteraction);
+      clearPendingScrollTasks();
+    };
+  }, []);
+
   // Dynamic catalog price bounds from full catalog
   const catalogReference = allProducts.length > 0 ? allProducts : products;
 
@@ -158,6 +244,63 @@ export const Shop: React.FC = () => {
     };
   }, [currentCategory, currentSubcategory, currentCollection, currentSize, currentSort]);
 
+  // When products finished loading (or mobile drawer closed), execute pending scroll to results section
+  useEffect(() => {
+    if (!loading && !mobileFilterOpen && pendingResultsScrollRef.current) {
+      triggerResultsScroll();
+    }
+  }, [loading, mobileFilterOpen]);
+
+  // Detect in-page filter/category changes on /shop
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      prevParamsStrRef.current = searchParams.toString();
+      prevCategoryRef.current = currentCategory;
+      prevSubcategoryRef.current = currentSubcategory;
+      prevCollectionRef.current = currentCollection;
+      prevSearchRef.current = currentSearch;
+      return;
+    }
+
+    const currentParamsStr = searchParams.toString();
+    const isParamsChanged = currentParamsStr !== prevParamsStrRef.current;
+
+    if (isParamsChanged && navigationType !== 'POP') {
+      isUserInteractingRef.current = false;
+      pendingResultsScrollRef.current = true;
+
+      const prevParams = new URLSearchParams(prevParamsStrRef.current);
+      const isServerParamChanged =
+        currentCategory !== prevCategoryRef.current ||
+        currentSubcategory !== prevSubcategoryRef.current ||
+        currentCollection !== prevCollectionRef.current ||
+        currentSearch !== prevSearchRef.current ||
+        searchParams.get('size') !== prevParams.get('size') ||
+        searchParams.get('sort') !== prevParams.get('sort');
+
+      // For client-side-only filter changes when not currently loading or bottom sheet open
+      if (!isServerParamChanged && !loading && !mobileFilterOpen) {
+        triggerResultsScroll();
+      }
+    }
+
+    prevParamsStrRef.current = currentParamsStr;
+    prevCategoryRef.current = currentCategory;
+    prevSubcategoryRef.current = currentSubcategory;
+    prevCollectionRef.current = currentCollection;
+    prevSearchRef.current = currentSearch;
+  }, [
+    searchParams,
+    currentCategory,
+    currentSubcategory,
+    currentCollection,
+    currentSearch,
+    navigationType,
+    loading,
+    mobileFilterOpen,
+  ]);
+
   // Lock background scroll when bottom sheet is open
   useEffect(() => {
     if (mobileFilterOpen || mobileSortOpen) {
@@ -210,8 +353,13 @@ export const Shop: React.FC = () => {
   };
 
   const clearAllFilters = () => {
+    isUserInteractingRef.current = false;
+    pendingResultsScrollRef.current = true;
     setSearchParams(new URLSearchParams());
     setSliderPrice(catalogMaxPrice);
+    if (mobileFilterOpen) {
+      setMobileFilterOpen(false);
+    }
   };
 
   const hasActiveFilters = Boolean(
@@ -329,7 +477,11 @@ export const Shop: React.FC = () => {
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+      <div
+        id="shop-results-section"
+        ref={resultsSectionRef}
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10"
+      >
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-6 font-medium">
           <Link to="/" className="hover:text-[#5E1224] transition-colors">Home</Link>
