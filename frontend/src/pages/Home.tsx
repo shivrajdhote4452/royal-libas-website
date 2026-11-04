@@ -17,6 +17,7 @@ import { BoutiqueHomepageSection } from '../components/BoutiqueHomepageSection';
 import { BoutiqueReviewsSection } from '../components/BoutiqueReviewsSection';
 import { CuratedMomentsSection } from '../components/CuratedMomentsSection';
 import { useStoreSettings } from '../lib/settings';
+import { setMetaDescription, DEFAULT_HOMEPAGE_TITLE, DEFAULT_HOMEPAGE_DESCRIPTION } from '../lib/seo';
 
 export const Home: React.FC = () => {
   const { settings } = useStoreSettings();
@@ -46,7 +47,8 @@ export const Home: React.FC = () => {
   };
 
   useEffect(() => {
-    document.title = 'Royal Libas by Tanya | Handcrafted Festive Silhouettes & Couture';
+    document.title = DEFAULT_HOMEPAGE_TITLE;
+    setMetaDescription(DEFAULT_HOMEPAGE_DESCRIPTION);
     let isMounted = true;
     async function loadData() {
       try {
