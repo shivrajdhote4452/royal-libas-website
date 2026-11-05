@@ -1004,7 +1004,7 @@ export const AdminProductEdit: React.FC = () => {
       {/* ========================================================
           1. TOP BREADCRUMBS & ACTION HEADER
           ======================================================== */}
-      <div className="bg-white border-b border-[#E8DFD0] sticky top-0 z-20 px-4 sm:px-6 py-3.5 shadow-sm">
+      <div className="bg-white border-b border-[#E8DFD0] sticky top-0 z-20 px-4 sm:px-6 py-2.5 shadow-xs">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
           {/* Breadcrumb Trail */}
           <div className="flex items-center gap-2 text-xs text-gray-600 flex-wrap">
@@ -1104,19 +1104,19 @@ export const AdminProductEdit: React.FC = () => {
       {/* ========================================================
           2. TWO-COLUMN EDIT WORKSPACE (Visual 2)
           ======================================================== */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-2">
-        <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 mb-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-1">
+        <h1 className="font-serif text-xl sm:text-2xl font-bold text-gray-900 mb-4">
           Edit Product
         </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
           {/* ----------------------------------------------------
               LEFT COLUMN: Media Preview, Thumbnails & Media Panel
               ---------------------------------------------------- */}
-          <div className="lg:col-span-5 space-y-5">
+          <div className="lg:col-span-4 xl:col-span-4 space-y-3.5">
             {/* Primary Large Photo Preview Card */}
-            <div className="bg-white rounded-2xl border border-[#E8DFD0] overflow-hidden shadow-sm p-3 bg-gradient-to-b from-white to-[#FAF6F0]">
-              <div className="relative aspect-[4/5] rounded-xl overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center">
+            <div className="bg-white rounded-xl border border-[#E8DFD0] overflow-hidden shadow-xs p-2.5 sm:p-3 bg-gradient-to-b from-white to-[#FAF6F0]">
+              <div className="relative aspect-[4/5] max-h-[350px] sm:max-h-[380px] mx-auto rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center">
                 {activePhoto?.url ? (
                   activePhoto.resource_type === 'video' ? (
                     <video
@@ -1132,8 +1132,8 @@ export const AdminProductEdit: React.FC = () => {
                     />
                   )
                 ) : (
-                  <div className="text-center p-6 space-y-2">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-[#5E1224]/10 text-[#5E1224] flex items-center justify-center font-serif text-xl font-bold">
+                  <div className="text-center p-5 space-y-1.5">
+                    <div className="w-12 h-12 mx-auto rounded-full bg-[#5E1224]/10 text-[#5E1224] flex items-center justify-center font-serif text-lg font-bold">
                       RL
                     </div>
                     <p className="text-xs text-gray-500 font-serif">No images uploaded for this garment.</p>
@@ -1142,22 +1142,22 @@ export const AdminProductEdit: React.FC = () => {
 
                 {/* Cover Photo Badge */}
                 {isCover && activePhoto?.url && (
-                  <div className="absolute top-3 left-3 bg-[#5E1224] text-[#E6C687] text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md shadow-md flex items-center gap-1 border border-[#B58A3C]/40">
-                    <Star className="w-3 h-3 fill-[#E6C687]" />
+                  <div className="absolute top-2.5 left-2.5 bg-[#5E1224] text-[#E6C687] text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-sm flex items-center gap-1 border border-[#B58A3C]/40">
+                    <Star className="w-2.5 h-2.5 fill-[#E6C687]" />
                     <span>Cover Photo</span>
                   </div>
                 )}
 
                 {/* Photo Counter */}
                 {photos.length > 0 && (
-                  <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium px-2.5 py-0.5 rounded-full shadow">
+                  <div className="absolute bottom-2.5 right-2.5 bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full shadow-xs">
                     {selectedPhotoIndex + 1} / {photos.length}
                   </div>
                 )}
               </div>
 
               {/* Thumbnail Strip */}
-              <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+              <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
                 {photos.map((item, idx) => {
                   const isSelected = selectedPhotoIndex === idx;
                   return (
@@ -1165,21 +1165,21 @@ export const AdminProductEdit: React.FC = () => {
                       key={item.id || idx}
                       type="button"
                       onClick={() => setSelectedPhotoIndex(idx)}
-                      className={`relative w-16 h-20 rounded-lg overflow-hidden border shrink-0 transition-all ${
+                      className={`relative w-14 h-18 rounded-md overflow-hidden border shrink-0 transition-all ${
                         isSelected
-                          ? 'ring-2 ring-[#5E1224] border-transparent scale-105 shadow-md'
+                          ? 'ring-2 ring-[#5E1224] border-transparent scale-105 shadow-sm'
                           : 'border-gray-300 opacity-70 hover:opacity-100 hover:border-gray-400'
                       }`}
                     >
                       {item.resource_type === 'video' ? (
-                        <div className="w-full h-full bg-gray-900 text-white flex items-center justify-center text-[9px] font-bold">
+                        <div className="w-full h-full bg-gray-900 text-white flex items-center justify-center text-[8px] font-bold">
                           VIDEO
                         </div>
                       ) : (
                         <img src={item.url} alt={item.alt_text || ''} className="w-full h-full object-cover" />
                       )}
                       {idx === 0 && (
-                        <span className="absolute top-1 left-1 bg-[#5E1224] text-white p-0.5 rounded-full shadow text-[8px]">
+                        <span className="absolute top-0.5 left-0.5 bg-[#5E1224] text-white p-0.5 rounded-full shadow text-[7px]">
                           ★
                         </span>
                       )}
@@ -1191,18 +1191,18 @@ export const AdminProductEdit: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-16 h-20 rounded-lg border-2 border-dashed border-[#B58A3C]/50 hover:border-[#5E1224] bg-amber-50/40 hover:bg-amber-50 text-[#5E1224] flex flex-col items-center justify-center gap-1 shrink-0 transition-all"
+                  className="w-14 h-18 rounded-md border-2 border-dashed border-[#B58A3C]/50 hover:border-[#5E1224] bg-amber-50/40 hover:bg-amber-50 text-[#5E1224] flex flex-col items-center justify-center gap-0.5 shrink-0 transition-all"
                   title="Upload New Photo"
                 >
-                  <Plus className="w-5 h-5 text-[#5E1224]" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#5E1224]">Add</span>
+                  <Plus className="w-4 h-4 text-[#5E1224]" />
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#5E1224]">Add</span>
                 </button>
               </div>
             </div>
 
             {/* Media Library & Actions Card */}
-            <div className="bg-white rounded-2xl border border-[#E8DFD0] p-4 sm:p-5 shadow-sm space-y-3">
-              <h3 className="font-serif font-bold text-sm text-gray-900 border-b border-[#E8DFD0] pb-2">
+            <div className="bg-white rounded-xl border border-[#E8DFD0] p-3 sm:p-3.5 shadow-xs space-y-2">
+              <h3 className="font-serif font-bold text-xs uppercase tracking-wider text-gray-800 border-b border-[#E8DFD0] pb-1.5">
                 Media Library & Photos
               </h3>
 
@@ -1211,18 +1211,18 @@ export const AdminProductEdit: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMediaPickerOpen(true)}
-                  className="w-full py-2.5 flex items-center justify-between text-left hover:text-[#5E1224] group transition-colors"
+                  className="w-full py-1.5 flex items-center justify-between text-left hover:text-[#5E1224] group transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-[#5E1224] flex items-center justify-center border border-amber-200/60 group-hover:bg-[#5E1224] group-hover:text-white transition-colors">
-                      <ImageIcon className="w-4 h-4" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-md bg-amber-50 text-[#5E1224] flex items-center justify-center border border-amber-200/60 group-hover:bg-[#5E1224] group-hover:text-white transition-colors">
+                      <ImageIcon className="w-3.5 h-3.5" />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-gray-900 group-hover:text-[#5E1224]">Media Library</p>
-                      <p className="text-[11px] text-gray-500">Choose from existing boutique assets</p>
+                      <p className="text-[10px] text-gray-500">Choose from existing boutique assets</p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#5E1224] transition-colors" />
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#5E1224] transition-colors" />
                 </button>
 
                 {/* 2. Upload New Photos */}
@@ -1230,63 +1230,63 @@ export const AdminProductEdit: React.FC = () => {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingPhotos}
-                  className="w-full py-2.5 flex items-center justify-between text-left hover:text-[#5E1224] group transition-colors"
+                  className="w-full py-1.5 flex items-center justify-between text-left hover:text-[#5E1224] group transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-[#5E1224] flex items-center justify-center border border-amber-200/60 group-hover:bg-[#5E1224] group-hover:text-white transition-colors">
-                      {uploadingPhotos ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-md bg-amber-50 text-[#5E1224] flex items-center justify-center border border-amber-200/60 group-hover:bg-[#5E1224] group-hover:text-white transition-colors">
+                      {uploadingPhotos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                     </div>
                     <div>
                       <p className="text-xs font-bold text-gray-900 group-hover:text-[#5E1224]">Upload Photos</p>
-                      <p className="text-[11px] text-gray-500">
+                      <p className="text-[10px] text-gray-500">
                         {uploadingPhotos ? 'Uploading media assets...' : 'Upload new product images or video'}
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#5E1224] transition-colors" />
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#5E1224] transition-colors" />
                 </button>
 
                 {/* 3. Add via URL */}
                 <button
                   type="button"
                   onClick={() => setUrlModalOpen(true)}
-                  className="w-full py-2.5 flex items-center justify-between text-left hover:text-[#5E1224] group transition-colors"
+                  className="w-full py-1.5 flex items-center justify-between text-left hover:text-[#5E1224] group transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-amber-50 text-[#5E1224] flex items-center justify-center border border-amber-200/60 group-hover:bg-[#5E1224] group-hover:text-white transition-colors">
-                      <LinkIcon className="w-4 h-4" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-md bg-amber-50 text-[#5E1224] flex items-center justify-center border border-amber-200/60 group-hover:bg-[#5E1224] group-hover:text-white transition-colors">
+                      <LinkIcon className="w-3.5 h-3.5" />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-gray-900 group-hover:text-[#5E1224]">Add via URL</p>
-                      <p className="text-[11px] text-gray-500">Attach external Cloudinary or web image</p>
+                      <p className="text-[10px] text-gray-500">Attach external Cloudinary or web image</p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#5E1224] transition-colors" />
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#5E1224] transition-colors" />
                 </button>
 
                 {/* 4. Photo Specific Controls (for currently active thumbnail) */}
                 {photos.length > 0 && (
-                  <div className="pt-3 space-y-2">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                  <div className="pt-2 space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
                       Selected Photo Actions (Photo #{selectedPhotoIndex + 1})
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
                         onClick={() => handleSetCoverPhoto(selectedPhotoIndex)}
                         disabled={isCover}
-                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-300 bg-amber-50/60 text-[#5E1224] hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                        className="flex items-center justify-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-amber-300 bg-amber-50/60 text-[#5E1224] hover:bg-amber-100 disabled:opacity-50 transition-colors"
                       >
-                        <Star className="w-3.5 h-3.5" />
+                        <Star className="w-3 h-3" />
                         <span>Set as Cover</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => handleRemovePhoto(selectedPhotoIndex)}
-                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                        className="flex items-center justify-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                         <span>Remove Photo</span>
                       </button>
 
@@ -1294,9 +1294,9 @@ export const AdminProductEdit: React.FC = () => {
                         type="button"
                         onClick={() => handleMovePhoto(selectedPhotoIndex, 'left')}
                         disabled={selectedPhotoIndex === 0}
-                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:opacity-40 transition-colors"
+                        className="flex items-center justify-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:opacity-40 transition-colors"
                       >
-                        <MoveLeft className="w-3.5 h-3.5" />
+                        <MoveLeft className="w-3 h-3" />
                         <span>Move Left</span>
                       </button>
 
@@ -1304,9 +1304,9 @@ export const AdminProductEdit: React.FC = () => {
                         type="button"
                         onClick={() => handleMovePhoto(selectedPhotoIndex, 'right')}
                         disabled={selectedPhotoIndex === photos.length - 1}
-                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:opacity-40 transition-colors"
+                        className="flex items-center justify-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:opacity-40 transition-colors"
                       >
-                        <MoveRight className="w-3.5 h-3.5" />
+                        <MoveRight className="w-3 h-3" />
                         <span>Move Right</span>
                       </button>
                     </div>
@@ -1329,15 +1329,15 @@ export const AdminProductEdit: React.FC = () => {
           {/* ----------------------------------------------------
               RIGHT COLUMN: Product Details & Sizes/Stock/Pricing
               ---------------------------------------------------- */}
-          <div className="lg:col-span-7 space-y-6">
+          <div className="lg:col-span-8 xl:col-span-8 space-y-4">
             {/* Card 1: Product Details */}
-            <div className="bg-white rounded-2xl border border-[#E8DFD0] p-5 sm:p-6 shadow-sm space-y-5">
-              <div className="flex items-center justify-between border-b border-[#E8DFD0] pb-3">
+            <div className="bg-white rounded-xl border border-[#E8DFD0] p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-[#E8DFD0] pb-2">
                 <div className="flex items-center gap-2">
-                  <h2 className="font-serif font-bold text-base sm:text-lg text-gray-900 text-[#5E1224]">
+                  <h2 className="font-serif font-bold text-sm sm:text-base text-gray-900 text-[#5E1224]">
                     Product Details
                   </h2>
-                  <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 font-semibold inline-flex items-center gap-1">
+                  <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full border border-amber-200 font-semibold inline-flex items-center gap-1">
                     💾 Requires Save
                   </span>
                 </div>
@@ -1357,10 +1357,10 @@ export const AdminProductEdit: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-2.5">
                 {/* Product Name */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-0.5">
                     Product Name *
                   </label>
                   <input
@@ -1372,20 +1372,20 @@ export const AdminProductEdit: React.FC = () => {
                       setIsDirty(true);
                     }}
                     placeholder="e.g. Neel Slate Blue Floral Kurta Pant Set"
-                    className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all"
+                    className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all"
                   />
                 </div>
 
                 {/* Category & Collection */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-0.5">
                       Category *
                     </label>
                     <select
                       value={category}
                       onChange={(e) => handleCategoryChange(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all"
+                      className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all"
                     >
                       {Object.keys(CATEGORY_GROUPS).map((catKey) => (
                         <option key={catKey} value={catKey}>
@@ -1396,7 +1396,7 @@ export const AdminProductEdit: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-0.5">
                       Collection
                     </label>
                     <select
@@ -1405,7 +1405,7 @@ export const AdminProductEdit: React.FC = () => {
                         setSelectedCollectionId(e.target.value);
                         setIsDirty(true);
                       }}
-                      className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all"
+                      className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all"
                     >
                       <option value="">None / Standalone Design</option>
                       {collections.map((col) => (
@@ -1415,7 +1415,7 @@ export const AdminProductEdit: React.FC = () => {
                       ))}
                     </select>
                     {collectionsFetchError && (
-                      <p className="text-[11px] text-amber-700 mt-1">
+                      <p className="text-[10px] text-amber-700 mt-0.5">
                         ⚠️ Collections list could not be loaded. Existing assignments will be preserved on save.
                       </p>
                     )}
@@ -1423,9 +1423,9 @@ export const AdminProductEdit: React.FC = () => {
                 </div>
 
                 {/* Subcategory & SKU */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-0.5">
                       Subcategory
                     </label>
                     <select
@@ -1434,7 +1434,7 @@ export const AdminProductEdit: React.FC = () => {
                         setSubcategory(e.target.value);
                         setIsDirty(true);
                       }}
-                      className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all"
+                      className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all"
                     >
                       {availableSubcategories.map((sub) => (
                         <option key={sub} value={sub}>
@@ -1445,7 +1445,7 @@ export const AdminProductEdit: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-0.5">
                       Base Design SKU
                     </label>
                     <input
@@ -1456,9 +1456,9 @@ export const AdminProductEdit: React.FC = () => {
                         setIsDirty(true);
                       }}
                       placeholder="e.g. RLB-CS-1047"
-                      className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all font-mono"
+                      className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all font-mono"
                     />
-                    <p className="text-[10px] text-gray-400 mt-0.5">
+                    <p className="text-[9px] text-gray-400 mt-0.5">
                       Base design code persisted to variant SKUs (e.g. {sku || 'SKU'}-S)
                     </p>
                   </div>
@@ -1466,25 +1466,25 @@ export const AdminProductEdit: React.FC = () => {
 
                 {/* Description */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-0.5">
                     Description (Optional)
                   </label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     value={description}
                     onChange={(e) => {
                       setDescription(e.target.value);
                       setIsDirty(true);
                     }}
                     placeholder="Artisanal garment details, embroidery, fabric drape, and styling suggestions..."
-                    className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all"
+                    className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all"
                   />
                 </div>
 
                 {/* Artisanal Attributes: Fabric, Fit & Care */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-0.5">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-0.5">
                       Fabric
                     </label>
                     <input
@@ -1495,11 +1495,11 @@ export const AdminProductEdit: React.FC = () => {
                         setIsDirty(true);
                       }}
                       placeholder="e.g. Pure Chanderi Silk"
-                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-[#5E1224] focus:bg-white"
+                      className="w-full px-2.5 py-1 bg-gray-50/50 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-[#5E1224] focus:bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-0.5">
                       Fit
                     </label>
                     <input
@@ -1510,11 +1510,11 @@ export const AdminProductEdit: React.FC = () => {
                         setIsDirty(true);
                       }}
                       placeholder="e.g. Tailored Regular Fit"
-                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-[#5E1224] focus:bg-white"
+                      className="w-full px-2.5 py-1 bg-gray-50/50 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-[#5E1224] focus:bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-0.5">
                       Care
                     </label>
                     <input
@@ -1525,18 +1525,18 @@ export const AdminProductEdit: React.FC = () => {
                         setIsDirty(true);
                       }}
                       placeholder="e.g. Dry clean only"
-                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-[#5E1224] focus:bg-white"
+                      className="w-full px-2.5 py-1 bg-gray-50/50 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-[#5E1224] focus:bg-white"
                     />
                   </div>
                 </div>
 
                 {/* Status Toggle & Slug */}
-                <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                <div className="pt-1.5 border-t border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">
                       Publication:
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {(['PUBLISHED', 'DRAFT', 'ARCHIVED'] as const).map((st) => (
                         <button
                           key={st}
@@ -1545,13 +1545,13 @@ export const AdminProductEdit: React.FC = () => {
                             setStatus(st);
                             setIsDirty(true);
                           }}
-                          className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                          className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all ${
                             status === st
                               ? st === 'PUBLISHED'
-                                ? 'bg-emerald-600 text-white shadow'
+                                ? 'bg-emerald-600 text-white shadow-xs'
                                 : st === 'DRAFT'
-                                ? 'bg-amber-600 text-white shadow'
-                                : 'bg-gray-700 text-white shadow'
+                                ? 'bg-amber-600 text-white shadow-xs'
+                                : 'bg-gray-700 text-white shadow-xs'
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                         >
@@ -1561,7 +1561,7 @@ export const AdminProductEdit: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-gray-400 font-mono truncate max-w-full">
+                  <div className="text-[10px] text-gray-400 font-mono truncate max-w-full">
                     slug: /{slug || product.slug}
                   </div>
                 </div>
@@ -1569,18 +1569,18 @@ export const AdminProductEdit: React.FC = () => {
             </div>
 
             {/* Card 2: Sizes, Stock & Pricing (Visual 2 Table) */}
-            <div className="bg-white rounded-2xl border border-[#E8DFD0] p-5 sm:p-6 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8DFD0] pb-3">
+            <div className="bg-white rounded-xl border border-[#E8DFD0] p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8DFD0] pb-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="font-serif font-bold text-base sm:text-lg text-gray-900 text-[#5E1224]">
+                    <h2 className="font-serif font-bold text-sm sm:text-base text-gray-900 text-[#5E1224]">
                       Sizes, Stock & Pricing
                     </h2>
-                    <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold inline-flex items-center gap-1">
+                    <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full border border-emerald-200 font-semibold inline-flex items-center gap-1">
                       <Check className="w-2.5 h-2.5" /> ⚡ Saved Live
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-500">
+                  <p className="text-[10px] text-gray-500">
                     Live stock stepper and availability toggles save instantly to server with concurrency protection.
                   </p>
                 </div>
@@ -1591,18 +1591,18 @@ export const AdminProductEdit: React.FC = () => {
                       type="button"
                       onClick={handleSaveAllVariantPrices}
                       disabled={savingProduct}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E1224] text-white text-xs font-semibold rounded-lg hover:bg-[#4A0E1C] transition-colors shadow-sm"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#5E1224] text-white text-xs font-semibold rounded-md hover:bg-[#4A0E1C] transition-colors shadow-xs"
                     >
-                      <Save className="w-3.5 h-3.5" />
+                      <Save className="w-3 h-3" />
                       <span>{savingProduct ? 'Saving...' : 'Save Prices'}</span>
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => setIsEditingAllPrices(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-lg border border-gray-300 transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-md border border-gray-300 transition-colors"
                     >
-                      <Edit2 className="w-3.5 h-3.5 text-[#5E1224]" />
+                      <Edit2 className="w-3 h-3 text-[#5E1224]" />
                       <span>Edit Prices</span>
                     </button>
                   )}
@@ -1610,30 +1610,30 @@ export const AdminProductEdit: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setAddSizeModalOpen(true)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-[#5E1224] border border-amber-300 text-xs font-bold rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-[#5E1224] border border-amber-300 text-xs font-bold rounded-md transition-colors"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3 h-3" />
                     <span>Add Size</span>
                   </button>
                 </div>
               </div>
 
               {/* Sizes Table */}
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#FAF6F0] text-gray-700 uppercase tracking-wider text-[11px] font-bold border-b border-gray-200">
+                  <thead className="bg-[#FAF6F0] text-gray-700 uppercase tracking-wider text-[10px] font-bold border-b border-gray-200">
                     <tr>
-                      <th className="py-2.5 px-3">Size</th>
-                      <th className="py-2.5 px-3 text-center">Stock</th>
-                      <th className="py-2.5 px-3 text-right">Price (₹)</th>
-                      <th className="py-2.5 px-3 text-right">MRP (₹)</th>
-                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2 px-2.5">Size</th>
+                      <th className="py-2 px-2.5 text-center">Stock</th>
+                      <th className="py-2 px-2.5 text-right">Price (₹)</th>
+                      <th className="py-2 px-2.5 text-right">MRP (₹)</th>
+                      <th className="py-2 px-2.5 text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {variants.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-gray-400">
+                        <td colSpan={5} className="py-5 text-center text-gray-400">
                           No size variants created yet. Click "+ Add Size" to add garment sizes.
                         </td>
                       </tr>
@@ -1649,30 +1649,30 @@ export const AdminProductEdit: React.FC = () => {
                         return (
                           <tr key={v.id} className="hover:bg-amber-50/20 transition-colors">
                             {/* Size Name & SKU */}
-                            <td className="py-3 px-3 font-bold text-gray-900">
-                              <span className="font-serif text-sm">{v.size}</span>
-                              {v.sku && <span className="block text-[10px] text-gray-400 font-mono">{v.sku}</span>}
+                            <td className="py-2 px-2.5 font-bold text-gray-900">
+                              <span className="font-serif text-xs">{v.size}</span>
+                              {v.sku && <span className="block text-[9px] text-gray-400 font-mono">{v.sku}</span>}
                             </td>
 
                             {/* Stock Stepper (- qty +) */}
-                            <td className="py-3 px-3 text-center">
-                              <div className="inline-flex items-center rounded-lg border border-gray-300 bg-white shadow-sm overflow-hidden">
+                            <td className="py-2 px-2.5 text-center">
+                              <div className="inline-flex items-center rounded-md border border-gray-300 bg-white shadow-xs overflow-hidden">
                                 <button
                                   type="button"
                                   onClick={() => handleStockStep(v.id, -1)}
                                   disabled={v.stock <= 0 || isUpdating}
-                                  className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 disabled:opacity-30 font-bold transition-colors"
+                                  className="px-2 py-0.5 text-gray-600 hover:bg-gray-100 disabled:opacity-30 font-bold text-xs transition-colors"
                                 >
                                   −
                                 </button>
-                                <span className="px-3 py-1 font-bold text-gray-900 min-w-[32px] text-center">
-                                  {isUpdating ? <Loader2 className="w-3 h-3 animate-spin mx-auto text-[#5E1224]" /> : v.stock}
+                                <span className="px-2.5 py-0.5 font-bold text-gray-900 min-w-[28px] text-xs text-center">
+                                  {isUpdating ? <Loader2 className="w-2.5 h-2.5 animate-spin mx-auto text-[#5E1224]" /> : v.stock}
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => handleStockStep(v.id, 1)}
                                   disabled={isUpdating}
-                                  className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 disabled:opacity-30 font-bold transition-colors"
+                                  className="px-2 py-0.5 text-gray-600 hover:bg-gray-100 disabled:opacity-30 font-bold text-xs transition-colors"
                                 >
                                   +
                                 </button>
@@ -1680,7 +1680,7 @@ export const AdminProductEdit: React.FC = () => {
                             </td>
 
                             {/* Price (₹) */}
-                            <td className="py-3 px-3 text-right">
+                            <td className="py-2 px-2.5 text-right">
                               {isEditingAllPrices ? (
                                 <input
                                   type="number"
@@ -1691,17 +1691,17 @@ export const AdminProductEdit: React.FC = () => {
                                       [v.id]: { ...edits, selling_price: e.target.value },
                                     }))
                                   }
-                                  className="w-20 px-2 py-1 text-right text-xs border border-gray-300 rounded font-semibold focus:ring-1 focus:ring-[#5E1224]"
+                                  className="w-18 px-1.5 py-0.5 text-right text-xs border border-gray-300 rounded font-semibold focus:ring-1 focus:ring-[#5E1224]"
                                 />
                               ) : (
-                                <span className="font-semibold text-gray-900">
+                                <span className="font-semibold text-gray-900 text-xs">
                                   ₹{v.selling_price.toLocaleString('en-IN')}
                                 </span>
                               )}
                             </td>
 
                             {/* MRP (₹) */}
-                            <td className="py-3 px-3 text-right">
+                            <td className="py-2 px-2.5 text-right">
                               {isEditingAllPrices ? (
                                 <input
                                   type="number"
@@ -1713,22 +1713,22 @@ export const AdminProductEdit: React.FC = () => {
                                       [v.id]: { ...edits, mrp: e.target.value },
                                     }))
                                   }
-                                  className="w-20 px-2 py-1 text-right text-xs border border-gray-300 rounded text-gray-600 focus:ring-1 focus:ring-[#5E1224]"
+                                  className="w-18 px-1.5 py-0.5 text-right text-xs border border-gray-300 rounded text-gray-600 focus:ring-1 focus:ring-[#5E1224]"
                                 />
                               ) : (
-                                <span className="text-gray-500">
+                                <span className="text-gray-500 text-xs">
                                   {v.mrp ? `₹${v.mrp.toLocaleString('en-IN')}` : '—'}
                                 </span>
                               )}
                             </td>
 
                             {/* ON/OFF Switch */}
-                            <td className="py-3 px-3 text-center">
+                            <td className="py-2 px-2.5 text-center">
                               <button
                                 type="button"
                                 onClick={() => handleToggleVariantActive(v)}
                                 disabled={isUpdating}
-                                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm ${
+                                className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-all shadow-xs ${
                                   v.is_active
                                     ? 'bg-[#5E1224] text-white hover:bg-[#4A0E1C]'
                                     : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
@@ -1746,19 +1746,19 @@ export const AdminProductEdit: React.FC = () => {
               </div>
 
               {/* Summary Bar (Visual 2 bottom) */}
-              <div className="grid grid-cols-3 gap-3 p-3 bg-[#FAF6F0] rounded-xl border border-[#E8DFD0] text-center">
+              <div className="grid grid-cols-3 gap-2 p-2 sm:p-2.5 bg-[#FAF6F0] rounded-lg border border-[#E8DFD0] text-center">
                 <div>
-                  <span className="block text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                  <span className="block text-[9px] uppercase tracking-wider text-gray-500 font-bold">
                     Total Sizes
                   </span>
-                  <span className="font-serif text-base font-bold text-gray-900">{totalSizes}</span>
+                  <span className="font-serif text-sm sm:text-base font-bold text-gray-900">{totalSizes}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                  <span className="block text-[9px] uppercase tracking-wider text-gray-500 font-bold">
                     Total Stock
                   </span>
                   <span
-                    className={`font-serif text-base font-bold ${
+                    className={`font-serif text-sm sm:text-base font-bold ${
                       totalStock === 0 ? 'text-red-700' : totalStock < 10 ? 'text-amber-700' : 'text-emerald-800'
                     }`}
                   >
@@ -1766,10 +1766,10 @@ export const AdminProductEdit: React.FC = () => {
                   </span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                  <span className="block text-[9px] uppercase tracking-wider text-gray-500 font-bold">
                     Price Range
                   </span>
-                  <span className="font-serif text-base font-bold text-[#5E1224]">{priceRange}</span>
+                  <span className="font-serif text-sm sm:text-base font-bold text-[#5E1224]">{priceRange}</span>
                 </div>
               </div>
             </div>
@@ -1780,25 +1780,25 @@ export const AdminProductEdit: React.FC = () => {
       {/* ========================================================
           3. STICKY BOTTOM SAVE & BACK ACTION BAR
           ======================================================== */}
-      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-[#E8DFD0] px-4 sm:px-8 py-3.5 shadow-2xl">
+      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-[#E8DFD0] px-4 sm:px-6 py-2 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <button
             type="button"
             onClick={handleBackToProducts}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Products</span>
           </button>
 
           <div className="flex items-center gap-3">
             {isDirty ? (
-              <span className="hidden sm:inline-flex items-center gap-2 text-xs text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-semibold">
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                 Unsaved changes in Product Details / Photos / Pricing
               </span>
             ) : (
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 font-semibold">
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 font-semibold">
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                 All changes saved
               </span>
@@ -1808,16 +1808,16 @@ export const AdminProductEdit: React.FC = () => {
               type="button"
               onClick={handleSaveProduct}
               disabled={savingProduct}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs sm:text-sm font-bold rounded-xl shadow-md disabled:opacity-50 transition-all hover:scale-[1.02]"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-bold rounded-lg shadow-sm disabled:opacity-50 transition-all hover:scale-[1.01]"
             >
               {savingProduct ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span>Saving Product...</span>
                 </>
               ) : (
                 <>
-                  <Check className="w-4 h-4" />
+                  <Check className="w-3.5 h-3.5" />
                   <span>Save Product</span>
                 </>
               )}

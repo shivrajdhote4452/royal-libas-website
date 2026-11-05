@@ -218,32 +218,32 @@ export const AdminProducts: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ========================================================
           1. HEADER & ACTIONS (Visual 1)
           ======================================================== */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900 text-[#5E1224]">
+          <h1 className="font-serif text-xl sm:text-2xl font-bold text-gray-900 text-[#5E1224]">
             Products & Sizes
           </h1>
-          <p className="text-xs sm:text-sm text-gray-600 font-sans mt-0.5">
+          <p className="text-xs text-gray-500 font-sans mt-0.5">
             Manage your boutique catalogue, sizes, live stock, and pricing.
           </p>
         </div>
 
         <button
           onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs sm:text-sm font-semibold rounded-xl shadow-md transition-all hover:scale-[1.02] shrink-0"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-semibold rounded-lg shadow-sm transition-all hover:scale-[1.01] shrink-0"
         >
-          <Plus className="w-4 h-4 text-[#E6C687]" />
+          <Plus className="w-3.5 h-3.5 text-[#E6C687]" />
           <span>Add New Product</span>
         </button>
       </div>
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold flex items-center justify-between shadow-sm animate-fadeIn">
+        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs font-semibold flex items-center justify-between shadow-xs animate-fadeIn">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{toastMessage}</span>
@@ -255,10 +255,10 @@ export const AdminProducts: React.FC = () => {
           2. STATUS FILTER TABS (Visual 1)
           ======================================================== */}
       <div className="border-b border-[#E8DFD0] overflow-x-auto pb-px custom-scrollbar">
-        <div className="flex items-center gap-2 sm:gap-4 min-w-max">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-max">
           <button
             onClick={() => setStatusFilter('working')}
-            className={`py-2.5 px-3 sm:px-4 text-xs font-bold transition-all relative ${
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
               statusFilter === 'working'
                 ? 'text-[#5E1224] border-b-2 border-[#5E1224] bg-amber-50/30'
                 : 'text-gray-500 hover:text-gray-900'
@@ -272,7 +272,7 @@ export const AdminProducts: React.FC = () => {
 
           <button
             onClick={() => setStatusFilter('published')}
-            className={`py-2.5 px-3 sm:px-4 text-xs font-bold transition-all relative ${
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
               statusFilter === 'published'
                 ? 'text-emerald-800 border-b-2 border-emerald-700 bg-emerald-50/30'
                 : 'text-gray-500 hover:text-gray-900'
@@ -286,7 +286,7 @@ export const AdminProducts: React.FC = () => {
 
           <button
             onClick={() => setStatusFilter('draft')}
-            className={`py-2.5 px-3 sm:px-4 text-xs font-bold transition-all relative ${
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
               statusFilter === 'draft'
                 ? 'text-amber-800 border-b-2 border-amber-600 bg-amber-50/40'
                 : 'text-gray-500 hover:text-gray-900'
@@ -300,7 +300,7 @@ export const AdminProducts: React.FC = () => {
 
           <button
             onClick={() => setStatusFilter('archived')}
-            className={`py-2.5 px-3 sm:px-4 text-xs font-bold transition-all relative ${
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
               statusFilter === 'archived'
                 ? 'text-gray-800 border-b-2 border-gray-700 bg-gray-100'
                 : 'text-gray-500 hover:text-gray-900'
@@ -314,7 +314,7 @@ export const AdminProducts: React.FC = () => {
 
           <button
             onClick={() => setStatusFilter('all')}
-            className={`py-2.5 px-3 sm:px-4 text-xs font-bold transition-all relative ${
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
               statusFilter === 'all'
                 ? 'text-[#5E1224] border-b-2 border-[#5E1224] bg-amber-50/30'
                 : 'text-gray-500 hover:text-gray-900'
@@ -331,26 +331,26 @@ export const AdminProducts: React.FC = () => {
       {/* ========================================================
           3. SEARCH, CATEGORY FILTER & VIEW TOGGLE (Visual 1)
           ======================================================== */}
-      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-[#E8DFD0] shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
         {/* Search Input */}
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search by product name, SKU or design no."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:border-transparent bg-gray-50/50"
+            className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:border-transparent bg-gray-50/50"
           />
         </div>
 
         {/* Category Filter Dropdown */}
         <div className="flex items-center gap-2">
-          <div className="relative min-w-[170px]">
+          <div className="relative min-w-[160px]">
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#5E1224] bg-gray-50/50 cursor-pointer text-gray-700 appearance-none"
+              className="w-full pl-3 pr-7 py-1.5 border border-gray-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#5E1224] bg-gray-50/50 cursor-pointer text-gray-700 appearance-none"
             >
               <option value="ALL">All Categories</option>
               {Object.keys(CATEGORY_GROUPS).map((cat) => (
@@ -367,7 +367,7 @@ export const AdminProducts: React.FC = () => {
                 ))
               )}
             </select>
-            <Filter className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Filter className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
           {/* Reset Filters */}
@@ -379,37 +379,37 @@ export const AdminProducts: React.FC = () => {
                 setCategoryFilter('ALL');
                 setStatusFilter('working');
               }}
-              className="px-2.5 py-1.5 text-gray-500 hover:text-gray-900 underline text-xs whitespace-nowrap"
+              className="px-2 py-1 text-gray-500 hover:text-gray-900 underline text-xs whitespace-nowrap"
             >
               Reset
             </button>
           )}
 
           {/* View Mode Toggle (Grid Cards vs List Table) */}
-          <div className="flex items-center rounded-xl border border-gray-300 bg-gray-100 p-0.5 shadow-inner">
+          <div className="flex items-center rounded-lg border border-gray-300 bg-gray-100 p-0.5 shadow-inner">
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-md transition-colors ${
                 viewMode === 'grid'
-                  ? 'bg-white text-[#5E1224] shadow-sm font-bold'
+                  ? 'bg-white text-[#5E1224] shadow-xs font-bold'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               title="Photo Cards Grid View"
             >
-              <LayoutGrid className="w-4 h-4" />
+              <LayoutGrid className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-md transition-colors ${
                 viewMode === 'list'
-                  ? 'bg-white text-[#5E1224] shadow-sm font-bold'
+                  ? 'bg-white text-[#5E1224] shadow-xs font-bold'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
               title="Compact List View"
             >
-              <List className="w-4 h-4" />
+              <List className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -424,29 +424,29 @@ export const AdminProducts: React.FC = () => {
           <p className="text-xs text-gray-500 font-serif">Loading boutique designs...</p>
         </div>
       ) : error ? (
-        <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center space-y-3 max-w-lg mx-auto">
-          <AlertCircle className="w-8 h-8 text-red-700 mx-auto" />
+        <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-center space-y-3 max-w-lg mx-auto">
+          <AlertCircle className="w-7 h-7 text-red-700 mx-auto" />
           <p className="text-sm text-red-800 font-semibold">{error}</p>
           <button
             onClick={loadProducts}
-            className="px-5 py-2 bg-[#5E1224] text-white rounded-xl text-xs font-semibold shadow hover:bg-[#4A0E1C]"
+            className="px-4 py-2 bg-[#5E1224] text-white rounded-lg text-xs font-semibold shadow hover:bg-[#4A0E1C]"
           >
             Retry Loading
           </button>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-[#E8DFD0] p-12 text-center text-gray-400 text-xs space-y-2">
-          <div className="w-12 h-12 rounded-full bg-amber-50 text-[#B58A3C] flex items-center justify-center mx-auto mb-2">
-            <Search className="w-6 h-6" />
+        <div className="bg-white rounded-xl border border-[#E8DFD0] p-10 text-center text-gray-400 text-xs space-y-2">
+          <div className="w-10 h-10 rounded-full bg-amber-50 text-[#B58A3C] flex items-center justify-center mx-auto mb-2">
+            <Search className="w-5 h-5" />
           </div>
           <p className="text-sm font-semibold text-gray-700">No designs found matching the selected filter criteria.</p>
           <p className="text-gray-400">Try adjusting your search keywords, category filter, or status tab.</p>
         </div>
       ) : viewMode === 'grid' ? (
         /* ------------------------------------------------------
-           PHOTO CARDS GRID VIEW (Screen 1 in Visual Reference)
+           PHOTO CARDS GRID VIEW (Compact & Responsive)
            ------------------------------------------------------ */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-3.5 lg:gap-4">
           {filteredProducts.map((product) => {
             const primaryImg = product.primary_image || product.images?.[0]?.url;
             const totalStock = product.total_stock ?? product.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
@@ -456,7 +456,7 @@ export const AdminProducts: React.FC = () => {
             return (
               <div
                 key={product.id}
-                className="bg-white rounded-2xl border border-[#E8DFD0] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col group bg-gradient-to-b from-white to-[#FAF6F0]/20"
+                className="bg-white rounded-xl border border-[#E8DFD0] overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group bg-gradient-to-b from-white to-[#FAF6F0]/20"
               >
                 {/* Product Cover Photo Card */}
                 <div className="relative aspect-[4/5] w-full overflow-hidden bg-gray-100 border-b border-[#E8DFD0]/60">
@@ -468,8 +468,8 @@ export const AdminProducts: React.FC = () => {
                       loading="lazy"
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#FAF6F0] text-center">
-                      <div className="w-12 h-12 rounded-full bg-[#5E1224]/10 text-[#5E1224] flex items-center justify-center font-serif text-lg font-bold mb-1 border border-[#B58A3C]/30">
+                    <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-[#FAF6F0] text-center">
+                      <div className="w-10 h-10 rounded-full bg-[#5E1224]/10 text-[#5E1224] flex items-center justify-center font-serif text-base font-bold mb-1 border border-[#B58A3C]/30">
                         RL
                       </div>
                       <span className="text-[10px] text-gray-400 font-serif">No photo uploaded</span>
@@ -478,30 +478,30 @@ export const AdminProducts: React.FC = () => {
 
                   {/* Bestseller Badge */}
                   {product.is_bestseller && (
-                    <span className="absolute top-2.5 right-2.5 bg-[#5E1224] text-[#E6C687] text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow border border-[#B58A3C]/40">
+                    <span className="absolute top-2 right-2 bg-[#5E1224] text-[#E6C687] text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow border border-[#B58A3C]/40">
                       Bestseller
                     </span>
                   )}
                 </div>
 
                 {/* Card Body */}
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
                   <div>
                     {/* Product Name */}
-                    <h3 className="font-serif font-bold text-sm text-gray-900 group-hover:text-[#5E1224] transition-colors line-clamp-1 mb-1">
+                    <h3 className="font-serif font-bold text-xs sm:text-sm text-gray-900 group-hover:text-[#5E1224] transition-colors line-clamp-1 mb-0.5" title={product.name}>
                       {product.name}
                     </h3>
 
                     {/* Category / Subcategory */}
-                    <div className="flex items-center gap-1.5 text-xs text-gray-600 mb-2">
-                      <Folder className="w-3.5 h-3.5 text-[#B58A3C] shrink-0" />
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-1.5">
+                      <Folder className="w-3 h-3 text-[#B58A3C] shrink-0" />
                       <span className="truncate">{product.subcategory || product.category || 'Atelier Design'}</span>
                     </div>
 
                     {/* Status Pill with dot */}
                     <div className="flex items-center">
                       <span
-                        className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                           status === 'PUBLISHED'
                             ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                             : status === 'DRAFT'
@@ -524,15 +524,15 @@ export const AdminProducts: React.FC = () => {
                   </div>
 
                   {/* Stats Row: Sizes & Total Stock */}
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-600">
+                  <div className="pt-1.5 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-600">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-400 block">Sizes</span>
-                      <span className="font-serif font-bold text-gray-900">{sizeCount}</span>
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Sizes</span>
+                      <span className="font-serif font-bold text-gray-900 text-xs">{sizeCount}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-gray-400 block">Total Stock</span>
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Total Stock</span>
                       <span
-                        className={`font-serif font-bold ${
+                        className={`font-serif font-bold text-xs ${
                           totalStock === 0 ? 'text-red-700' : totalStock < 10 ? 'text-amber-700' : 'text-gray-900'
                         }`}
                       >
@@ -544,9 +544,9 @@ export const AdminProducts: React.FC = () => {
                   {/* Manage Product Button (Navigates to Dedicated Edit Page) */}
                   <Link
                     to={`/admin/products/${product.id}`}
-                    className="w-full mt-2 py-2 px-3 border border-[#5E1224]/30 hover:border-[#5E1224] bg-white hover:bg-[#5E1224] text-[#5E1224] hover:text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 group-hover:border-[#5E1224]"
+                    className="w-full mt-1.5 py-1.5 px-2 border border-[#5E1224]/30 hover:border-[#5E1224] bg-white hover:bg-[#5E1224] text-[#5E1224] hover:text-white rounded-lg text-xs font-semibold transition-all shadow-xs flex items-center justify-center gap-1.5 group-hover:border-[#5E1224]"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
+                    <Edit3 className="w-3 h-3" />
                     <span>Manage Product</span>
                   </Link>
                 </div>
@@ -558,16 +558,16 @@ export const AdminProducts: React.FC = () => {
         /* ------------------------------------------------------
            COMPACT LIST VIEW (Alternative Density)
            ------------------------------------------------------ */
-        <div className="bg-white rounded-2xl border border-[#E8DFD0] overflow-hidden shadow-sm">
+        <div className="bg-white rounded-xl border border-[#E8DFD0] overflow-hidden shadow-xs">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#FAF6F0] text-gray-700 uppercase tracking-wider text-[11px] font-bold border-b border-gray-200">
+            <thead className="bg-[#FAF6F0] text-gray-700 uppercase tracking-wider text-[10px] font-bold border-b border-gray-200">
               <tr>
-                <th className="py-3 px-4">Design</th>
-                <th className="py-3 px-4">Category</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-center">Sizes</th>
-                <th className="py-3 px-4 text-center">Stock</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="py-2.5 px-3">Design</th>
+                <th className="py-2.5 px-3">Category</th>
+                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3 text-center">Sizes</th>
+                <th className="py-2.5 px-3 text-center">Stock</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -579,36 +579,36 @@ export const AdminProducts: React.FC = () => {
                 return (
                   <tr key={product.id} className="hover:bg-amber-50/20 transition-colors">
                     {/* Design Photo & Name */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-11 rounded bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
                           {primaryImg ? (
                             <img src={primaryImg} alt={product.name} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full bg-[#5E1224] text-white text-[9px] flex items-center justify-center font-serif">
+                            <div className="w-full h-full bg-[#5E1224] text-white text-[8px] flex items-center justify-center font-serif">
                               RL
                             </div>
                           )}
                         </div>
                         <div>
-                          <p className="font-serif font-bold text-gray-900 text-sm">{product.name}</p>
+                          <p className="font-serif font-bold text-gray-900 text-xs sm:text-sm">{product.name}</p>
                           <p className="text-[10px] text-gray-400 font-mono">ID: #{product.id}</p>
                         </div>
                       </div>
                     </td>
 
                     {/* Category */}
-                    <td className="py-3 px-4 text-gray-600">
-                      <span className="font-semibold text-gray-800">{product.category}</span>
+                    <td className="py-2 px-3 text-gray-600">
+                      <span className="font-semibold text-gray-800 text-xs">{product.category}</span>
                       {product.subcategory && (
-                        <span className="block text-[11px] text-gray-500">{product.subcategory}</span>
+                        <span className="block text-[10px] text-gray-500">{product.subcategory}</span>
                       )}
                     </td>
 
                     {/* Status */}
-                    <td className="py-3 px-4">
+                    <td className="py-2 px-3">
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
                           status === 'PUBLISHED'
                             ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                             : status === 'DRAFT'
@@ -621,14 +621,14 @@ export const AdminProducts: React.FC = () => {
                     </td>
 
                     {/* Sizes Count */}
-                    <td className="py-3 px-4 text-center font-bold text-gray-800">
+                    <td className="py-2 px-3 text-center font-bold text-gray-800">
                       {product.variants.length}
                     </td>
 
                     {/* Stock Count */}
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-2 px-3 text-center">
                       <span
-                        className={`font-bold ${
+                        className={`font-bold text-xs ${
                           totalStock === 0 ? 'text-red-700' : totalStock < 10 ? 'text-amber-700' : 'text-gray-800'
                         }`}
                       >
@@ -637,12 +637,12 @@ export const AdminProducts: React.FC = () => {
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-2 px-3 text-right">
                       <Link
                         to={`/admin/products/${product.id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#5E1224]/30 hover:border-[#5E1224] text-[#5E1224] hover:bg-[#5E1224] hover:text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-[#5E1224]/30 hover:border-[#5E1224] text-[#5E1224] hover:bg-[#5E1224] hover:text-white rounded-md text-xs font-semibold shadow-xs transition-all"
                       >
-                        <Edit3 className="w-3.5 h-3.5" />
+                        <Edit3 className="w-3 h-3" />
                         <span>Manage</span>
                       </Link>
                     </td>
