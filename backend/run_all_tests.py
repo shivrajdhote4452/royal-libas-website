@@ -22,6 +22,7 @@ Security & Execution Model:
 
 import atexit
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -58,6 +59,7 @@ runner_env["CASHFREE_CLIENT_SECRET"] = "cf_test_isolated_runner_secret"
 runner_env["CASHFREE_ENVIRONMENT"] = "sandbox"
 runner_env["SHIPROCKET_API_EMAIL"] = "test@royallibas.com"
 runner_env["SHIPROCKET_API_PASSWORD"] = "test_shiprocket_password"
+runner_env["CLOUDINARY_CLOUD_NAME"] = os.environ.get("CLOUDINARY_CLOUD_NAME") or "galbyoxi"
 
 # Prepend temp_dir and backend_dir so sitecustomize.py and network_guard load automatically
 orig_pythonpath = runner_env.get("PYTHONPATH", "")
@@ -100,6 +102,36 @@ QUARANTINED_SUITES = {
 }
 
 
+def check_suite_output(output: str, returncode: int) -> tuple[bool, bool, str]:
+    """Inspects process output to determine if tests actually ran and passed.
+
+    Returns:
+        (is_success, is_zero_or_skipped, reason)
+    """
+    if returncode != 0:
+        return (False, False, "Process exited with non-zero exit code")
+
+    # Match unittest 'Ran X test(s) in ...'
+    ran_match = re.search(r"Ran (\d+) tests? in", output)
+    if ran_match:
+        ran_count = int(ran_match.group(1))
+        if ran_count == 0:
+            return (False, True, "Suite reported 0 tests ran (empty test run or module-level skip)")
+
+        skip_match = re.search(r"OK \(skipped=(\d+)\)", output)
+        if skip_match:
+            skipped_count = int(skip_match.group(1))
+            if skipped_count >= ran_count:
+                return (False, True, f"Suite executed {ran_count} tests but all {skipped_count} were skipped")
+
+        return (True, False, "")
+
+    if "NO TESTS RAN" in output or "Ran 0 tests" in output:
+        return (False, True, "Suite reported NO TESTS RAN")
+
+    return (True, False, "")
+
+
 def run_tests():
     print("=" * 70)
     print(">>> ROYAL LIBAS ISOLATED TEST RUNNER <<<")
@@ -115,6 +147,7 @@ def run_tests():
 
     passed = []
     failed = []
+    skipped_zero_test_suites = []
     quarantined_blocked = []
     unverified_blocked = []
 
@@ -150,25 +183,32 @@ def run_tests():
             env=runner_env,
         )
 
-        if res.returncode == 0:
+        output = (res.stderr or "") + "\n" + (res.stdout or "")
+        is_success, is_zero_or_skipped, reason = check_suite_output(output, res.returncode)
+
+        if is_success:
             print(f"[PASS] {tf}")
             passed.append(tf)
+        elif is_zero_or_skipped:
+            print(f"[SKIPPED / ZERO TESTS] {tf} ({reason})")
+            skipped_zero_test_suites.append((tf, reason))
         else:
             print(f"[FAIL] {tf}")
-            output = (res.stderr.strip() or res.stdout.strip())
-            lines = output.splitlines()
-            snippet = "\n".join(lines[-15:]) if len(lines) > 15 else output
+            err_output = (res.stderr.strip() or res.stdout.strip())
+            lines = err_output.splitlines()
+            snippet = "\n".join(lines[-15:]) if len(lines) > 15 else err_output
             print("--- Error Summary ---")
             print(snippet)
             failed.append(tf)
 
-    total_executed = len(passed) + len(failed)
+    total_dispatched = len(target_files)
 
     print("\n" + "=" * 70)
     print(">>> TEST EXECUTION SUMMARY <<<")
     print("=" * 70)
-    print(f"Suites Executed:                 {total_executed}")
+    print(f"Suites Dispatched:               {total_dispatched}")
     print(f"Verified Safe Suites Passed:     {len(passed)}")
+    print(f"Suites Skipped / Zero Tests:     {len(skipped_zero_test_suites)}")
     print(f"Verified Safe Suites Failed:     {len(failed)}")
     print(f"Quarantined Suites Blocked:      {len(quarantined_blocked)}")
     print(f"Unverified Suites Blocked:       {len(unverified_blocked)}")
@@ -186,8 +226,9 @@ def run_tests():
         print("\n[ERROR] No test suites passed. An empty test run is never reported as a pass.")
         sys.exit(1)
 
-    # Return non-zero exit code if ANY test failed, or if any explicit target was blocked
-    if failed or quarantined_blocked or unverified_blocked:
+    # Return non-zero exit code if ANY test failed, if explicit targets were quarantined/unverified,
+    # or if an explicit target resulted in zero executed tests / only skips.
+    if failed or quarantined_blocked or unverified_blocked or (is_explicit and skipped_zero_test_suites):
         sys.exit(1)
     else:
         sys.exit(0)
