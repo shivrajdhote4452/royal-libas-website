@@ -245,11 +245,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                   const thumb =
                     product.primary_image ||
                     (product.images && product.images.length > 0 ? product.images[0].url : null);
-                  const price =
-                    product.min_price ||
-                    (product.variants && product.variants.length > 0
-                      ? product.variants[0].selling_price
-                      : 0);
+                  const purchasable = (product.variants || []).filter((v) => v.is_active && v.stock > 0);
+                  const eligiblePrices = purchasable.map((v) => Number(v.selling_price));
+                  const minPrice = eligiblePrices.length > 0 ? Math.min(...eligiblePrices) : (product.min_price ? Number(product.min_price) : null);
+                  const maxPrice = eligiblePrices.length > 0 ? Math.max(...eligiblePrices) : (product.max_price ? Number(product.max_price) : null);
+                  const hasPriceRange = minPrice !== null && maxPrice !== null && minPrice !== maxPrice;
+                  const isSoldOut = product.total_stock === 0 || purchasable.length === 0;
 
                   return (
                     <Link
@@ -280,7 +281,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                           {product.name}
                         </h4>
                         <div className="text-xs font-bold text-[#5B111A] mt-1 price-display">
-                          {formatPrice(price)}
+                          {isSoldOut ? (
+                            <span className="text-[11px] text-gray-500 font-semibold uppercase">Sold Out</span>
+                          ) : (
+                            <>
+                              {hasPriceRange && <span className="text-[10px] font-normal text-gray-500 mr-0.5">From</span>}
+                              {formatPrice(minPrice)}
+                            </>
+                          )}
                         </div>
                       </div>
                     </Link>

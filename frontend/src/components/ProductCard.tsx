@@ -65,10 +65,48 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const canCrossfade = Boolean(hasSecondary && secondaryLoaded);
 
   // Prices and stock
-  const firstVariant = product.variants && product.variants.length > 0 ? product.variants[0] : null;
-  const sellingPrice = product.min_price ?? (firstVariant ? firstVariant.selling_price : 0);
-  const mrp = firstVariant?.mrp ?? null;
-  const isSoldOut = product.total_stock === 0 || Boolean(product.badges?.includes('Sold Out'));
+  // 1. Purchasable variants: must be active AND in stock (stock > 0)
+  const purchasableVariants = (product.variants || []).filter(
+    (v) => v.is_active !== false && v.stock > 0
+  );
+  const hasPurchasableVariants = purchasableVariants.length > 0;
+  const isSoldOut =
+    product.total_stock === 0 ||
+    !hasPurchasableVariants ||
+    Boolean(product.badges?.includes('Sold Out'));
+
+  // 2. Derive starting price and matching MRP
+  let displaySellingPrice: number | null = null;
+  let displayMrp: number | null = null;
+  let hasPriceRange = false;
+
+  if (hasPurchasableVariants) {
+    const eligiblePrices = purchasableVariants.map((v) => Number(v.selling_price));
+    const minPrice = Math.min(...eligiblePrices);
+    const maxPrice = Math.max(...eligiblePrices);
+    hasPriceRange = minPrice !== maxPrice;
+
+    // Pick representative variant matching lowest eligible price (do not combine values from different variants!)
+    const matchingVariants = purchasableVariants.filter((v) => Number(v.selling_price) === minPrice);
+    const chosenVariant = matchingVariants.reduce((best, curr) => {
+      const bestMrp = best.mrp ? Number(best.mrp) : 0;
+      const currMrp = curr.mrp ? Number(curr.mrp) : 0;
+      return currMrp > bestMrp ? curr : best;
+    }, matchingVariants[0]);
+
+    displaySellingPrice = minPrice;
+    displayMrp = chosenVariant?.mrp ? Number(chosenVariant.mrp) : null;
+  } else {
+    // Sold out: fall back strictly for reference display; do not present as an active purchasable price
+    const fallback = (product.variants || []).find((v) => v.is_active !== false) || product.variants?.[0] || null;
+    displaySellingPrice = fallback ? Number(fallback.selling_price) : (product.min_price ? Number(product.min_price) : null);
+    displayMrp = fallback?.mrp ? Number(fallback.mrp) : null;
+  }
+
+  const discountPercent =
+    displaySellingPrice && displayMrp && displayMrp > displaySellingPrice
+      ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
+      : null;
 
   const inWishlist = isInWishlist(product.id);
   const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
@@ -297,16 +335,37 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Price Row & Mobile Quick Add Button */}
         <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
-          <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap no-motion min-w-0">
-            <span className="price-display text-sm sm:text-base font-bold text-[#5E1224] tracking-tight">
-              {formatPrice(sellingPrice)}
-            </span>
-            {mrp && mrp > sellingPrice && (
-              <span className="price-display text-[11px] sm:text-xs text-gray-400 line-through">
-                {formatPrice(mrp)}
+          {isSoldOut ? (
+            <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap no-motion min-w-0">
+              <span className="price-display text-xs sm:text-sm font-semibold uppercase tracking-wider text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                Sold Out
               </span>
-            )}
-          </div>
+              {displaySellingPrice && displaySellingPrice > 0 && (
+                <span className="price-display text-[11px] sm:text-xs text-gray-400 line-through">
+                  {formatPrice(displaySellingPrice)}
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap no-motion min-w-0">
+              <span className="price-display text-sm sm:text-base font-bold text-[#5E1224] tracking-tight">
+                {hasPriceRange && (
+                  <span className="text-[11px] sm:text-xs font-normal text-gray-500 mr-0.5">From</span>
+                )}
+                {formatPrice(displaySellingPrice)}
+              </span>
+              {displayMrp && displayMrp > (displaySellingPrice || 0) && (
+                <span className="price-display text-[11px] sm:text-xs text-gray-400 line-through">
+                  {formatPrice(displayMrp)}
+                </span>
+              )}
+              {discountPercent && discountPercent > 0 && (
+                <span className="text-[9.5px] sm:text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/80">
+                  {discountPercent}% OFF
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Mobile Circular Quick-Add Action (Handoff Page 12 - Sibling button, NOT in <a>) */}
           {!isSoldOut && (

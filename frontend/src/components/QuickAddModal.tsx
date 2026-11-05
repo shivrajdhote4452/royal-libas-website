@@ -40,10 +40,11 @@ export const QuickAddModal: React.FC = () => {
     activeProduct.primary_image ||
     (activeProduct.images && activeProduct.images.length > 0 ? activeProduct.images[0].url : null);
 
-  const displaySellingPrice = selectedVariant
-    ? selectedVariant.selling_price
-    : activeProduct.min_price || 0;
-  const displayMrp = selectedVariant?.mrp ?? (activeProduct.variants[0]?.mrp || null);
+  const purchasable = (activeProduct.variants || []).filter((v) => v.is_active && v.stock > 0);
+  const fallbackVariant = purchasable[0] || (activeProduct.variants || []).find((v) => v.is_active) || activeProduct.variants?.[0] || null;
+  const currentVariant = selectedVariant || fallbackVariant;
+  const displaySellingPrice = currentVariant ? currentVariant.selling_price : (activeProduct.min_price || 0);
+  const displayMrp = currentVariant ? currentVariant.mrp : null;
   const discountPercent =
     displayMrp && displayMrp > displaySellingPrice
       ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)

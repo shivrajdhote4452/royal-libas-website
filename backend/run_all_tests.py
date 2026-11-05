@@ -85,6 +85,7 @@ VERIFIED_SAFE_SUITES = [
     "test_postgres_variant_migration.py",
     "test_postgres_concurrency.py",
     "test_photo_change_and_publication_safety.py",
+    "test_product_pricing_consistency.py",
     "test_phase1.py",
     "test_runner_safety_harness.py",
 ]

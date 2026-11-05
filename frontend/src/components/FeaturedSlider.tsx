@@ -422,7 +422,15 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                         </span>
                         <div className="text-right">
                           <span className="font-serif text-sm sm:text-base font-bold text-white tracking-wide">
-                            {formatPrice(product.min_price)}
+                            {(() => {
+                              const purchasable = (product.variants || []).filter((v) => v.is_active && v.stock > 0);
+                              const eligiblePrices = purchasable.map((v) => Number(v.selling_price));
+                              const minPrice = eligiblePrices.length > 0 ? Math.min(...eligiblePrices) : (product.min_price ? Number(product.min_price) : null);
+                              const maxPrice = eligiblePrices.length > 0 ? Math.max(...eligiblePrices) : (product.max_price ? Number(product.max_price) : null);
+                              const hasRange = minPrice !== null && maxPrice !== null && minPrice !== maxPrice;
+                              if (minPrice === null || product.total_stock === 0) return 'Sold Out';
+                              return `${hasRange ? 'From ' : ''}${formatPrice(minPrice)}`;
+                            })()}
                           </span>
                         </div>
                       </div>
