@@ -325,6 +325,17 @@ export async function fetchAdminProducts(token: string): Promise<Product[]> {
   return response.json();
 }
 
+export async function fetchAdminProduct(token: string, id: number): Promise<Product> {
+  const response = await fetch(`${API_BASE_URL}/admin/products/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to load product details');
+  }
+  return response.json();
+}
+
 export async function adminCreateProduct(token: string, payload: any): Promise<Product> {
   const response = await fetch(`${API_BASE_URL}/admin/products`, {
     method: 'POST',
@@ -384,7 +395,39 @@ export async function adminUpdateVariant(token: string, variantId: number, paylo
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Failed to update variant');
+    const err: any = new Error(errorData.detail || 'Failed to update variant');
+    err.status = response.status;
+    err.detail = errorData.detail;
+    throw err;
+  }
+  return response.json();
+}
+
+export async function adminBulkUpdateVariants(
+  token: string,
+  productId: number,
+  items: Array<{
+    variant_id: number;
+    selling_price?: number;
+    mrp?: number | null;
+    sku?: string | null;
+    is_active?: boolean;
+  }>
+): Promise<{ product_id: number; updated_variants: any[]; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/admin/products/${productId}/variants/bulk-update`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ items }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const err: any = new Error(errorData.detail || 'Failed to update variants in bulk');
+    err.status = response.status;
+    err.detail = errorData.detail;
+    throw err;
   }
   return response.json();
 }

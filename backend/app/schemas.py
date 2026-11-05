@@ -68,6 +68,8 @@ class ProductVariantUpdate(BaseModel):
     mrp: Optional[Decimal] = None
     selling_price: Optional[Decimal] = None
     stock: Optional[int] = None
+    expected_stock: Optional[int] = None
+    stock_delta: Optional[int] = None
     is_active: Optional[bool] = None
 
     @field_validator("stock")
@@ -170,6 +172,28 @@ class ProductCreate(BaseModel):
     images: Optional[List[ProductImageCreate]] = []
 
 
+class BulkVariantUpdateItem(BaseModel):
+    variant_id: int
+    selling_price: Optional[Decimal] = None
+    mrp: Optional[Decimal] = None
+    sku: Optional[str] = None
+    is_active: Optional[bool] = None
+
+    @field_validator("selling_price")
+    @classmethod
+    def validate_selling_price_positive(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v <= 0:
+            raise ValueError("Selling price must be greater than 0")
+        return v
+
+    @field_validator("mrp")
+    @classmethod
+    def validate_mrp_positive(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v <= 0:
+            raise ValueError("MRP must be greater than 0")
+        return v
+
+
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
@@ -187,6 +211,7 @@ class ProductUpdate(BaseModel):
     is_active: Optional[bool] = None
     collection_ids: Optional[List[int]] = None
     images: Optional[List[ProductImageCreate]] = None
+    variants: Optional[List[BulkVariantUpdateItem]] = None
 
 
 class ProductListResponse(BaseModel):
@@ -234,6 +259,7 @@ class ProductDetailResponse(BaseModel):
     images: List[ProductImageResponse] = []
     variants: List[ProductVariantResponse] = []
     collections: List[str] = []
+    collection_ids: List[int] = []
     created_at: datetime
     updated_at: datetime
 
@@ -1265,6 +1291,25 @@ class InventorySummaryResponse(BaseModel):
     total_working_products: int
     total_working_units: int
 
+
+class BulkVariantUpdateRequest(BaseModel):
+    items: List[BulkVariantUpdateItem]
+
+    @field_validator("items")
+    @classmethod
+    def validate_items_non_empty(cls, v: List[BulkVariantUpdateItem]) -> List[BulkVariantUpdateItem]:
+        if not v:
+            raise ValueError("At least one variant update must be provided.")
+        vids = [item.variant_id for item in v]
+        if len(vids) != len(set(vids)):
+            raise ValueError("Duplicate variant IDs detected in payload.")
+        return v
+
+
+class BulkVariantUpdateResponse(BaseModel):
+    product_id: int
+    updated_variants: List[ProductVariantResponse]
+    message: str
 
 class BulkStockAdjustmentResponse(BaseModel):
     product_id: int

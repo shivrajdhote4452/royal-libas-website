@@ -21,6 +21,7 @@ export interface ProductImage {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  media_asset_id?: number | null;
 }
 
 export interface MediaAssetProductUsage {
@@ -202,6 +203,7 @@ export interface Product {
   images?: ProductImage[];
   variants: ProductVariant[];
   collections: string[];
+  collection_ids?: number[];
   created_at?: string;
   updated_at?: string;
 }
@@ -214,3 +216,23 @@ export interface Collection {
   product_count: number;
   is_active?: boolean;
 }
+
+export interface ProductMediaItem {
+  id?: number;
+  media_asset_id?: number | null;
+  url: string;
+  public_id?: string | null;
+  resource_type?: 'image' | 'video';
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
+  alt_text?: string | null;
+  sort_order?: number;
+}
+
+export const CATEGORY_GROUPS: Record<string, string[]> = {
+  'TWO PIECES': ['Co-ord Sets', 'Kurta Pant'],
+  'SUIT SET': ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
+  'HEAVY DRESS': ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
+  'UNSTITCHED MATERIAL': ['Unstitched Suits', 'Dress Material'],
+};

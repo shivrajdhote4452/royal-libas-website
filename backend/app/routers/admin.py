@@ -4376,6 +4376,31 @@ def admin_list_products(
     return [build_product_detail_response(p) for p in products]
 
 
+@router.get("/products/{id}", response_model=ProductDetailResponse)
+def admin_get_product(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve a single product by ID (including draft and archived) for admin editing."""
+    product = (
+        db.query(Product)
+        .options(
+            joinedload(Product.variants),
+            joinedload(Product.images),
+            joinedload(Product.collections),
+        )
+        .filter(Product.id == id)
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with id {id} not found.",
+        )
+    return build_product_detail_response(product)
+
+
 def _process_product_images(
     images_payload: List[ProductImageCreate],
     db: Session,
@@ -4713,6 +4738,73 @@ def admin_update_product(
 
     if payload.images is not None:
         product.images = _process_product_images(payload.images, db, product.name)
+
+    if "variants" in fields_set and payload.variants is not None and len(payload.variants) > 0:
+        # Pre-validate all variant items before making any modifications
+        variant_ids = [item.variant_id for item in payload.variants]
+        if len(variant_ids) != len(set(variant_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Duplicate variant IDs detected in payload.",
+            )
+
+        existing_variants = {v.id: v for v in product.variants}
+        for item in payload.variants:
+            if item.variant_id not in existing_variants:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Variant ID {item.variant_id} does not belong to product {id}.",
+                )
+            v = existing_variants[item.variant_id]
+            v_fields = item.model_fields_set
+            new_sp = item.selling_price if ("selling_price" in v_fields and item.selling_price is not None) else v.selling_price
+            new_mrp = item.mrp if "mrp" in v_fields else v.mrp
+
+            if new_sp is not None and new_sp <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Variant {v.size} selling price must be greater than 0.",
+                )
+            if new_mrp is not None and new_mrp <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Variant {v.size} MRP must be greater than 0.",
+                )
+            if new_mrp is not None and new_sp is not None and new_sp > new_mrp:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{new_mrp}).",
+                )
+
+        # Check SKU uniqueness across database
+        for item in payload.variants:
+            v_fields = item.model_fields_set
+            if "sku" in v_fields and item.sku is not None:
+                clean_sku = item.sku.strip()
+                if clean_sku:
+                    conflict = (
+                        db.query(ProductVariant)
+                        .filter(ProductVariant.sku == clean_sku, ProductVariant.id != item.variant_id)
+                        .first()
+                    )
+                    if conflict:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"SKU '{clean_sku}' is already assigned to another variant.",
+                        )
+
+        # Apply updates to variants within the same transaction
+        for item in payload.variants:
+            v = existing_variants[item.variant_id]
+            v_fields = item.model_fields_set
+            if "selling_price" in v_fields and item.selling_price is not None:
+                v.selling_price = item.selling_price
+            if "mrp" in v_fields:
+                v.mrp = item.mrp
+            if "sku" in v_fields:
+                v.sku = item.sku.strip() if item.sku and item.sku.strip() else None
+            if "is_active" in v_fields and item.is_active is not None:
+                v.is_active = item.is_active
 
     db.commit()
     db.refresh(product)

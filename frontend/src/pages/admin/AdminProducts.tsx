@@ -1,74 +1,39 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Plus,
-  Edit2,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Upload,
-  Trash2,
-  ArrowLeft,
-  ArrowRight,
-  Image as ImageIcon,
-  Check,
-  Play,
-  Camera,
   Search,
-  X,
+  Filter,
+  CheckCircle,
+  Folder,
+  Edit3,
+  Loader2,
+  LayoutGrid,
+  List,
+  AlertCircle,
 } from 'lucide-react';
 import {
   fetchAdminProducts,
   adminCreateProduct,
-  adminUpdateProduct,
-  adminAddVariant,
-  adminUpdateVariant,
-  adminUploadProductImage,
   adminDeleteProduct,
-  formatPrice,
 } from '../../lib/api';
-import { Product, ProductVariant, MediaAsset } from '../../types/product';
-import { MediaLibraryPickerModal, getAssetKey } from '../../components/admin/MediaLibraryPickerModal';
+import {
+  Product,
+  CATEGORY_GROUPS,
+} from '../../types/product';
 
-export function getProductMediaItemKey(item: {
-  resource_type?: string | null;
-  url: string;
-  public_id?: string | null;
-}): string {
-  const isVid =
-    item.resource_type === 'video' ||
-    /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(item.url);
-  const rType = isVid ? 'video' : 'image';
-  if (item.public_id) {
-    return `${rType}:${item.public_id}`;
-  }
-  return `${rType}:${item.url.split('?')[0]}`;
-}
-
-interface ProductMediaItem {
-  id?: number;
-  media_asset_id?: number | null;
-  url: string;
-  public_id?: string | null;
-  resource_type?: 'image' | 'video';
-  width?: number | null;
-  height?: number | null;
-  duration?: number | null;
-  alt_text?: string | null;
-}
-
-export const CATEGORY_GROUPS: Record<string, string[]> = {
-  'TWO PIECES': ['Co-ord Sets', 'Kurta Pant'],
-  'SUIT SET': ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
-  'HEAVY DRESS': ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
-  'UNSTITCHED MATERIAL': ['Unstitched Suits', 'Dress Material'],
-};
+export { CATEGORY_GROUPS };
 
 export const AdminProducts: React.FC = () => {
+  const token = localStorage.getItem('royal_libas_admin_token') || '';
+
+  // Products Data State
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedProductId, setExpandedProductId] = useState<number | null>(null);
+
+  // Layout View Mode (Grid Photo Cards vs List Table)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Filter & Search State
   type ProductStatusTab = 'working' | 'all' | 'published' | 'draft' | 'archived';
@@ -76,45 +41,10 @@ export const AdminProducts: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
-  const counts = React.useMemo(() => {
-    const working = products.filter((p) => p.status !== 'ARCHIVED').length;
-    const published = products.filter((p) => p.status === 'PUBLISHED' || (!p.status && p.is_active)).length;
-    const draft = products.filter((p) => p.status === 'DRAFT' || (!p.is_active && p.status !== 'ARCHIVED')).length;
-    const archived = products.filter((p) => p.status === 'ARCHIVED').length;
-    return { working, all: products.length, published, draft, archived };
-  }, [products]);
-
-  const filteredProducts = React.useMemo(() => {
-    return products.filter((p) => {
-      // Status filter
-      if (statusFilter === 'working') {
-        if (p.status === 'ARCHIVED') return false;
-      } else if (statusFilter === 'published') {
-        if (p.status !== 'PUBLISHED' && !(p.is_active && !p.status)) return false;
-      } else if (statusFilter === 'draft') {
-        if (p.status !== 'DRAFT' && !(!p.is_active && p.status !== 'ARCHIVED')) return false;
-      } else if (statusFilter === 'archived') {
-        if (p.status !== 'ARCHIVED') return false;
-      }
-
-      // Category filter
-      if (categoryFilter !== 'ALL') {
-        if (p.category?.toUpperCase() !== categoryFilter.toUpperCase()) return false;
-      }
-
-      // Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        const matchName = p.name.toLowerCase().includes(q);
-        const matchSlug = p.slug.toLowerCase().includes(q);
-        const matchCat = p.category?.toLowerCase().includes(q);
-        const matchSub = p.subcategory?.toLowerCase().includes(q);
-        if (!matchName && !matchSlug && !matchCat && !matchSub) return false;
-      }
-
-      return true;
-    });
-  }, [products, statusFilter, categoryFilter, searchQuery]);
+  // Quick Action / Notification State
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Add Product Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -123,112 +53,30 @@ export const AdminProducts: React.FC = () => {
   const [newCategory, setNewCategory] = useState('TWO PIECES');
   const [newSubcategory, setNewSubcategory] = useState('Co-ord Sets');
   const [newFabric, setNewFabric] = useState('Pure Chanderi Silk');
-  const [categoryModalProduct, setCategoryModalProduct] = useState<Product | null>(null);
-  const [assignCat, setAssignCat] = useState<string>('TWO PIECES');
-  const [assignSubcat, setAssignSubcat] = useState<string>('Co-ord Sets');
-  const [newCare, setNewCare] = useState('Dry clean only');
-  const [newFit, setNewFit] = useState('Tailored Regular Fit');
   const [newStatus, setNewStatus] = useState<'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('DRAFT');
   const [newDescription, setNewDescription] = useState('');
   const [initialPrice, setInitialPrice] = useState('2999');
   const [newMrp, setNewMrp] = useState('3999');
   const [newSizeStock, setNewSizeStock] = useState<Record<string, { enabled: boolean; stock: string; price: string }>>({
     XS: { enabled: false, stock: '0', price: '' },
-    S: { enabled: true, stock: '0', price: '' },
-    M: { enabled: true, stock: '0', price: '' },
-    L: { enabled: true, stock: '0', price: '' },
+    S: { enabled: true, stock: '5', price: '' },
+    M: { enabled: true, stock: '5', price: '' },
+    L: { enabled: true, stock: '5', price: '' },
     XL: { enabled: false, stock: '0', price: '' },
     XXL: { enabled: false, stock: '0', price: '' },
   });
 
-  // Variant Add State
-  const [addingVariantForId, setAddingVariantForId] = useState<number | null>(null);
-  const [newSize, setNewSize] = useState('XL');
-  const [newVariantPrice, setNewVariantPrice] = useState('2999');
-  const [newVariantStock, setNewVariantStock] = useState('0');
+  // Delete Confirmation State
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
 
-  // Inline editing state for variant
-  const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
-  const [editPrice, setEditPrice] = useState('');
-  const [editMrp, setEditMrp] = useState('');
-  const [editStock, setEditStock] = useState('');
-  const [editIsActive, setEditIsActive] = useState(true);
-  const [togglingVariantId, setTogglingVariantId] = useState<number | null>(null);
-
-  // Toggle variant ON/OFF
-  const handleToggleVariantActive = async (v: ProductVariant) => {
-    if (!token || togglingVariantId === v.id) return;
-    const nextActive = !v.is_active;
-    setTogglingVariantId(v.id);
-    setActionError(null);
-    try {
-      await adminUpdateVariant(token, v.id, { is_active: nextActive });
-      setProducts((prev) =>
-        prev.map((p) => {
-          if (p.variants.some((varItem) => varItem.id === v.id)) {
-            return {
-              ...p,
-              variants: p.variants.map((varItem) =>
-                varItem.id === v.id
-                  ? {
-                      ...varItem,
-                      is_active: nextActive,
-                      is_available: nextActive && varItem.stock > 0,
-                    }
-                  : varItem
-              ),
-            };
-          }
-          return p;
-        })
-      );
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to update size availability');
-    } finally {
-      setTogglingVariantId(null);
-    }
-  };
-
-  // Image Gallery State for Existing Products
-  const [photosMap, setPhotosMap] = useState<Record<number, ProductMediaItem[]>>({});
-  const [photoUrlInput, setPhotoUrlInput] = useState<Record<number, string>>({});
-  const [isSavingGallery, setIsSavingGallery] = useState<number | null>(null);
-  const [uploadingTarget, setUploadingTarget] = useState<'new' | number | null>(null);
-
-  // Image State for New Product Modal
-  const [newImages, setNewImages] = useState<ProductMediaItem[]>([]);
-  const [newImageUrlInput, setNewImageUrlInput] = useState('');
-  const [mediaPickerTarget, setMediaPickerTarget] = useState<'new' | number | null>(null);
-
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const token = localStorage.getItem('royal_libas_admin_token') || '';
-
+  // Fetch Products
   const loadProducts = async () => {
+    if (!token) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetchAdminProducts(token);
       setProducts(res);
-      const initialMap: Record<number, ProductMediaItem[]> = {};
-      res.forEach((p) => {
-        initialMap[p.id] = (p.images || []).map((img) => ({
-          id: img.id,
-          media_asset_id: (img as any).media_asset_id || null,
-          url: img.url,
-          public_id: img.public_id,
-          resource_type: img.resource_type || (img.url.match(/\.(mp4|webm|mov|ogg|mkv)/i) ? 'video' : 'image'),
-          width: img.width,
-          height: img.height,
-          duration: img.duration,
-          alt_text: img.alt_text,
-        }));
-      });
-      setPhotosMap(initialMap);
-      if (res.length > 0 && expandedProductId === null) {
-        setExpandedProductId(res[0].id);
-      }
     } catch (err: any) {
       setError(err.message || 'Failed to load products');
     } finally {
@@ -240,273 +88,109 @@ export const AdminProducts: React.FC = () => {
     loadProducts();
   }, [token]);
 
-  // Image Handlers: Upload via backend file storage, Add URL, Reorder, Remove
-  const handleUploadFiles = async (files: FileList | null, target: 'new' | number) => {
-    if (!files || files.length === 0) return;
-    setActionError(null);
-    setUploadingTarget(target);
-    try {
-      for (const file of Array.from(files)) {
-        const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|ogg|mkv)$/i.test(file.name);
-        const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|avif)$/i.test(file.name);
-        if (!isVideo && !isImage) {
-          throw new Error(`File ${file.name} is not an allowed format (JPEG, PNG, WebP, MP4, MOV, WebM).`);
-        }
-        if (isImage && file.size > 10 * 1024 * 1024) {
-          throw new Error(`Photo ${file.name} exceeds 10MB limit for images.`);
-        }
-        if (isVideo && file.size > 60 * 1024 * 1024) {
-          throw new Error(`Video ${file.name} exceeds 60MB limit.`);
-        }
-        const uploaded = await adminUploadProductImage(token, file);
-        if (uploaded && uploaded.url) {
-          const mediaObj: ProductMediaItem = {
-            url: uploaded.secure_url || uploaded.url,
-            public_id: uploaded.public_id,
-            resource_type: uploaded.resource_type || (isVideo ? 'video' : 'image'),
-            width: uploaded.width,
-            height: uploaded.height,
-            duration: uploaded.duration,
-            alt_text: file.name,
-          };
-          if (target === 'new') {
-            setNewImages((prev) => [...prev, mediaObj]);
-          } else {
-            setPhotosMap((prev) => ({
-              ...prev,
-              [target]: [...(prev[target] || []), mediaObj],
-            }));
-          }
-        }
+  // Tab Counts (Live Computed)
+  const counts = useMemo(() => {
+    const working = products.filter((p) => p.status !== 'ARCHIVED').length;
+    const published = products.filter((p) => p.status === 'PUBLISHED' || (!p.status && p.is_active)).length;
+    const draft = products.filter((p) => p.status === 'DRAFT' || (!p.is_active && p.status !== 'ARCHIVED')).length;
+    const archived = products.filter((p) => p.status === 'ARCHIVED').length;
+    return { working, all: products.length, published, draft, archived };
+  }, [products]);
+
+  // Filtered Products
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      // 1. Status Filter
+      if (statusFilter === 'working' && p.status === 'ARCHIVED') return false;
+      if (statusFilter === 'published' && !(p.status === 'PUBLISHED' || (!p.status && p.is_active))) return false;
+      if (statusFilter === 'draft' && !(p.status === 'DRAFT' || (!p.is_active && p.status !== 'ARCHIVED'))) return false;
+      if (statusFilter === 'archived' && p.status !== 'ARCHIVED') return false;
+
+      // 2. Category Filter
+      if (categoryFilter !== 'ALL') {
+        const catUpper = p.category?.toUpperCase() || '';
+        const subcatUpper = p.subcategory?.toUpperCase() || '';
+        const filterUpper = categoryFilter.toUpperCase();
+        if (catUpper !== filterUpper && subcatUpper !== filterUpper) return false;
       }
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to upload media');
-    } finally {
-      setUploadingTarget(null);
-    }
-  };
 
-  const handleAddUrl = (target: 'new' | number) => {
-    setActionError(null);
-    if (target === 'new') {
-      const url = newImageUrlInput.trim();
-      if (!url) return;
-      if (url.startsWith('data:image/')) {
-        setActionError('Base64 data strings cannot be stored in database. Please upload the image file directly.');
-        return;
+      // 3. Search Query (Name, SKU, Category, Subcategory)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchName = p.name.toLowerCase().includes(q);
+        const matchCat = p.category?.toLowerCase().includes(q);
+        const matchSub = p.subcategory?.toLowerCase().includes(q);
+        const matchSku = p.variants?.some((v) => v.sku?.toLowerCase().includes(q));
+        if (!matchName && !matchCat && !matchSub && !matchSku) return false;
       }
-      const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url);
-      setNewImages((prev) => [...prev, { url, resource_type: isVid ? 'video' : 'image' }]);
-      setNewImageUrlInput('');
-    } else {
-      const url = (photoUrlInput[target] || '').trim();
-      if (!url) return;
-      if (url.startsWith('data:image/')) {
-        setActionError('Base64 data strings cannot be stored in database. Please upload the image file directly.');
-        return;
-      }
-      const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url);
-      setPhotosMap((prev) => ({
-        ...prev,
-        [target]: [...(prev[target] || []), { url, resource_type: isVid ? 'video' : 'image' }],
-      }));
-      setPhotoUrlInput((prev) => ({ ...prev, [target]: '' }));
-    }
-  };
 
-  const handleReorder = (target: 'new' | number, fromIdx: number, toIdx: number) => {
-    if (target === 'new') {
-      setNewImages((prev) => {
-        const copy = [...prev];
-        const [moved] = copy.splice(fromIdx, 1);
-        copy.splice(toIdx, 0, moved);
-        return copy;
-      });
-    } else {
-      setPhotosMap((prev) => {
-        const current = prev[target] || [];
-        const copy = [...current];
-        const [moved] = copy.splice(fromIdx, 1);
-        copy.splice(toIdx, 0, moved);
-        return { ...prev, [target]: copy };
-      });
-    }
-  };
+      return true;
+    });
+  }, [products, statusFilter, categoryFilter, searchQuery]);
 
-  const handleRemoveImage = (target: 'new' | number, index: number) => {
-    if (target === 'new') {
-      setNewImages((prev) => prev.filter((_, idx) => idx !== index));
-    } else {
-      setPhotosMap((prev) => ({
-        ...prev,
-        [target]: (prev[target] || []).filter((_, idx) => idx !== index),
-      }));
-    }
-  };
-
-  const handleAddFromLibrary = (target: 'new' | number | null, selectedAssets: MediaAsset[]) => {
-    if (!target || selectedAssets.length === 0) {
-      setMediaPickerTarget(null);
-      return;
-    }
-    if (target === 'new') {
-      setNewImages((prev) => {
-        const existingKeys = new Set(prev.map(getProductMediaItemKey));
-        const newItems: ProductMediaItem[] = [];
-        for (const asset of selectedAssets) {
-          const key = getAssetKey(asset);
-          if (!existingKeys.has(key)) {
-            existingKeys.add(key);
-            const isVid =
-              asset.resource_type === 'video' ||
-              /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
-            newItems.push({
-              media_asset_id: asset.id,
-              url: asset.secure_url || asset.url,
-              public_id: asset.public_id || null,
-              resource_type: isVid ? 'video' : 'image',
-              width: asset.width || null,
-              height: asset.height || null,
-              duration: asset.duration || null,
-              alt_text: asset.alt_text || asset.display_name || asset.filename,
-            });
-          }
-        }
-        return [...prev, ...newItems];
-      });
-    } else {
-      setPhotosMap((prev) => {
-        const currentList = prev[target] || [];
-        const existingKeys = new Set(currentList.map(getProductMediaItemKey));
-        const newItems: ProductMediaItem[] = [];
-        for (const asset of selectedAssets) {
-          const key = getAssetKey(asset);
-          if (!existingKeys.has(key)) {
-            existingKeys.add(key);
-            const isVid =
-              asset.resource_type === 'video' ||
-              /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(asset.filename || asset.url);
-            newItems.push({
-              media_asset_id: asset.id,
-              url: asset.secure_url || asset.url,
-              public_id: asset.public_id || null,
-              resource_type: isVid ? 'video' : 'image',
-              width: asset.width || null,
-              height: asset.height || null,
-              duration: asset.duration || null,
-              alt_text: asset.alt_text || asset.display_name || asset.filename,
-            });
-          }
-        }
-        return {
-          ...prev,
-          [target]: [...currentList, ...newItems],
-        };
-      });
-    }
-    setMediaPickerTarget(null);
-  };
-
-  const handleSaveGallery = async (productId: number) => {
-    setIsSavingGallery(productId);
-    setActionError(null);
-    try {
-      const items = photosMap[productId] || [];
-      if (items.some((u) => u.url.startsWith('data:image/'))) {
-        throw new Error('Base64 data URLs cannot be saved. Please remove them and upload images directly.');
-      }
-      const imagePayload = items.map((item, idx) => ({
-        media_asset_id: item.media_asset_id || null,
-        url: item.url,
-        sort_order: idx + 1,
-        public_id: item.public_id || null,
-        resource_type: item.resource_type || (item.url.match(/\.(mp4|webm|mov|ogg|mkv)/i) ? 'video' : 'image'),
-        width: item.width || null,
-        height: item.height || null,
-        duration: item.duration || null,
-        alt_text: item.alt_text || null,
-      }));
-      await adminUpdateProduct(token, productId, { images: imagePayload });
-      await loadProducts();
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to save product photos');
-    } finally {
-      setIsSavingGallery(null);
-    }
-  };
-
-  // Handle Create Product
+  // Handle New Product Creation
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    setActionError(null);
-    setActionLoading(true);
+    if (!token) return;
 
-    const slug =
+    setActionLoading(true);
+    setActionError(null);
+
+    const generatedSlug =
       newProductSlug.trim() ||
       newProductName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
+        .replace(/(^-|-$)+/g, '');
 
-    const priceNum = parseFloat(initialPrice) || 2999;
-    const mrpNum = parseFloat(newMrp) || priceNum + 1000;
+    const variantsPayload = Object.entries(newSizeStock)
+      .filter(([_, data]) => data.enabled)
+      .map(([size, data]) => {
+        const sprice = parseFloat(data.price || initialPrice) || 2999;
+        const mrpVal = newMrp ? parseFloat(newMrp) : undefined;
+        return {
+          size,
+          colour: null,
+          sku: `${generatedSlug.slice(0, 10).toUpperCase()}-${size}`,
+          selling_price: sprice,
+          mrp: mrpVal,
+          stock: parseInt(data.stock, 10) || 0,
+          is_active: true,
+        };
+      });
 
-    if (priceNum > mrpNum) {
-      setActionError(`Selling price (₹${priceNum}) cannot exceed MRP (₹${mrpNum}).`);
+    if (variantsPayload.length === 0) {
+      setActionError('At least one size must be enabled with stock.');
       setActionLoading(false);
       return;
     }
 
-    const selectedVariants = Object.entries(newSizeStock)
-      .filter(([_, data]) => data.enabled)
-      .map(([size, data]) => {
-        const vPrice = parseFloat(data.price) || priceNum;
-        const vStockRaw = parseInt(data.stock, 10);
-        const stock = isNaN(vStockRaw) ? 0 : Math.max(0, vStockRaw);
-        return {
-          size,
-          selling_price: vPrice,
-          mrp: mrpNum,
-          stock,
-        };
-      });
-
     const payload = {
       name: newProductName.trim(),
-      slug: slug,
+      slug: generatedSlug,
+      description: newDescription.trim() || null,
+      fabric: newFabric.trim() || null,
+      care: 'Dry clean only',
+      fit: 'Tailored Regular Fit',
       category: newCategory,
       subcategory: newSubcategory,
-      fabric: newFabric.trim() || null,
-      care: newCare.trim() || null,
-      fit: newFit.trim() || null,
       status: newStatus,
-      description: newDescription.trim() || null,
       is_active: newStatus === 'PUBLISHED',
-      variants:
-        selectedVariants.length > 0
-          ? selectedVariants
-          : [{ size: 'Free Size', selling_price: priceNum, mrp: mrpNum, stock: 0 }],
-      images: newImages.map((item, idx) => ({
-        media_asset_id: item.media_asset_id || null,
-        url: item.url,
-        sort_order: idx + 1,
-        public_id: item.public_id || null,
-        resource_type: item.resource_type || (item.url.match(/\.(mp4|webm|mov|ogg|mkv)/i) ? 'video' : 'image'),
-        width: item.width || null,
-        height: item.height || null,
-        duration: item.duration || null,
-        alt_text: item.alt_text || null,
-      })),
+      is_bestseller: false,
+      images: [],
+      variants: variantsPayload,
     };
 
     try {
-      await adminCreateProduct(token, payload);
+      const created = await adminCreateProduct(token, payload);
+      setProducts((prev) => [created, ...prev]);
       setShowAddModal(false);
+      // Reset form
       setNewProductName('');
       setNewProductSlug('');
-      setNewImages([]);
-      setNewImageUrlInput('');
-      await loadProducts();
+      setNewDescription('');
+      setToastMessage(`Product "${created.name}" created successfully!`);
+      setTimeout(() => setToastMessage(null), 3000);
     } catch (err: any) {
       setActionError(err.message || 'Failed to create product');
     } finally {
@@ -514,291 +198,179 @@ export const AdminProducts: React.FC = () => {
     }
   };
 
-  // Delete product action
-  const handleDeleteProduct = async (product: Product) => {
-    if (!window.confirm(`Permanently remove product "${product.name}" from catalogue?`)) return;
-    try {
-      await adminDeleteProduct(token, product.id);
-      await loadProducts();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete product');
-    }
-  };
-
-  // Toggle active status
-  const handleToggleActive = async (product: Product) => {
-    try {
-      const updated = await adminUpdateProduct(token, product.id, {
-        is_active: !product.is_active,
-      });
-      setProducts((prev) =>
-        prev.map((p) => (p.id === product.id ? { ...p, is_active: updated.is_active } : p))
-      );
-    } catch (err: any) {
-      alert(err.message || 'Failed to update product status');
-    }
-  };
 
 
-  // Save Category & Subcategory assignment for existing product
-  const handleSaveCategoryAssignment = async () => {
-    if (!categoryModalProduct) return;
+  // Handle Delete Product
+  const handleDeleteProductConfirm = async () => {
+    if (!deletingProduct || !token) return;
     setActionLoading(true);
-    setActionError(null);
     try {
-      await adminUpdateProduct(token, categoryModalProduct.id, {
-        category: assignCat,
-        subcategory: assignSubcat,
-      });
-      setCategoryModalProduct(null);
-      await loadProducts();
+      await adminDeleteProduct(token, deletingProduct.id);
+      setProducts((prev) => prev.filter((p) => p.id !== deletingProduct.id));
+      setDeletingProduct(null);
+      setToastMessage('Product deleted successfully');
+      setTimeout(() => setToastMessage(null), 3000);
     } catch (err: any) {
-      setActionError(err.message || 'Failed to update category');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Quick Stock / Price / MRP Update
-  const handleSaveVariantEdit = async (variantId: number) => {
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      const payload: { selling_price?: number; mrp?: number | null; stock?: number; is_active?: boolean } = {
-        is_active: editIsActive,
-      };
-
-      if (editPrice.trim() !== '') {
-        const priceNum = parseFloat(editPrice);
-        if (isNaN(priceNum) || priceNum <= 0) {
-          throw new Error('Price must be greater than ₹0');
-        }
-        payload.selling_price = priceNum;
-      }
-
-      if (editStock.trim() !== '') {
-        const stockNum = parseInt(editStock, 10);
-        if (isNaN(stockNum) || stockNum < 0) {
-          throw new Error('Stock must be a non-negative number (0 or greater).');
-        }
-        payload.stock = stockNum;
-      }
-
-      // MRP can be explicitly cleared (empty string -> null) or set to a positive number
-      if (editMrp.trim() === '') {
-        payload.mrp = null;
-      } else {
-        const mrpNum = parseFloat(editMrp);
-        if (isNaN(mrpNum) || mrpNum <= 0) {
-          throw new Error('MRP must be greater than ₹0 (or leave blank to clear)');
-        }
-        payload.mrp = mrpNum;
-      }
-
-      // Client-side cross validation if both selling_price and mrp are present
-      if (payload.selling_price !== undefined && payload.mrp !== undefined && payload.mrp !== null) {
-        if (payload.selling_price > payload.mrp) {
-          throw new Error(`Selling price (${formatPrice(payload.selling_price)}) cannot exceed MRP (${formatPrice(payload.mrp)}).`);
-        }
-      }
-
-      await adminUpdateVariant(token, variantId, payload);
-
-      setEditingVariantId(null);
-      await loadProducts();
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to update variant');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Quick +/- Stock
-  const handleAdjustStock = async (v: ProductVariant, delta: number) => {
-    const nextStock = Math.max(0, v.stock + delta);
-    try {
-      await adminUpdateVariant(token, v.id, { stock: nextStock });
-      await loadProducts();
-    } catch (err: any) {
-      alert(err.message || 'Failed to adjust stock');
-    }
-  };
-
-  // Add Size Variant
-  const handleAddVariant = async (productId: number) => {
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      const trimmedSize = newSize.trim().toUpperCase();
-      if (!trimmedSize) {
-        throw new Error('Size name is required (e.g., S, M, L, XL)');
-      }
-      const priceNum = parseFloat(newVariantPrice);
-      if (isNaN(priceNum) || priceNum <= 0) {
-        throw new Error('Please enter a valid price greater than ₹0');
-      }
-      const stockInt = parseInt(newVariantStock, 10);
-      if (isNaN(stockInt) || stockInt < 0) {
-        throw new Error('Stock must be a non-negative number (0 or greater).');
-      }
-
-      await adminAddVariant(token, productId, {
-        size: trimmedSize,
-        selling_price: priceNum,
-        mrp: priceNum + 1000,
-        stock: stockInt, // Preserves exact 0, does not overwrite with 5
-      });
-      setAddingVariantForId(null);
-      setNewVariantStock('0');
-      await loadProducts();
-    } catch (err: any) {
-      setActionError(err.message || 'Failed to add size variant');
+      setActionError(err.message || 'Failed to delete product');
     } finally {
       setActionLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* ========================================================
+          1. HEADER & ACTIONS (Visual 1)
+          ======================================================== */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <span className="text-xs uppercase tracking-widest font-bold text-[#B58A3C]">
-            Catalogue Management
-          </span>
-          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-gray-900">
+          <h1 className="font-serif text-xl sm:text-2xl font-bold text-gray-900 text-[#5E1224]">
             Products & Sizes
           </h1>
+          <p className="text-xs text-gray-500 font-sans mt-0.5">
+            Manage your boutique catalogue, sizes, live stock, and pricing.
+          </p>
         </div>
 
         <button
-          type="button"
           onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-lg shadow transition-colors flex items-center justify-center gap-2"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-semibold rounded-lg shadow-sm transition-all hover:scale-[1.01] shrink-0"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5 text-[#E6C687]" />
           <span>Add New Product</span>
         </button>
       </div>
 
-      {actionError && (
-        <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-          <span>{actionError}</span>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs font-semibold flex items-center justify-between shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
         </div>
       )}
 
-      {/* Status Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs border-b border-[#E8DFD0]">
-        <button
-          type="button"
-          onClick={() => setStatusFilter('working')}
-          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
-            statusFilter === 'working'
-              ? 'border-[#5E1224] text-[#5E1224] bg-white'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          <span>Working Catalogue</span>
-          <span className="px-1.5 py-0.2 bg-[#FCF8F0] text-[#5E1224] rounded-full text-[10px] font-bold">
-            {counts.working}
-          </span>
-        </button>
+      {/* ========================================================
+          2. STATUS FILTER TABS (Visual 1)
+          ======================================================== */}
+      <div className="border-b border-[#E8DFD0] overflow-x-auto pb-px custom-scrollbar">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-max">
+          <button
+            onClick={() => setStatusFilter('working')}
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
+              statusFilter === 'working'
+                ? 'text-[#5E1224] border-b-2 border-[#5E1224] bg-amber-50/30'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>Working Catalogue</span>
+            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-700">
+              {counts.working}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setStatusFilter('published')}
-          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
-            statusFilter === 'published'
-              ? 'border-emerald-600 text-emerald-800 bg-white'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          <span>Published (Live)</span>
-          <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded-full text-[10px] font-bold">
-            {counts.published}
-          </span>
-        </button>
+          <button
+            onClick={() => setStatusFilter('published')}
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
+              statusFilter === 'published'
+                ? 'text-emerald-800 border-b-2 border-emerald-700 bg-emerald-50/30'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>Published</span>
+            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-emerald-100 text-emerald-800 font-semibold">
+              {counts.published}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setStatusFilter('draft')}
-          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
-            statusFilter === 'draft'
-              ? 'border-amber-600 text-amber-800 bg-white'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          <span>Draft Setup</span>
-          <span className="px-1.5 py-0.2 bg-amber-50 text-amber-800 rounded-full text-[10px] font-bold">
-            {counts.draft}
-          </span>
-        </button>
+          <button
+            onClick={() => setStatusFilter('draft')}
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
+              statusFilter === 'draft'
+                ? 'text-amber-800 border-b-2 border-amber-600 bg-amber-50/40'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>Draft Setup</span>
+            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-800 font-semibold">
+              {counts.draft}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setStatusFilter('archived')}
-          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
-            statusFilter === 'archived'
-              ? 'border-gray-500 text-gray-800 bg-white'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          <span>Archived Legacy</span>
-          <span className="px-1.5 py-0.2 bg-gray-100 text-gray-700 rounded-full text-[10px] font-bold">
-            {counts.archived}
-          </span>
-        </button>
+          <button
+            onClick={() => setStatusFilter('archived')}
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
+              statusFilter === 'archived'
+                ? 'text-gray-800 border-b-2 border-gray-700 bg-gray-100'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>Archived Legacy</span>
+            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-200 text-gray-700 font-semibold">
+              {counts.archived}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setStatusFilter('all')}
-          className={`px-3.5 py-2 font-semibold rounded-t-lg transition-colors border-b-2 flex items-center gap-1.5 shrink-0 ${
-            statusFilter === 'all'
-              ? 'border-[#5E1224] text-[#5E1224] bg-white'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          <span>All Designs</span>
-          <span className="px-1.5 py-0.2 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">
-            {counts.all}
-          </span>
-        </button>
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`py-2 px-2.5 sm:px-3 text-xs font-bold transition-all relative ${
+              statusFilter === 'all'
+                ? 'text-[#5E1224] border-b-2 border-[#5E1224] bg-amber-50/30'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>All Designs</span>
+            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-700">
+              {counts.all}
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* Search and Category Filter Bar */}
-      <div className="bg-white p-3.5 rounded-xl border border-[#E8DFD0] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* ========================================================
+          3. SEARCH, CATEGORY FILTER & VIEW TOGGLE (Visual 1)
+          ======================================================== */}
+      <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-[#E8DFD0] shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        {/* Search Input */}
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by design name, slug, subcategory..."
+            placeholder="Search by product name, SKU or design no."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#5E1224]"
+            className="w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:border-transparent bg-gray-50/50"
           />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg bg-white font-medium focus:outline-none focus:border-[#5E1224] w-full sm:w-auto"
-          >
-            <option value="ALL">All Categories</option>
-            <option value="TWO PIECES">TWO PIECES</option>
-            <option value="SUIT SET">SUIT SET</option>
-            <option value="HEAVY DRESS">HEAVY DRESS</option>
-          </select>
+        {/* Category Filter Dropdown */}
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-[160px]">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full pl-3 pr-7 py-1.5 border border-gray-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#5E1224] bg-gray-50/50 cursor-pointer text-gray-700 appearance-none"
+            >
+              <option value="ALL">All Categories</option>
+              {Object.keys(CATEGORY_GROUPS).map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+              <option disabled>──────────</option>
+              {Object.entries(CATEGORY_GROUPS).flatMap(([_, subcats]) =>
+                subcats.map((sub) => (
+                  <option key={sub} value={sub}>
+                    • {sub}
+                  </option>
+                ))
+              )}
+            </select>
+            <Filter className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
 
+          {/* Reset Filters */}
           {(searchQuery || categoryFilter !== 'ALL' || statusFilter !== 'working') && (
             <button
               type="button"
@@ -807,656 +379,313 @@ export const AdminProducts: React.FC = () => {
                 setCategoryFilter('ALL');
                 setStatusFilter('working');
               }}
-              className="px-3 py-2 text-gray-500 hover:text-gray-800 underline text-xs whitespace-nowrap"
+              className="px-2 py-1 text-gray-500 hover:text-gray-900 underline text-xs whitespace-nowrap"
             >
-              Reset Filters
+              Reset
             </button>
           )}
+
+          {/* View Mode Toggle (Grid Cards vs List Table) */}
+          <div className="flex items-center rounded-lg border border-gray-300 bg-gray-100 p-0.5 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-md transition-colors ${
+                viewMode === 'grid'
+                  ? 'bg-white text-[#5E1224] shadow-xs font-bold'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              title="Photo Cards Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-md transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-white text-[#5E1224] shadow-xs font-bold'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              title="Compact List View"
+            >
+              <List className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* ========================================================
+          4. PRODUCT CATALOGUE CONTENT
+          ======================================================== */}
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-3">
           <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
-          <p className="text-xs text-gray-500 font-serif">Loading catalogue products...</p>
+          <p className="text-xs text-gray-500 font-serif">Loading boutique designs...</p>
         </div>
       ) : error ? (
-        <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-center space-y-3">
-          <p className="text-xs sm:text-sm text-red-800 font-semibold">{error}</p>
+        <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-center space-y-3 max-w-lg mx-auto">
+          <AlertCircle className="w-7 h-7 text-red-700 mx-auto" />
+          <p className="text-sm text-red-800 font-semibold">{error}</p>
           <button
             onClick={loadProducts}
-            className="px-4 py-2 bg-[#5E1224] text-white rounded text-xs font-semibold"
+            className="px-4 py-2 bg-[#5E1224] text-white rounded-lg text-xs font-semibold shadow hover:bg-[#4A0E1C]"
           >
-            Retry
+            Retry Loading
           </button>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="bg-white rounded-xl border border-[#E8DFD0] p-12 text-center text-gray-400 text-xs">
-          No designs found matching the selected filter criteria.
+        <div className="bg-white rounded-xl border border-[#E8DFD0] p-10 text-center text-gray-400 text-xs space-y-2">
+          <div className="w-10 h-10 rounded-full bg-amber-50 text-[#B58A3C] flex items-center justify-center mx-auto mb-2">
+            <Search className="w-5 h-5" />
+          </div>
+          <p className="text-sm font-semibold text-gray-700">No designs found matching the selected filter criteria.</p>
+          <p className="text-gray-400">Try adjusting your search keywords, category filter, or status tab.</p>
         </div>
-      ) : (
-        <div className="space-y-4">
+      ) : viewMode === 'grid' ? (
+        /* ------------------------------------------------------
+           PHOTO CARDS GRID VIEW (Compact & Responsive)
+           ------------------------------------------------------ */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-3.5 lg:gap-4">
           {filteredProducts.map((product) => {
-            const isExpanded = expandedProductId === product.id;
             const primaryImg = product.primary_image || product.images?.[0]?.url;
+            const totalStock = product.total_stock ?? product.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
+            const sizeCount = product.variants.length;
+            const status = product.status || (product.is_active ? 'PUBLISHED' : 'DRAFT');
 
             return (
               <div
                 key={product.id}
-                className="bg-white rounded-xl border border-[#E8DFD0] shadow-sm overflow-hidden"
+                className="bg-white rounded-xl border border-[#E8DFD0] overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group bg-gradient-to-b from-white to-[#FAF6F0]/20 max-w-[300px] sm:max-w-none w-full mx-auto"
               >
-                {/* Product Header Row */}
-                <div
-                  onClick={() => setExpandedProductId(isExpanded ? null : product.id)}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-14 rounded bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
-                      {primaryImg ? (
-                        <img src={primaryImg} alt={product.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-[#5E1224] text-white text-[9px] flex items-center justify-center p-1 text-center font-serif">
-                          RL
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-serif font-bold text-sm sm:text-base text-gray-900">
-                          {product.name}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                            product.status === 'PUBLISHED' || (!product.status && product.is_active)
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : product.status === 'DRAFT'
-                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                              : 'bg-gray-100 text-gray-600 border border-gray-200'
-                          }`}
-                        >
-                          {product.status || (product.is_active ? 'PUBLISHED' : 'INACTIVE')}
-                        </span>
+                {/* Product Cover Photo Card */}
+                <div className="relative aspect-[4/3] sm:aspect-[4/5] w-full overflow-hidden bg-gray-100 border-b border-[#E8DFD0]/60">
+                  {primaryImg ? (
+                    <img
+                      src={primaryImg}
+                      alt={product.name}
+                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-[#FAF6F0] text-center">
+                      <div className="w-10 h-10 rounded-full bg-[#5E1224]/10 text-[#5E1224] flex items-center justify-center font-serif text-base font-bold mb-1 border border-[#B58A3C]/30">
+                        RL
                       </div>
-                      <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                          {product.category || 'Unassigned'} {product.subcategory ? `› ${product.subcategory}` : ''}
-                        </span>
-                        {product.fit && (
-                          <>
-                            <span>•</span>
-                            <span className="text-[#B58A3C] font-medium">{product.fit}</span>
-                          </>
-                        )}
-                        <span>•</span>
-                        <span>{product.variants.length} sizes</span>
-                        <span>•</span>
-                        <span className="font-semibold text-[#5E1224]">
-                          From {formatPrice(product.min_price)}
-                        </span>
-                        <span>•</span>
-                        <span
-                          className={`inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded border ${
-                            product.total_stock === 0
-                              ? 'text-rose-800 bg-rose-50 border-rose-200'
-                              : product.total_stock <= 5
-                              ? 'text-amber-800 bg-amber-50 border-amber-200'
-                              : 'text-gray-700 bg-gray-50 border-gray-200'
-                          }`}
-                        >
-                          Stock: {product.total_stock ?? 0}
-                        </span>
-                        <span>•</span>
-                        {product.images && product.images.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            <Camera className="w-3 h-3 text-emerald-600" />
-                            {product.images.length} photo{product.images.length > 1 ? 's' : ''}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                            <Camera className="w-3 h-3 text-amber-600" />
-                            No photos (Placeholder)
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-[10px] text-gray-400 font-serif">No photo uploaded</span>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCategoryModalProduct(product);
-                        const initialCat = product.category && CATEGORY_GROUPS[product.category] ? product.category : 'TWO PIECES';
-                        setAssignCat(initialCat);
-                        setAssignSubcat(product.subcategory || CATEGORY_GROUPS[initialCat]?.[0] || 'Co-ord Sets');
-                      }}
-                      className="px-2.5 py-1 rounded text-xs font-semibold transition-colors border border-[#D4AF67] text-[#5E1224] bg-[#FCF8F0] hover:bg-[#F3E9DA]"
-                      title="Assign Main Category and Subcategory"
-                    >
-                      Assign Category
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleActive(product);
-                      }}
-                      className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors border ${
-                        product.is_active
-                          ? 'border-gray-300 text-gray-600 hover:bg-gray-100'
-                          : 'border-emerald-600 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                      }`}
-                    >
-                      {product.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteProduct(product);
-                      }}
-                      className="px-2.5 py-1 rounded text-xs font-semibold text-rose-600 border border-rose-200 hover:bg-rose-50 transition-colors"
-                      title="Remove product from catalogue"
-                    >
-                      Delete
-                    </button>
-
-                    <span className="text-gray-400">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  {/* Bestseller Badge */}
+                  {product.is_bestseller && (
+                    <span className="absolute top-2 right-2 bg-[#5E1224] text-[#E6C687] text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow border border-[#B58A3C]/40">
+                      Bestseller
                     </span>
-                  </div>
+                  )}
                 </div>
 
-                {/* Expanded Variants & Stock Editor */}
-                {isExpanded && (
-                  <div className="px-4 pb-5 sm:px-6 pt-2 border-t border-gray-100 bg-[#FCF8F0]/30 space-y-4">
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="font-bold text-xs text-gray-800 uppercase tracking-wider">
-                        Size Variants & Live Stock ({product.variants.length})
-                      </span>
+                {/* Card Body */}
+                <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
+                  <div>
+                    {/* Product Name */}
+                    <h3 className="font-serif font-bold text-xs sm:text-sm text-gray-900 group-hover:text-[#5E1224] transition-colors line-clamp-1 mb-0.5" title={product.name}>
+                      {product.name}
+                    </h3>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAddingVariantForId(product.id);
-                          setNewVariantPrice(String(product.min_price || 2999));
-                        }}
-                        className="text-xs font-semibold text-[#5E1224] hover:underline flex items-center gap-1"
+                    {/* Category / Subcategory */}
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-1.5">
+                      <Folder className="w-3 h-3 text-[#B58A3C] shrink-0" />
+                      <span className="truncate">{product.subcategory || product.category || 'Atelier Design'}</span>
+                    </div>
+
+                    {/* Status Pill with dot */}
+                    <div className="flex items-center">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          status === 'PUBLISHED'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : status === 'DRAFT'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-gray-100 text-gray-600 border border-gray-200'
+                        }`}
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Size</span>
-                      </button>
-                    </div>
-
-                    {/* Variants Table */}
-                    <div className="bg-white rounded-lg border border-[#E8DFD0] divide-y divide-gray-100 text-xs">
-                      {product.variants.map((v) => {
-                        const isEditingThis = editingVariantId === v.id;
-
-                        return (
-                          <div
-                            key={v.id}
-                            className={`p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
-                              !v.is_active ? 'bg-gray-50/80 border-l-4 border-l-gray-300' : 'hover:bg-gray-50/50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="relative">
-                                <span
-                                  className={`w-9 h-9 rounded flex items-center justify-center font-bold text-xs ${
-                                    !v.is_active
-                                      ? 'bg-gray-100 border border-gray-200 text-gray-400'
-                                      : 'bg-[#FCF8F0] border border-[#E8DFD0] text-gray-900'
-                                  }`}
-                                >
-                                  {v.size}
-                                </span>
-                                {!v.is_active && (
-                                  <span className="absolute -top-1.5 -right-1.5 px-1 py-0.2 bg-gray-500 text-white text-[8px] font-bold rounded">
-                                    OFF
-                                  </span>
-                                )}
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className={`font-semibold ${!v.is_active ? 'text-gray-500' : 'text-gray-900'}`}>
-                                    Price: {formatPrice(v.selling_price)}
-                                  </span>
-                                  {v.colour && (
-                                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                                      {v.colour}
-                                    </span>
-                                  )}
-                                  {!v.is_active && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-200">
-                                      Disabled for Purchase
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="text-[11px] text-gray-400">
-                                  MRP: {v.mrp !== null && v.mrp !== undefined ? formatPrice(v.mrp) : '—'}
-                                  {v.sku && ` • SKU: ${v.sku}`}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Direct Inline Edit Form */}
-                            {isEditingThis ? (
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-gray-500">Price:</span>
-                                  <input
-                                    type="number"
-                                    value={editPrice}
-                                    onChange={(e) => setEditPrice(e.target.value)}
-                                    className="w-20 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5E1224]"
-                                    placeholder="Price"
-                                  />
-                                </div>
-
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-gray-500">MRP:</span>
-                                  <input
-                                    type="number"
-                                    value={editMrp}
-                                    onChange={(e) => setEditMrp(e.target.value)}
-                                    className="w-24 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5E1224]"
-                                    placeholder="e.g. 2499 (or blank)"
-                                    title="Leave blank to clear MRP"
-                                  />
-                                </div>
-
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-gray-500">Stock:</span>
-                                  <input
-                                    type="number"
-                                    value={editStock}
-                                    onChange={(e) => setEditStock(e.target.value)}
-                                    className="w-16 px-2 py-1 text-xs border rounded focus:outline-none focus:border-[#5E1224]"
-                                  />
-                                </div>
-
-                                <label className="flex items-center gap-1.5 text-[11px] text-gray-700 font-semibold cursor-pointer select-none px-1">
-                                  <input
-                                    type="checkbox"
-                                    checked={editIsActive}
-                                    onChange={(e) => setEditIsActive(e.target.checked)}
-                                    className="rounded border-gray-300 text-[#5E1224] focus:ring-[#5E1224]"
-                                  />
-                                  <span>Active (ON)</span>
-                                </label>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveVariantEdit(v.id)}
-                                  disabled={actionLoading}
-                                  className="px-2.5 py-1 bg-[#5E1224] text-white rounded text-xs font-semibold hover:bg-[#4A0E1C]"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingVariantId(null)}
-                                  className="px-2 py-1 text-gray-500 hover:text-gray-800 text-xs"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 w-full sm:w-auto">
-                                {/* Size Availability ON/OFF Switch */}
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-semibold text-gray-500">Status:</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleVariantActive(v)}
-                                    disabled={togglingVariantId === v.id}
-                                    role="switch"
-                                    aria-checked={v.is_active}
-                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:ring-offset-1 disabled:opacity-50 ${
-                                      v.is_active ? 'bg-emerald-600' : 'bg-gray-300'
-                                    }`}
-                                    title={
-                                      v.is_active
-                                        ? `Size ${v.size} is ON — Click to disable for customer purchase`
-                                        : `Size ${v.size} is OFF — Click to enable for customer purchase`
-                                    }
-                                  >
-                                    <span
-                                      aria-hidden="true"
-                                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                        v.is_active ? 'translate-x-5' : 'translate-x-0'
-                                      }`}
-                                    />
-                                  </button>
-                                  <span
-                                    className={`text-[11px] font-bold tracking-wider min-w-[28px] ${
-                                      v.is_active ? 'text-emerald-700' : 'text-gray-400'
-                                    }`}
-                                  >
-                                    {togglingVariantId === v.id ? (
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />
-                                    ) : v.is_active ? (
-                                      'ON'
-                                    ) : (
-                                      'OFF'
-                                    )}
-                                  </span>
-                                </div>
-
-                                {/* Stock Counter with +/- */}
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[11px] text-gray-500">Stock:</span>
-                                  <div className="flex items-center border border-gray-300 rounded bg-[#FCF8F0]">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleAdjustStock(v, -1)}
-                                      disabled={v.stock <= 0}
-                                      className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center hover:bg-gray-200 text-gray-700 font-bold text-sm disabled:opacity-40"
-                                      title="Decrease stock by 1"
-                                    >
-                                      -
-                                    </button>
-                                    <span
-                                      className={`px-2 text-xs font-bold ${
-                                        v.stock === 0
-                                          ? 'text-red-600'
-                                          : v.stock <= 5
-                                          ? 'text-amber-700'
-                                          : 'text-gray-900'
-                                      }`}
-                                    >
-                                      {v.stock}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleAdjustStock(v, 1)}
-                                      className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center hover:bg-gray-200 text-gray-700 font-bold text-sm"
-                                      title="Increase stock by 1"
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingVariantId(v.id);
-                                    setEditPrice(String(v.selling_price));
-                                    setEditMrp(v.mrp !== null && v.mrp !== undefined ? String(v.mrp) : '');
-                                    setEditStock(String(v.stock));
-                                    setEditIsActive(v.is_active);
-                                  }}
-                                  className="p-2 text-gray-500 hover:text-[#5E1224] rounded hover:bg-gray-100 min-w-[36px] min-h-[36px] flex items-center justify-center"
-                                  title="Edit price or stock directly"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Add Variant Form Drawer */}
-                    {addingVariantForId === product.id && (
-                      <div className="p-4 bg-white rounded-lg border-2 border-[#5E1224] space-y-3 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-900">
-                            Add New Size Variant to {product.name}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setAddingVariantForId(null)}
-                            className="text-gray-400 hover:text-gray-700"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                              Size
-                            </label>
-                            <input
-                              type="text"
-                              value={newSize}
-                              onChange={(e) => setNewSize(e.target.value.toUpperCase())}
-                              placeholder="XL, XXL, Free Size"
-                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5E1224]"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                              Price (Rs.)
-                            </label>
-                            <input
-                              type="number"
-                              value={newVariantPrice}
-                              onChange={(e) => setNewVariantPrice(e.target.value)}
-                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5E1224]"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                              Initial Stock
-                            </label>
-                            <input
-                              type="number"
-                              value={newVariantStock}
-                              onChange={(e) => setNewVariantStock(e.target.value)}
-                              className="w-full px-2.5 py-1.5 border rounded focus:outline-none focus:border-[#5E1224]"
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={actionLoading || !newSize.trim()}
-                          onClick={() => handleAddVariant(product.id)}
-                          className="w-full py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white font-semibold rounded shadow transition-colors flex items-center justify-center gap-1.5"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Save Size Variant</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Photos & Image Gallery Management (FIX 6) */}
-                    <div className="p-4 bg-white rounded-lg border border-[#E8DFD0] space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4 text-[#B58A3C]" />
-                          <span className="font-bold text-xs text-gray-800 uppercase tracking-wider">
-                            Product Images ({photosMap[product.id]?.length || 0})
-                          </span>
-                        </div>
-
-                        {photosMap[product.id] && (
-                          <button
-                            type="button"
-                            disabled={isSavingGallery === product.id}
-                            onClick={() => handleSaveGallery(product.id)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white text-xs font-semibold rounded shadow transition-colors disabled:opacity-50"
-                          >
-                            {isSavingGallery === product.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Check className="w-3.5 h-3.5" />
-                            )}
-                            <span>Save Image Order</span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Photo Thumbnails with Reorder & Remove */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                        {(photosMap[product.id] || []).map((item, idx) => {
-                        const imgUrl = item.url;
-                        return (
-                          <div
-                            key={idx}
-                            className="relative group bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm flex flex-col"
-                          >
-                            <div className="aspect-[4/5] bg-gray-100 overflow-hidden relative">
-                              {(() => {
-                                const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(imgUrl);
-                                const pUrl = isVid ? imgUrl.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : imgUrl;
-                                return (
-                                  <>
-                                    <img src={pUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
-                                    {isVid && (
-                                      <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <span className="w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center">
-                                          <Play className="w-3 h-3 fill-white ml-0.5" />
-                                        </span>
-                                      </span>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                              {idx === 0 && (
-                                <span className="absolute top-1.5 left-1.5 bg-[#5E1224] text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
-                                  Cover
-                                </span>
-                              )}
-                              <span className="absolute bottom-1.5 right-1.5 bg-black/60 text-white text-[9px] px-1 rounded">
-                                #{idx + 1}
-                              </span>
-                            </div>
-
-                            <div className="p-1 bg-[#FCF8F0] border-t border-gray-200 flex items-center justify-between">
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  disabled={idx === 0}
-                                  onClick={() => handleReorder(product.id, idx, idx - 1)}
-                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[28px] min-h-[28px] flex items-center justify-center text-xs"
-                                  title="Move earlier"
-                                >
-                                  <ArrowLeft className="w-3 h-3" />
-                                </button>
-                                {idx > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReorder(product.id, idx, 0)}
-                                    className="text-[9.5px] px-1.5 py-0.5 bg-[#FAF5EC] hover:bg-[#B58A3C] hover:text-white text-[#B58A3C] border border-[#B58A3C]/40 rounded font-semibold transition-colors"
-                                    title="Set this as main cover photo"
-                                  >
-                                    ★ Cover
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  disabled={idx === (photosMap[product.id]?.length || 0) - 1}
-                                  onClick={() => handleReorder(product.id, idx, idx + 1)}
-                                  className="p-1 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded min-w-[28px] min-h-[28px] flex items-center justify-center text-xs"
-                                  title="Move later"
-                                >
-                                  <ArrowRight className="w-3 h-3" />
-                                </button>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveImage(product.id, idx)}
-                                className="p-2 sm:p-1.5 text-red-600 hover:bg-red-50 rounded min-w-[32px] min-h-[32px] flex items-center justify-center"
-                                title="Remove image"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      </div>
-
-                      {/* Add Image Inputs */}
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setMediaPickerTarget(product.id)}
-                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
-                        >
-                          <ImageIcon className="w-3.5 h-3.5 text-[#E8DFD0]" />
-                          <span>Select from Media Library</span>
-                        </button>
-
-                        <label className={`cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8DFD0] hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-sm transition-colors ${
-                          uploadingTarget === product.id ? 'opacity-60 cursor-not-allowed' : ''
-                        }`}>
-                          {uploadingTarget === product.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5E1224]" />
-                          ) : (
-                            <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
-                          )}
-                          <span>{uploadingTarget === product.id ? 'Uploading...' : 'Upload Photos'}</span>
-                          <input
-                            type="file"
-                            multiple
-                            accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime"
-                            disabled={uploadingTarget === product.id}
-                            onChange={(e) => handleUploadFiles(e.target.files, product.id)}
-                            className="hidden"
-                          />
-                        </label>
-
-                        <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="url"
-                            placeholder="Or paste photo URL (Cloudinary, Unsplash)"
-                            value={photoUrlInput[product.id] || ''}
-                            onChange={(e) =>
-                              setPhotoUrlInput((prev) => ({ ...prev, [product.id]: e.target.value }))
-                            }
-                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224] bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleAddUrl(product.id)}
-                            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-900 text-white rounded text-xs font-semibold"
-                          >
-                            Add URL
-                          </button>
-                        </div>
-                      </div>
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            status === 'PUBLISHED'
+                              ? 'bg-emerald-600'
+                              : status === 'DRAFT'
+                              ? 'bg-amber-600'
+                              : 'bg-gray-400'
+                          }`}
+                        />
+                        {status === 'PUBLISHED' ? 'Published' : status === 'DRAFT' ? 'Draft' : 'Archived'}
+                      </span>
                     </div>
                   </div>
-                )}
+
+                  {/* Stats Row: Sizes & Total Stock */}
+                  <div className="pt-1.5 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-600">
+                    <div>
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Sizes</span>
+                      <span className="font-serif font-bold text-gray-900 text-xs">{sizeCount}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Total Stock</span>
+                      <span
+                        className={`font-serif font-bold text-xs ${
+                          totalStock === 0 ? 'text-red-700' : totalStock < 10 ? 'text-amber-700' : 'text-gray-900'
+                        }`}
+                      >
+                        {totalStock}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Manage Product Button (Navigates to Dedicated Edit Page) */}
+                  <Link
+                    to={`/admin/products/${product.id}`}
+                    className="w-full mt-1.5 py-1.5 px-2 border border-[#5E1224]/30 hover:border-[#5E1224] bg-white hover:bg-[#5E1224] text-[#5E1224] hover:text-white rounded-lg text-xs font-semibold transition-all shadow-xs flex items-center justify-center gap-1.5 group-hover:border-[#5E1224]"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    <span>Manage Product</span>
+                  </Link>
+                </div>
               </div>
             );
           })}
         </div>
+      ) : (
+        /* ------------------------------------------------------
+           COMPACT LIST VIEW (Alternative Density)
+           ------------------------------------------------------ */
+        <div className="bg-white rounded-xl border border-[#E8DFD0] overflow-hidden shadow-xs">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#FAF6F0] text-gray-700 uppercase tracking-wider text-[10px] font-bold border-b border-gray-200">
+              <tr>
+                <th className="py-2.5 px-3">Design</th>
+                <th className="py-2.5 px-3">Category</th>
+                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3 text-center">Sizes</th>
+                <th className="py-2.5 px-3 text-center">Stock</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredProducts.map((product) => {
+                const primaryImg = product.primary_image || product.images?.[0]?.url;
+                const totalStock = product.total_stock ?? product.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
+                const status = product.status || (product.is_active ? 'PUBLISHED' : 'DRAFT');
+
+                return (
+                  <tr key={product.id} className="hover:bg-amber-50/20 transition-colors">
+                    {/* Design Photo & Name */}
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-11 rounded bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
+                          {primaryImg ? (
+                            <img src={primaryImg} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-[#5E1224] text-white text-[8px] flex items-center justify-center font-serif">
+                              RL
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-serif font-bold text-gray-900 text-xs sm:text-sm">{product.name}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">ID: #{product.id}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Category */}
+                    <td className="py-2 px-3 text-gray-600">
+                      <span className="font-semibold text-gray-800 text-xs">{product.category}</span>
+                      {product.subcategory && (
+                        <span className="block text-[10px] text-gray-500">{product.subcategory}</span>
+                      )}
+                    </td>
+
+                    {/* Status */}
+                    <td className="py-2 px-3">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                          status === 'PUBLISHED'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : status === 'DRAFT'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-gray-100 text-gray-600 border border-gray-200'
+                        }`}
+                      >
+                        {status}
+                      </span>
+                    </td>
+
+                    {/* Sizes Count */}
+                    <td className="py-2 px-3 text-center font-bold text-gray-800">
+                      {product.variants.length}
+                    </td>
+
+                    {/* Stock Count */}
+                    <td className="py-2 px-3 text-center">
+                      <span
+                        className={`font-bold text-xs ${
+                          totalStock === 0 ? 'text-red-700' : totalStock < 10 ? 'text-amber-700' : 'text-gray-800'
+                        }`}
+                      >
+                        {totalStock}
+                      </span>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-2 px-3 text-right">
+                      <Link
+                        to={`/admin/products/${product.id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-[#5E1224]/30 hover:border-[#5E1224] text-[#5E1224] hover:bg-[#5E1224] hover:text-white rounded-md text-xs font-semibold shadow-xs transition-all"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>Manage</span>
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      {/* Add New Product Modal */}
+      {/* ========================================================
+          5. ADD NEW PRODUCT MODAL (Preserved & Enhanced)
+          ======================================================== */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-[#E8DFD0] shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h2 className="font-serif font-bold text-lg text-gray-900">
-                Add New Boutique Product
-              </h2>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-[#E8DFD0] shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+              <div>
+                <h2 className="font-serif font-bold text-lg text-gray-900 text-[#5E1224]">
+                  Add New Boutique Design
+                </h2>
+                <p className="text-xs text-gray-500">Configure core product details and initial garment sizes.</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-gray-400 hover:text-gray-700 text-lg"
+                className="text-gray-400 hover:text-gray-700 p-1"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateProduct} className="space-y-3.5 text-xs">
+            {actionError && (
+              <div className="p-3 bg-red-50 text-red-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{actionError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateProduct} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-gray-700 mb-1">
+                <label className="block font-bold text-gray-700 mb-1">
                   Product Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1465,13 +694,13 @@ export const AdminProducts: React.FC = () => {
                   placeholder="e.g. Royal Indigo Silk Anarkali Set"
                   value={newProductName}
                   onChange={(e) => setNewProductName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
+                  className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224] focus:outline-none"
                 />
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
+                  <label className="block font-bold text-gray-700 mb-1">
                     Category <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -1481,7 +710,7 @@ export const AdminProducts: React.FC = () => {
                       setNewCategory(cat);
                       setNewSubcategory(CATEGORY_GROUPS[cat]?.[0] || '');
                     }}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224] bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224] focus:outline-none bg-white"
                   >
                     {Object.keys(CATEGORY_GROUPS).map((cat) => (
                       <option key={cat} value={cat}>
@@ -1492,13 +721,13 @@ export const AdminProducts: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
+                  <label className="block font-bold text-gray-700 mb-1">
                     Subcategory <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={newSubcategory}
                     onChange={(e) => setNewSubcategory(e.target.value)}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224] bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224] focus:outline-none bg-white"
                   >
                     {(CATEGORY_GROUPS[newCategory] || []).map((sub) => (
                       <option key={sub} value={sub}>
@@ -1507,329 +736,115 @@ export const AdminProducts: React.FC = () => {
                     ))}
                   </select>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Selling Price (₹) <span className="text-red-500">*</span>
-                  </label>
+                  <label className="block font-bold text-gray-700 mb-1">Initial Selling Price (₹)</label>
                   <input
                     type="number"
-                    required
+                    min="1"
                     value={initialPrice}
                     onChange={(e) => setInitialPrice(e.target.value)}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224]"
                   />
                 </div>
-
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    MRP (₹) <span className="text-red-500">*</span>
-                  </label>
+                  <label className="block font-bold text-gray-700 mb-1">MRP (₹)</label>
                   <input
                     type="number"
-                    required
+                    min="1"
                     value={newMrp}
                     onChange={(e) => setNewMrp(e.target.value)}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Fabric
-                  </label>
+                  <label className="block font-bold text-gray-700 mb-1">Fabric</label>
                   <input
                     type="text"
+                    placeholder="e.g. Pure Chanderi Silk"
                     value={newFabric}
                     onChange={(e) => setNewFabric(e.target.value)}
-                    placeholder="e.g. Pure Mulmul Cotton"
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224]"
                   />
                 </div>
-
                 <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Silhouette / Fit
-                  </label>
-                  <input
-                    type="text"
-                    value={newFit}
-                    onChange={(e) => setNewFit(e.target.value)}
-                    placeholder="e.g. Tailored Regular Fit"
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Status
-                  </label>
+                  <label className="block font-bold text-gray-700 mb-1">Status</label>
                   <select
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224] bg-white font-medium"
+                    onChange={(e) => setNewStatus(e.target.value as 'PUBLISHED' | 'DRAFT' | 'ARCHIVED')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224] bg-white"
                   >
-                    <option value="PUBLISHED">PUBLISHED (Visible)</option>
-                    <option value="DRAFT">DRAFT (Hidden)</option>
-                    <option value="ARCHIVED">ARCHIVED (Discontinued)</option>
+                    <option value="DRAFT">Draft Setup</option>
+                    <option value="PUBLISHED">Published Live</option>
+                    <option value="ARCHIVED">Archived</option>
                   </select>
                 </div>
               </div>
 
+              {/* Size Checkboxes */}
               <div>
-                <label className="block font-semibold text-gray-700 mb-1">
-                  Product Description
-                </label>
-                <textarea
-                  rows={2}
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="Enter authentic product details, embroidery, or occasion notes..."
-                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">
-                  Wash Care
-                </label>
-                <input
-                  type="text"
-                  value={newCare}
-                  onChange={(e) => setNewCare(e.target.value)}
-                  placeholder="Dry clean only"
-                  className="w-full px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
-                />
-              </div>
-
-              {/* Sizes and Live Inventory Inputs */}
-              <div className="bg-[#FAF7F2] p-3 rounded-lg border border-[#E8DFD0] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-gray-900 text-xs">
-                    Sizes &amp; Initial Stock (Stock of 0 stays 0)
-                  </span>
-                  <span className="text-[10px] text-gray-500">
-                    Enable sizes for this product
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {Object.entries(newSizeStock).map(([sizeKey, data]) => (
+                <label className="block font-bold text-gray-700 mb-2">Initial Sizes & Stock</label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {Object.entries(newSizeStock).map(([sz, data]) => (
                     <div
-                      key={sizeKey}
-                      className={`p-2 rounded border flex flex-col gap-1.5 transition-colors ${
-                        data.enabled
-                          ? 'bg-white border-[#5E1224]/40 shadow-xs'
-                          : 'bg-gray-100/60 border-gray-200 opacity-60'
+                      key={sz}
+                      className={`p-2 rounded-xl border text-center transition-all ${
+                        data.enabled ? 'border-[#5E1224] bg-amber-50/40 shadow-sm' : 'border-gray-200 bg-gray-50 opacity-60'
                       }`}
                     >
-                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs text-gray-800">
+                      <label className="flex items-center justify-center gap-1 font-bold text-xs cursor-pointer">
                         <input
                           type="checkbox"
                           checked={data.enabled}
                           onChange={(e) =>
                             setNewSizeStock((prev) => ({
                               ...prev,
-                              [sizeKey]: { ...prev[sizeKey], enabled: e.target.checked },
+                              [sz]: { ...prev[sz], enabled: e.target.checked },
                             }))
                           }
                           className="rounded text-[#5E1224] focus:ring-[#5E1224]"
                         />
-                        <span>Size {sizeKey}</span>
+                        <span>{sz}</span>
                       </label>
-
                       {data.enabled && (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1 text-[11px]">
-                            <span className="text-gray-500 w-10">Stock:</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={data.stock}
-                              onChange={(e) =>
-                                setNewSizeStock((prev) => ({
-                                  ...prev,
-                                  [sizeKey]: { ...prev[sizeKey], stock: e.target.value },
-                                }))
-                              }
-                              className="w-full px-1.5 py-0.5 border rounded text-xs font-semibold focus:outline-none focus:border-[#5E1224]"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1 text-[11px]">
-                            <span className="text-gray-500 w-10">₹:</span>
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder={initialPrice}
-                              value={data.price}
-                              onChange={(e) =>
-                                setNewSizeStock((prev) => ({
-                                  ...prev,
-                                  [sizeKey]: { ...prev[sizeKey], price: e.target.value },
-                                }))
-                              }
-                              className="w-full px-1.5 py-0.5 border rounded text-xs focus:outline-none focus:border-[#5E1224]"
-                            />
-                          </div>
-                        </div>
+                        <input
+                          type="number"
+                          placeholder="Qty"
+                          min="0"
+                          value={data.stock}
+                          onChange={(e) =>
+                            setNewSizeStock((prev) => ({
+                              ...prev,
+                              [sz]: { ...prev[sz], stock: e.target.value },
+                            }))
+                          }
+                          className="w-full mt-1.5 px-1 py-0.5 text-center text-xs border rounded bg-white"
+                        />
                       )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">
-                  Product Photos & Videos ({newImages.length})
-                </label>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMediaPickerTarget('new')}
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded text-xs font-semibold shadow-sm transition-colors"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5 text-[#E8DFD0]" />
-                    <span>Select from Media Library</span>
-                  </button>
-
-                  <label className={`cursor-pointer inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#FCF8F0] border border-[#E8DFD0] hover:bg-gray-100 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors ${
-                    uploadingTarget === 'new' ? 'opacity-60 cursor-not-allowed' : ''
-                  }`}>
-                    {uploadingTarget === 'new' ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5E1224]" />
-                    ) : (
-                      <Upload className="w-3.5 h-3.5 text-[#B58A3C]" />
-                    )}
-                    <span>{uploadingTarget === 'new' ? 'Uploading...' : 'Upload Photos'}</span>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime"
-                      disabled={uploadingTarget === 'new'}
-                      onChange={(e) => handleUploadFiles(e.target.files, 'new')}
-                      className="hidden"
-                    />
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="Or paste photo URL"
-                    value={newImageUrlInput}
-                    onChange={(e) => setNewImageUrlInput(e.target.value)}
-                    className="flex-1 px-3 py-2 border rounded focus:outline-none focus:border-[#5E1224]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAddUrl('new')}
-                    className="px-3 py-2 bg-gray-800 text-white rounded text-xs font-semibold"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                {newImages.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-gray-100">
-                    {newImages.map((item, idx) => {
-                      const url = item.url;
-                      return (
-                      <div
-                        key={idx}
-                        className="relative bg-white rounded border border-gray-200 overflow-hidden flex flex-col"
-                      >
-                        <div className="aspect-[4/5] bg-gray-100 relative">
-                          {(() => {
-                            const isVid = /\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i.test(url);
-                            const pUrl = isVid ? url.replace(/\.(mp4|webm|mov|ogg|mkv)(\?.*)?$/i, '.jpg') : url;
-                            return (
-                              <>
-                                <img src={pUrl} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
-                                {isVid && (
-                                  <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <span className="w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center">
-                                      <Play className="w-3 h-3 fill-white ml-0.5" />
-                                    </span>
-                                  </span>
-                                )}
-                              </>
-                            );
-                          })()}
-                          {idx === 0 && (
-                            <span className="absolute top-1 left-1 bg-[#5E1224] text-white text-[8px] font-bold px-1 rounded">
-                              Cover
-                            </span>
-                          )}
-                        </div>
-                        <div className="p-1 bg-gray-50 flex items-center justify-between">
-                          <div className="flex items-center gap-0.5">
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={() => handleReorder('new', idx, idx - 1)}
-                              className="p-0.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded"
-                              title="Move earlier"
-                            >
-                              <ArrowLeft className="w-3 h-3" />
-                            </button>
-                            {idx > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleReorder('new', idx, 0)}
-                                className="text-[9px] px-1 py-0.5 bg-[#FAF5EC] hover:bg-[#B58A3C] hover:text-white text-[#B58A3C] border border-[#B58A3C]/40 rounded font-semibold transition-colors"
-                                title="Set this as main cover photo"
-                              >
-                                ★ Cover
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              disabled={idx === newImages.length - 1}
-                              onClick={() => handleReorder('new', idx, idx + 1)}
-                              className="p-0.5 hover:bg-gray-200 disabled:opacity-20 text-gray-700 rounded"
-                              title="Move later"
-                            >
-                              <ArrowRight className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage('new', idx)}
-                            className="p-0.5 text-red-600 hover:bg-red-50 rounded"
-                            title="Remove image"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  </div>
-                )}
-              </div>
-
-              <div className="text-[11px] text-gray-600 bg-[#FCF8F0] p-2.5 rounded border border-[#E8DFD0] space-y-1">
-                <p>
-                  <strong>Default Status:</strong> New products default to <strong>DRAFT</strong> so you can review descriptions, real stock, and photos before publishing to the storefront.
-                </p>
-                <p className="text-[10px] text-gray-500">
-                  <strong>Upload Limits:</strong> Images (JPEG, PNG, WebP up to 10MB) &bull; Videos (MP4, WebM, MOV up to 60MB).
-                </p>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-50 font-semibold"
+                  className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={actionLoading || !newProductName.trim()}
-                  className="px-5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 text-white font-semibold rounded shadow"
+                  disabled={actionLoading}
+                  className="px-5 py-2 bg-[#5E1224] text-white rounded-xl text-xs font-semibold hover:bg-[#4A0E1C] disabled:opacity-50 shadow-md"
                 >
-                  {actionLoading ? 'Creating...' : 'Create Product'}
+                  {actionLoading ? 'Creating...' : 'Create & Manage'}
                 </button>
               </div>
             </form>
@@ -1837,113 +852,34 @@ export const AdminProducts: React.FC = () => {
         </div>
       )}
 
-      {/* Category Assignment Modal for Existing Products */}
-      {categoryModalProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-[#E8DFD0] shadow-2xl max-w-md w-full p-6 space-y-4 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div>
-                <h3 className="font-serif font-bold text-base text-gray-900">
-                  Assign Category & Subcategory
-                </h3>
-                <p className="text-xs text-gray-500 truncate max-w-xs">
-                  {categoryModalProduct.name}
-                </p>
-              </div>
+      {/* Delete Confirmation Modal */}
+      {deletingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-red-200 space-y-4">
+            <h3 className="font-serif font-bold text-lg text-gray-900">Delete Product</h3>
+            <p className="text-xs text-gray-700">
+              Are you sure you want to delete <strong>{deletingProduct.name}</strong>? All variants and photos will be removed.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setCategoryModalProduct(null)}
-                className="text-gray-400 hover:text-gray-700 text-lg"
+                onClick={() => setDeletingProduct(null)}
+                className="px-4 py-2 border rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100"
               >
-                ✕
+                Cancel
               </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1.5">
-                  Main Category
-                </label>
-                <select
-                  value={assignCat}
-                  onChange={(e) => {
-                    const nextCat = e.target.value;
-                    setAssignCat(nextCat);
-                    setAssignSubcat(CATEGORY_GROUPS[nextCat]?.[0] || '');
-                  }}
-                  className="w-full px-3 py-2 border rounded bg-white text-sm focus:outline-none focus:border-[#5E1224]"
-                >
-                  {Object.keys(CATEGORY_GROUPS).map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1.5">
-                  Subcategory
-                </label>
-                <select
-                  value={assignSubcat}
-                  onChange={(e) => setAssignSubcat(e.target.value)}
-                  className="w-full px-3 py-2 border rounded bg-white text-sm focus:outline-none focus:border-[#5E1224]"
-                >
-                  {(CATEGORY_GROUPS[assignCat] || []).map((sub) => (
-                    <option key={sub} value={sub}>
-                      {sub}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="p-3 bg-[#FCF8F0] border border-[#E8DFD0] rounded text-gray-600 text-[11px] leading-relaxed">
-                Saving this will organize this design into <strong>{assignCat} › {assignSubcat}</strong> across desktop and mobile menus without changing any existing variants, prices, or orders.
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCategoryModalProduct(null)}
-                  className="px-4 py-2 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={handleSaveCategoryAssignment}
-                  className="px-5 py-2 rounded text-xs font-semibold bg-[#5E1224] text-white hover:bg-[#3A080F] disabled:opacity-50"
-                >
-                  {actionLoading ? 'Saving...' : 'Save Category'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleDeleteProductConfirm}
+                disabled={actionLoading}
+                className="px-5 py-2 bg-red-700 text-white rounded-xl text-xs font-semibold hover:bg-red-800 disabled:opacity-50"
+              >
+                {actionLoading ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>
       )}
-      {/* Media Library Picker Modal */}
-      <MediaLibraryPickerModal
-        isOpen={mediaPickerTarget !== null}
-        onClose={() => setMediaPickerTarget(null)}
-        onSelect={(selectedAssets) => handleAddFromLibrary(mediaPickerTarget, selectedAssets)}
-        targetId={mediaPickerTarget}
-        alreadySelectedKeys={
-          new Set(
-            mediaPickerTarget === 'new'
-              ? newImages.map(getProductMediaItemKey)
-              : typeof mediaPickerTarget === 'number'
-              ? (photosMap[mediaPickerTarget] || []).map(getProductMediaItemKey)
-              : []
-          )
-        }
-        title={
-          mediaPickerTarget === 'new'
-            ? 'Select Gallery Media for New Product'
-            : 'Select Gallery Media for Product'
-        }
-      />
     </div>
   );
 };
