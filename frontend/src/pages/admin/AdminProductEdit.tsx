@@ -1165,7 +1165,7 @@ export const AdminProductEdit: React.FC = () => {
                       key={item.id || idx}
                       type="button"
                       onClick={() => setSelectedPhotoIndex(idx)}
-                      className={`relative w-14 h-18 rounded-md overflow-hidden border shrink-0 transition-all ${
+                      className={`relative w-14 h-[72px] rounded-md overflow-hidden border shrink-0 transition-all ${
                         isSelected
                           ? 'ring-2 ring-[#5E1224] border-transparent scale-105 shadow-sm'
                           : 'border-gray-300 opacity-70 hover:opacity-100 hover:border-gray-400'
@@ -1176,7 +1176,7 @@ export const AdminProductEdit: React.FC = () => {
                           VIDEO
                         </div>
                       ) : (
-                        <img src={item.url} alt={item.alt_text || ''} className="w-full h-full object-cover" />
+                        <img src={item.url} alt={item.alt_text || ''} className="w-full h-full object-cover object-top" />
                       )}
                       {idx === 0 && (
                         <span className="absolute top-0.5 left-0.5 bg-[#5E1224] text-white p-0.5 rounded-full shadow text-[7px]">
@@ -1191,11 +1191,11 @@ export const AdminProductEdit: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-14 h-18 rounded-md border-2 border-dashed border-[#B58A3C]/50 hover:border-[#5E1224] bg-amber-50/40 hover:bg-amber-50 text-[#5E1224] flex flex-col items-center justify-center gap-0.5 shrink-0 transition-all"
+                  className="w-14 h-[72px] rounded-md border-2 border-dashed border-[#B58A3C]/50 hover:border-[#5E1224] bg-amber-50/40 hover:bg-amber-50 text-[#5E1224] flex flex-col items-center justify-center gap-1 shrink-0 transition-all cursor-pointer"
                   title="Upload New Photo"
                 >
                   <Plus className="w-4 h-4 text-[#5E1224]" />
-                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#5E1224]">Add</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#5E1224]">Add</span>
                 </button>
               </div>
             </div>
@@ -1691,7 +1691,7 @@ export const AdminProductEdit: React.FC = () => {
                                       [v.id]: { ...edits, selling_price: e.target.value },
                                     }))
                                   }
-                                  className="w-18 px-1.5 py-0.5 text-right text-xs border border-gray-300 rounded font-semibold focus:ring-1 focus:ring-[#5E1224]"
+                                  className="w-20 px-1.5 py-0.5 text-right text-xs border border-gray-300 rounded font-semibold focus:ring-1 focus:ring-[#5E1224]"
                                 />
                               ) : (
                                 <span className="font-semibold text-gray-900 text-xs">
@@ -1713,7 +1713,7 @@ export const AdminProductEdit: React.FC = () => {
                                       [v.id]: { ...edits, mrp: e.target.value },
                                     }))
                                   }
-                                  className="w-18 px-1.5 py-0.5 text-right text-xs border border-gray-300 rounded text-gray-600 focus:ring-1 focus:ring-[#5E1224]"
+                                  className="w-20 px-1.5 py-0.5 text-right text-xs border border-gray-300 rounded text-gray-600 focus:ring-1 focus:ring-[#5E1224]"
                                 />
                               ) : (
                                 <span className="text-gray-500 text-xs">

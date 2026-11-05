@@ -211,7 +211,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                     key={i}
                     className="p-3 bg-white rounded-lg border border-[#E8DFD0] flex gap-3 animate-pulse"
                   >
-                    <div className="w-14 h-18 bg-gray-200 rounded" />
+                    <div className="w-14 h-[72px] bg-gray-200 rounded" />
                     <div className="flex-1 space-y-2 py-1">
                       <div className="h-3.5 bg-gray-200 rounded w-3/4" />
                       <div className="h-3 bg-gray-200 rounded w-1/2" />
@@ -258,7 +258,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                       onClick={onClose}
                       className="group p-3 bg-white rounded-lg border border-[#E8DFD0] hover:border-[#5B111A] hover:shadow-sm flex gap-3 items-center transition-all"
                     >
-                      <div className="w-14 h-18 bg-gray-100 rounded overflow-hidden shrink-0 border border-gray-100">
+                      <div className="w-14 h-[72px] bg-gray-100 rounded overflow-hidden shrink-0 border border-gray-100">
                         {thumb ? (
                           <img
                             src={thumb}

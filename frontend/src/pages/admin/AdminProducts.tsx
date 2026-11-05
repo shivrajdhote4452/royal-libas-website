@@ -456,15 +456,15 @@ export const AdminProducts: React.FC = () => {
             return (
               <div
                 key={product.id}
-                className="bg-white rounded-xl border border-[#E8DFD0] overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group bg-gradient-to-b from-white to-[#FAF6F0]/20"
+                className="bg-white rounded-xl border border-[#E8DFD0] overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group bg-gradient-to-b from-white to-[#FAF6F0]/20 max-w-[300px] sm:max-w-none w-full mx-auto"
               >
                 {/* Product Cover Photo Card */}
-                <div className="relative aspect-[4/5] w-full overflow-hidden bg-gray-100 border-b border-[#E8DFD0]/60">
+                <div className="relative aspect-[4/3] sm:aspect-[4/5] w-full overflow-hidden bg-gray-100 border-b border-[#E8DFD0]/60">
                   {primaryImg ? (
                     <img
                       src={primaryImg}
                       alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500 ease-out"
                       loading="lazy"
                     />
                   ) : (
