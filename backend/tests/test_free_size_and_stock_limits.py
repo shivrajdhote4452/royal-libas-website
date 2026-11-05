@@ -526,6 +526,185 @@ class TestFreeSizeAndStockLimits(unittest.TestCase):
         self.assertEqual(sizes, ["S", "M", "L"])
         self.assertNotIn("Free Size", sizes)
 
+    def test_08_free_size_only_size_guide_visibility_rules(self):
+        """Case 8: Refinement for Size Guide visibility rules:
+        - Free Size-only product WITHOUT explicit chart: should NOT show generic S/M/L Size Guide.
+        - Free Size-only product WITH explicit chart: DOES show the explicit chart.
+        - Standard-size product (e.g. S, M, L) WITHOUT explicit chart: DOES show the default Size Guide.
+        - Mixed-size product (e.g. Free Size + S/M) WITHOUT explicit chart: DOES show the default Size Guide.
+        """
+        import json
+
+        def evaluate_size_guide_display(product_data: dict) -> dict:
+            variants = product_data.get("variants") or []
+            size_chart_raw = product_data.get("size_chart")
+            parsed_chart = None
+            if size_chart_raw:
+                try:
+                    parsed_chart = json.loads(size_chart_raw)
+                except Exception:
+                    parsed_chart = None
+
+            # Extract explicit rows
+            explicit_rows = []
+            if parsed_chart and isinstance(parsed_chart, (dict, list)):
+                source = parsed_chart.get("measurements") if isinstance(parsed_chart, dict) else parsed_chart
+                if source is None and isinstance(parsed_chart, dict):
+                    metadata_keys = {'name', 'title', 'unit', 'description', 'notes', 'advice'}
+                    filtered = {k: v for k, v in parsed_chart.items() if k.lower() not in metadata_keys}
+                    if filtered:
+                        for k, v in filtered.items():
+                            explicit_rows.append({"size": k})
+                elif isinstance(source, list):
+                    for item in source:
+                        explicit_rows.append({"size": item.get("size", "Free Size")})
+                elif isinstance(source, dict):
+                    for k in source.keys():
+                        explicit_rows.append({"size": k})
+
+            has_explicit_chart = len(explicit_rows) > 0
+
+            # Determine if product has ONLY Free Size variants
+            def norm(s):
+                s_str = str(s or "").strip().lower()
+                if s_str in ["free size", "freesize", "free-size", "free_size", "fs", "f.s."]:
+                    return "free size"
+                return s_str
+
+            is_only_free_size = (
+                len(variants) > 0 and
+                all(norm(v.get("size")) == "free size" for v in variants)
+            )
+
+            # Rule: Free Size-only without explicit chart hides size guide; others show it
+            should_show_size_guide = (not is_only_free_size) or has_explicit_chart
+            return {
+                "is_only_free_size": is_only_free_size,
+                "has_explicit_chart": has_explicit_chart,
+                "should_show_size_guide": should_show_size_guide,
+                "explicit_rows": explicit_rows,
+            }
+
+        # Scenario 1: Free Size-only product WITHOUT explicit chart
+        p_fs_no_chart = Product(
+            name="Unstitched Chiffon Dupatta Suit",
+            slug="unstitched-chiffon-dupatta-suit",
+            category="UNSTITCHED MATERIAL",
+            status="PUBLISHED",
+            is_active=True,
+            size_chart=None,
+        )
+        self.db.add(p_fs_no_chart)
+        self.db.commit()
+        self.db.refresh(p_fs_no_chart)
+        v_fs1 = ProductVariant(
+            product_id=p_fs_no_chart.id,
+            size="Free Size",
+            sku="UCDS-FS",
+            selling_price=Decimal("1999.00"),
+            stock=10,
+            is_active=True,
+        )
+        self.db.add(v_fs1)
+        self.db.commit()
+
+        res1 = client.get(f"/products/{p_fs_no_chart.slug}")
+        self.assertEqual(res1.status_code, 200)
+        data1 = res1.json()
+        eval1 = evaluate_size_guide_display(data1)
+        self.assertTrue(eval1["is_only_free_size"])
+        self.assertFalse(eval1["has_explicit_chart"])
+        self.assertFalse(eval1["should_show_size_guide"], "Free Size-only product without chart MUST NOT show generic Size Guide")
+
+        # Scenario 2: Free Size-only product WITH explicit chart
+        p_fs_with_chart = Product(
+            name="Handloom Chanderi Unstitched Set",
+            slug="handloom-chanderi-unstitched-set",
+            category="UNSTITCHED MATERIAL",
+            status="PUBLISHED",
+            is_active=True,
+            size_chart=json.dumps({
+                "name": "Unstitched Fabric Dimensions",
+                "measurements": [
+                    {"size": "Free Size", "bust": 110, "waist": 95, "hip": 115, "length": 125}
+                ],
+                "advice": "Fabric length: 2.5m Kurta, 2.5m Bottom, 2.25m Dupatta"
+            }),
+        )
+        self.db.add(p_fs_with_chart)
+        self.db.commit()
+        self.db.refresh(p_fs_with_chart)
+        v_fs2 = ProductVariant(
+            product_id=p_fs_with_chart.id,
+            size="Free Size",
+            sku="HCUS-FS",
+            selling_price=Decimal("3499.00"),
+            stock=8,
+            is_active=True,
+        )
+        self.db.add(v_fs2)
+        self.db.commit()
+
+        res2 = client.get(f"/products/{p_fs_with_chart.slug}")
+        self.assertEqual(res2.status_code, 200)
+        data2 = res2.json()
+        eval2 = evaluate_size_guide_display(data2)
+        self.assertTrue(eval2["is_only_free_size"])
+        self.assertTrue(eval2["has_explicit_chart"])
+        self.assertTrue(eval2["should_show_size_guide"], "Free Size-only product WITH explicit chart MUST show Size Guide")
+        self.assertEqual(len(eval2["explicit_rows"]), 1)
+
+        # Scenario 3: Standard-size product (S, M, L) WITHOUT explicit chart
+        p_std_no_chart = Product(
+            name="Boutique Velvet Kurti",
+            slug="boutique-velvet-kurti",
+            category="TWO PIECES",
+            status="PUBLISHED",
+            is_active=True,
+            size_chart=None,
+        )
+        self.db.add(p_std_no_chart)
+        self.db.commit()
+        self.db.refresh(p_std_no_chart)
+        v_s = ProductVariant(product_id=p_std_no_chart.id, size="S", selling_price=Decimal("2999.00"), stock=5, is_active=True)
+        v_m = ProductVariant(product_id=p_std_no_chart.id, size="M", selling_price=Decimal("2999.00"), stock=5, is_active=True)
+        v_l = ProductVariant(product_id=p_std_no_chart.id, size="L", selling_price=Decimal("2999.00"), stock=5, is_active=True)
+        self.db.add_all([v_s, v_m, v_l])
+        self.db.commit()
+
+        res3 = client.get(f"/products/{p_std_no_chart.slug}")
+        self.assertEqual(res3.status_code, 200)
+        data3 = res3.json()
+        eval3 = evaluate_size_guide_display(data3)
+        self.assertFalse(eval3["is_only_free_size"])
+        self.assertFalse(eval3["has_explicit_chart"])
+        self.assertTrue(eval3["should_show_size_guide"], "Standard multi-size product WITHOUT explicit chart MUST keep standard fallback Size Guide")
+
+        # Scenario 4: Mixed-size product (S, M, Free Size) WITHOUT explicit chart
+        p_mixed_no_chart = Product(
+            name="Fusion Co-ord Set",
+            slug="fusion-co-ord-set",
+            category="THREE PIECES",
+            status="PUBLISHED",
+            is_active=True,
+            size_chart=None,
+        )
+        self.db.add(p_mixed_no_chart)
+        self.db.commit()
+        self.db.refresh(p_mixed_no_chart)
+        v_mix1 = ProductVariant(product_id=p_mixed_no_chart.id, size="S", selling_price=Decimal("3299.00"), stock=4, is_active=True)
+        v_mix2 = ProductVariant(product_id=p_mixed_no_chart.id, size="Free Size", selling_price=Decimal("3299.00"), stock=4, is_active=True)
+        self.db.add_all([v_mix1, v_mix2])
+        self.db.commit()
+
+        res4 = client.get(f"/products/{p_mixed_no_chart.slug}")
+        self.assertEqual(res4.status_code, 200)
+        data4 = res4.json()
+        eval4 = evaluate_size_guide_display(data4)
+        self.assertFalse(eval4["is_only_free_size"])
+        self.assertFalse(eval4["has_explicit_chart"])
+        self.assertTrue(eval4["should_show_size_guide"], "Mixed-size product WITHOUT explicit chart MUST keep standard fallback Size Guide")
+
 
 if __name__ == "__main__":
     unittest.main()
