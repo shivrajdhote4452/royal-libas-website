@@ -1,5 +1,13 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  RouterProvider,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
+} from 'react-router-dom';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { Home } from './pages/Home';
@@ -85,69 +93,77 @@ const StorefrontLayout: React.FC = () => {
   );
 };
 
-export const App: React.FC = () => {
+const RootLayout: React.FC = () => {
   return (
     <ErrorBoundary>
       <CartProvider>
-      <WishlistProvider>
-        <QuickAddProvider>
-          <BrowserRouter>
+        <WishlistProvider>
+          <QuickAddProvider>
             <ScrollRestoration />
-            <Routes>
-          {/* Admin Routes */}
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="orders" element={<AdminOrders />} />
-            <Route path="orders/:id" element={<AdminOrderDetail />} />
-            <Route path="payments" element={<AdminPayments />} />
-            <Route path="shipping" element={<AdminShipping />} />
-            <Route path="returns" element={<AdminReturns />} />
-            <Route path="exchanges" element={<AdminReturns />} />
-            <Route path="products" element={<AdminProducts />} />
-            <Route path="products/:id" element={<AdminProductEdit />} />
-            <Route path="inventory" element={<AdminInventory />} />
-            <Route path="collections" element={<AdminCollections />} />
-            <Route path="size-charts" element={<Navigate to="/admin/products" replace />} />
-            <Route path="media" element={<AdminMedia />} />
-            <Route path="customers" element={<AdminCustomers />} />
-            <Route path="homepage" element={<AdminHomepage />} />
-            <Route path="coupons" element={<AdminCoupons />} />
-            <Route path="reports" element={<AdminReports />} />
-            <Route path="staff" element={<AdminStaff />} />
-            <Route path="activity" element={<AdminActivityLog />} />
-            <Route path="settings" element={<AdminSettings />} />
-          </Route>
-
-          {/* Customer Storefront Routes */}
-          <Route element={<StorefrontLayout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/shop" element={<Shop />} />
-            <Route path="/product/:id" element={<ProductPage />} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/order-success/:orderCode" element={<OrderSuccess />} />
-            <Route path="/track-order" element={<TrackOrder />} />
-
-            {/* Boutique Information & Policy Pages */}
-            <Route path="/about" element={<About />} />
-            <Route path="/shipping-policy" element={<ShippingPolicy />} />
-            <Route path="/return-policy" element={<ReturnsPolicy />} />
-            <Route path="/exchange-policy" element={<ReturnsPolicy />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/terms-of-service" element={<TermsOfService />} />
-
-            <Route path="*" element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-        </QuickAddProvider>
-      </WishlistProvider>
-    </CartProvider>
+            <Outlet />
+          </QuickAddProvider>
+        </WishlistProvider>
+      </CartProvider>
     </ErrorBoundary>
   );
+};
+
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route element={<RootLayout />}>
+      {/* Admin Routes */}
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="orders" element={<AdminOrders />} />
+        <Route path="orders/:id" element={<AdminOrderDetail />} />
+        <Route path="payments" element={<AdminPayments />} />
+        <Route path="shipping" element={<AdminShipping />} />
+        <Route path="returns" element={<AdminReturns />} />
+        <Route path="exchanges" element={<AdminReturns />} />
+        <Route path="products" element={<AdminProducts />} />
+        <Route path="products/:id" element={<AdminProductEdit />} />
+        <Route path="inventory" element={<AdminInventory />} />
+        <Route path="collections" element={<AdminCollections />} />
+        <Route path="size-charts" element={<Navigate to="/admin/products" replace />} />
+        <Route path="media" element={<AdminMedia />} />
+        <Route path="customers" element={<AdminCustomers />} />
+        <Route path="homepage" element={<AdminHomepage />} />
+        <Route path="coupons" element={<AdminCoupons />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="staff" element={<AdminStaff />} />
+        <Route path="activity" element={<AdminActivityLog />} />
+        <Route path="settings" element={<AdminSettings />} />
+      </Route>
+
+      {/* Customer Storefront Routes */}
+      <Route element={<StorefrontLayout />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/shop" element={<Shop />} />
+        <Route path="/product/:id" element={<ProductPage />} />
+        <Route path="/cart" element={<Cart />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/order-success/:orderCode" element={<OrderSuccess />} />
+        <Route path="/track-order" element={<TrackOrder />} />
+
+        {/* Boutique Information & Policy Pages */}
+        <Route path="/about" element={<About />} />
+        <Route path="/shipping-policy" element={<ShippingPolicy />} />
+        <Route path="/return-policy" element={<ReturnsPolicy />} />
+        <Route path="/exchange-policy" element={<ReturnsPolicy />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/terms-of-service" element={<TermsOfService />} />
+
+        <Route path="*" element={<Home />} />
+      </Route>
+    </Route>
+  )
+);
+
+export const App: React.FC = () => {
+  return <RouterProvider router={router} />;
 };
 
 export default App;

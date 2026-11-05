@@ -172,6 +172,28 @@ class ProductCreate(BaseModel):
     images: Optional[List[ProductImageCreate]] = []
 
 
+class BulkVariantUpdateItem(BaseModel):
+    variant_id: int
+    selling_price: Optional[Decimal] = None
+    mrp: Optional[Decimal] = None
+    sku: Optional[str] = None
+    is_active: Optional[bool] = None
+
+    @field_validator("selling_price")
+    @classmethod
+    def validate_selling_price_positive(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v <= 0:
+            raise ValueError("Selling price must be greater than 0")
+        return v
+
+    @field_validator("mrp")
+    @classmethod
+    def validate_mrp_positive(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v <= 0:
+            raise ValueError("MRP must be greater than 0")
+        return v
+
+
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
@@ -189,6 +211,7 @@ class ProductUpdate(BaseModel):
     is_active: Optional[bool] = None
     collection_ids: Optional[List[int]] = None
     images: Optional[List[ProductImageCreate]] = None
+    variants: Optional[List[BulkVariantUpdateItem]] = None
 
 
 class ProductListResponse(BaseModel):
@@ -1267,28 +1290,6 @@ class InventorySummaryResponse(BaseModel):
     out_of_stock_variants: int
     total_working_products: int
     total_working_units: int
-
-
-class BulkVariantUpdateItem(BaseModel):
-    variant_id: int
-    selling_price: Optional[Decimal] = None
-    mrp: Optional[Decimal] = None
-    sku: Optional[str] = None
-    is_active: Optional[bool] = None
-
-    @field_validator("selling_price")
-    @classmethod
-    def validate_selling_price_positive(cls, v: Optional[Decimal]) -> Optional[Decimal]:
-        if v is not None and v <= 0:
-            raise ValueError("Selling price must be greater than 0")
-        return v
-
-    @field_validator("mrp")
-    @classmethod
-    def validate_mrp_positive(cls, v: Optional[Decimal]) -> Optional[Decimal]:
-        if v is not None and v <= 0:
-            raise ValueError("MRP must be greater than 0")
-        return v
 
 
 class BulkVariantUpdateRequest(BaseModel):

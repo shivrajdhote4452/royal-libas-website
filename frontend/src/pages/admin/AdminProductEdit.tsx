@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useBlocker } from 'react-router-dom';
 import {
   ArrowLeft,
   ExternalLink,
@@ -84,6 +84,7 @@ export const AdminProductEdit: React.FC = () => {
     sku: string;
     photosJson: string;
     priceEditsJson: string;
+    initialVariantDetails: Record<number, { selling_price: string; mrp: string; sku: string; is_active: boolean; size: string }>;
   } | null>(null);
 
   // Media / Gallery State
@@ -218,13 +219,21 @@ export const AdminProductEdit: React.FC = () => {
         // Populate Variants
         setVariants(prod.variants || []);
 
-        // Initialize variant price edits
+        // Initialize variant price edits and initial snapshot
         const editsMap: Record<number, { selling_price: string; mrp: string; sku: string }> = {};
+        const initVariantDetails: Record<number, { selling_price: string; mrp: string; sku: string; is_active: boolean; size: string }> = {};
         (prod.variants || []).forEach((v) => {
           editsMap[v.id] = {
             selling_price: String(v.selling_price || ''),
             mrp: v.mrp ? String(v.mrp) : '',
             sku: v.sku || '',
+          };
+          initVariantDetails[v.id] = {
+            selling_price: String(v.selling_price || ''),
+            mrp: v.mrp ? String(v.mrp) : '',
+            sku: v.sku || '',
+            is_active: v.is_active !== false,
+            size: v.size || '',
           };
         });
         setVariantPriceEdits(editsMap);
@@ -246,6 +255,7 @@ export const AdminProductEdit: React.FC = () => {
           sku: initialBaseSku,
           photosJson,
           priceEditsJson,
+          initialVariantDetails: initVariantDetails,
         };
         setIsDirty(false);
       } catch (err: any) {
@@ -317,47 +327,24 @@ export const AdminProductEdit: React.FC = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
 
-  // 2. Browser Back / Forward buttons guard
+  // 2. Official React Router navigation blocker (browser Back/Forward, sidebar navigation, breadcrumbs)
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirty && currentLocation.pathname !== nextLocation.pathname
+  );
+
   useEffect(() => {
-    if (!isDirty) return;
-    const handlePopState = () => {
+    if (blocker.state === 'blocked') {
       const confirmed = window.confirm(
         'You have unsaved changes in Product Details, Photos, or Prices. Are you sure you want to leave without saving?'
       );
-      if (!confirmed) {
-        window.history.pushState(null, '', window.location.href);
+      if (confirmed) {
+        blocker.proceed();
+      } else {
+        blocker.reset();
       }
-    };
-    window.history.pushState(null, '', window.location.href);
-    window.addEventListener('popstate', handlePopState);
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [isDirty]);
-
-  // 3. In-app navigation (sidebar & top links) click interceptor
-  useEffect(() => {
-    if (!isDirty || !id) return;
-    const handleDocumentClick = (e: MouseEvent) => {
-      const target = (e.target as HTMLElement).closest('a');
-      if (target && target.getAttribute('href') && !target.getAttribute('href')?.startsWith('#')) {
-        const href = target.getAttribute('href') || '';
-        if (!href.includes(`/admin/products/${id}`)) {
-          const confirmed = window.confirm(
-            'You have unsaved changes in Product Details, Photos, or Prices. Are you sure you want to leave without saving?'
-          );
-          if (!confirmed) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }
-      }
-    };
-    document.addEventListener('click', handleDocumentClick, true);
-    return () => {
-      document.removeEventListener('click', handleDocumentClick, true);
-    };
-  }, [isDirty, id]);
+    }
+  }, [blocker]);
 
   // Available subcategories for current category
   const availableSubcategories = useMemo(() => {
@@ -537,14 +524,26 @@ export const AdminProductEdit: React.FC = () => {
 
       // Refresh edit map with server truth
       const updatedEdits: Record<number, { selling_price: string; mrp: string; sku: string }> = {};
+      const updatedInitDetails: Record<number, { selling_price: string; mrp: string; sku: string; is_active: boolean; size: string }> = {};
       res.updated_variants.forEach((v: any) => {
         updatedEdits[v.id] = {
           selling_price: String(v.selling_price),
           mrp: v.mrp ? String(v.mrp) : '',
           sku: v.sku || '',
         };
+        updatedInitDetails[v.id] = {
+          selling_price: String(v.selling_price),
+          mrp: v.mrp ? String(v.mrp) : '',
+          sku: v.sku || '',
+          is_active: v.is_active !== false,
+          size: v.size || '',
+        };
       });
       setVariantPriceEdits(updatedEdits);
+      if (initialStateRef.current) {
+        initialStateRef.current.initialVariantDetails = updatedInitDetails;
+        initialStateRef.current.priceEditsJson = JSON.stringify(updatedEdits);
+      }
       setIsEditingAllPrices(false);
       setSaveSuccessMessage('All variant prices and SKUs updated atomically!');
       setTimeout(() => setSaveSuccessMessage(null), 3000);
@@ -796,15 +795,69 @@ export const AdminProductEdit: React.FC = () => {
         }
       }
 
-      // If Base Design SKU was modified, persist to variant SKUs in single atomic transaction
+      // 1. Transactional Variant Price & SKU updates:
+      // - If Base Design SKU was modified, only rewrite variants whose initial SKU matched the standard pattern
+      // - Custom variant SKUs (e.g. RL-CUSTOM-XL) are preserved unless user explicitly edited that variant's SKU
+      // - Validate all changed variants (selling_price > 0, mrp > 0, selling_price <= mrp)
       const initialSku = initialStateRef.current?.sku || '';
-      if (sku.trim() && sku.trim() !== initialSku) {
-        const cleanBase = sku.trim();
-        const skuUpdates = variants.map((v) => ({
-          variant_id: v.id,
-          sku: `${cleanBase}-${v.size}`,
-        }));
-        await adminBulkUpdateVariants(token, product.id, skuUpdates);
+      const baseSkuChanged = sku.trim() && sku.trim() !== initialSku;
+      const variantUpdates: any[] = [];
+
+      for (const v of variants) {
+        const initV = initialStateRef.current?.initialVariantDetails?.[v.id];
+        const edit = variantPriceEdits[v.id];
+
+        const spStr = edit?.selling_price !== undefined ? edit.selling_price : (initV?.selling_price || String(v.selling_price || ''));
+        const mrpStr = edit?.mrp !== undefined ? edit.mrp : (initV?.mrp || (v.mrp ? String(v.mrp) : ''));
+        const p = parseFloat(spStr);
+        const m = mrpStr.trim() ? parseFloat(mrpStr) : undefined;
+
+        // Determine target SKU
+        let targetSku = edit?.sku !== undefined ? edit.sku.trim() : (initV?.sku || v.sku || '');
+        if (baseSkuChanged) {
+          const wasDefaultPattern = initV ? initV.sku === `${initialSku}-${v.size}` : false;
+          // Only update standard pattern variants; preserve custom variant SKUs
+          if (wasDefaultPattern && (!edit?.sku || edit.sku.trim() === initV?.sku)) {
+            targetSku = `${sku.trim()}-${v.size}`;
+          }
+        }
+
+        // Validate price and MRP
+        if (isNaN(p) || p <= 0) {
+          setSaveErrorMessage(`Validation error: Size '${v.size}' selling price must be greater than 0.`);
+          setSavingProduct(false);
+          return;
+        }
+        if (m !== undefined && (isNaN(m) || m <= 0)) {
+          setSaveErrorMessage(`Validation error: Size '${v.size}' MRP must be greater than 0.`);
+          setSavingProduct(false);
+          return;
+        }
+        if (m !== undefined && p > m) {
+          setSaveErrorMessage(`Validation error: Size '${v.size}' selling price (₹${p}) cannot exceed MRP (₹${m}).`);
+          setSavingProduct(false);
+          return;
+        }
+
+        // Detect if this variant has any change from initial snapshot
+        const priceDiff = initV ? Math.abs(parseFloat(initV.selling_price || '0') - p) > 0.001 : true;
+        const mrpDiff = initV ? (initV.mrp || '') !== (m !== undefined ? String(m) : '') : true;
+        const skuDiff = initV ? (initV.sku || '') !== targetSku : true;
+        const activeDiff = initV ? initV.is_active !== (v.is_active !== false) : false;
+
+        if (priceDiff || mrpDiff || skuDiff || activeDiff) {
+          variantUpdates.push({
+            variant_id: v.id,
+            selling_price: p,
+            mrp: m || null,
+            sku: targetSku || null,
+            is_active: v.is_active !== false,
+          });
+        }
+      }
+
+      if (variantUpdates.length > 0) {
+        payload.variants = variantUpdates;
       }
 
       const updated = await adminUpdateProduct(token, product.id, payload);
@@ -812,11 +865,30 @@ export const AdminProductEdit: React.FC = () => {
       setVariants(updated.variants || []);
       setInitialCollectionIds(updated.collection_ids || []);
 
+      // Refresh edit map and snapshot with server truth
+      const updatedEdits: Record<number, { selling_price: string; mrp: string; sku: string }> = {};
+      const updatedInitDetails: Record<number, { selling_price: string; mrp: string; sku: string; is_active: boolean; size: string }> = {};
+      (updated.variants || []).forEach((v: any) => {
+        updatedEdits[v.id] = {
+          selling_price: String(v.selling_price || ''),
+          mrp: v.mrp ? String(v.mrp) : '',
+          sku: v.sku || '',
+        };
+        updatedInitDetails[v.id] = {
+          selling_price: String(v.selling_price || ''),
+          mrp: v.mrp ? String(v.mrp) : '',
+          sku: v.sku || '',
+          is_active: v.is_active !== false,
+          size: v.size || '',
+        };
+      });
+      setVariantPriceEdits(updatedEdits);
+
       // Refresh snapshot
       const currentPhotosJson = JSON.stringify(
         photos.map((p, idx) => ({ url: p.url, sort_order: idx, media_asset_id: p.media_asset_id }))
       );
-      const currentPriceEditsJson = JSON.stringify(variantPriceEdits);
+      const currentPriceEditsJson = JSON.stringify(updatedEdits);
       initialStateRef.current = {
         name: updated.name,
         slug: updated.slug,
@@ -832,10 +904,12 @@ export const AdminProductEdit: React.FC = () => {
         sku: sku.trim(),
         photosJson: currentPhotosJson,
         priceEditsJson: currentPriceEditsJson,
+        initialVariantDetails: updatedInitDetails,
       };
 
       setIsDirty(false);
-      setSaveSuccessMessage('Product updated successfully!');
+      setIsEditingAllPrices(false);
+      setSaveSuccessMessage('Product and variants saved successfully!');
       setTimeout(() => setSaveSuccessMessage(null), 4000);
     } catch (err: any) {
       setSaveErrorMessage(err.message || 'Failed to save product changes');

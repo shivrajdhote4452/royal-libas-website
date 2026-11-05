@@ -43,7 +43,7 @@ if backend_dir not in sys.path:
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal, Base, engine
-from app.models import Admin, Product, ProductVariant, Order, OrderItem, Address, StoreSetting, ReturnRequest
+from app.models import Admin, Product, ProductVariant, Order, OrderItem, Address, StoreSetting, ReturnRequest, Collection
 from app.auth import hash_password
 
 client = TestClient(app)
@@ -85,13 +85,21 @@ def seed_isolated_fixtures():
 
         # Isolated test product & variant for inventory test
         if not db.query(Product).filter(Product.id == 1).first():
+            col_suit = db.query(Collection).filter(Collection.slug.in_(["suit-set", "suit-sets"])).first()
+            if not col_suit:
+                col_suit = Collection(name="Suit Sets", slug="suit-sets", is_active=True)
+                db.add(col_suit)
+                db.flush()
+
             p = Product(
                 id=1,
                 name="Isolated Test Garment",
                 slug="isolated-test-garment",
-                category="Suit Set",
+                category="SUIT SET",
+                subcategory="Party Wear",
                 is_active=True,
             )
+            p.collections = [col_suit]
             db.add(p)
             db.flush()
 
@@ -421,8 +429,7 @@ class TestAdminUpgradeIsolated(unittest.TestCase):
         res_404 = client.get("/admin/products/99999", headers=headers)
         self.assertEqual(res_404.status_code, 404)
 
-
-def test_admin_save_without_changes_preserves_collections_and_metadata(self):
+    def test_admin_save_without_changes_preserves_collections_and_metadata(self):
         """Regression test for non-destructive product save.
 
         Loading an existing product and saving without edits must not:
@@ -496,6 +503,213 @@ def test_admin_save_without_changes_preserves_collections_and_metadata(self):
 
         self.assertEqual(after_b["collections"], orig_collections, "Collections must match original when saved with same IDs!")
         self.assertEqual(after_b["collection_ids"], orig_col_ids)
+
+    def test_multiple_collections_preserved_on_failed_collection_fetch_and_category_sync(self):
+        """Prove multiple collections (canonical + multiple editorial) remain intact when collection fetch fails."""
+        headers = get_owner_token()
+        db = SessionLocal()
+        try:
+            # Seed collections: 1 canonical suit-sets, 1 canonical two-pieces, 2 editorial
+            col_suit = db.query(Collection).filter(Collection.slug == "suit-sets").first()
+            if not col_suit:
+                col_suit = Collection(name="Suit Sets", slug="suit-sets", is_active=True)
+                db.add(col_suit)
+            col_two = db.query(Collection).filter(Collection.slug == "two-pieces").first()
+            if not col_two:
+                col_two = Collection(name="Two Pieces", slug="two-pieces", is_active=True)
+                db.add(col_two)
+            col_festive = db.query(Collection).filter(Collection.slug == "festive-edit-reg").first()
+            if not col_festive:
+                col_festive = Collection(name="Festive Edit Reg", slug="festive-edit-reg", is_active=True)
+                db.add(col_festive)
+            col_heritage = db.query(Collection).filter(Collection.slug == "royal-heritage-reg").first()
+            if not col_heritage:
+                col_heritage = Collection(name="Royal Heritage Reg", slug="royal-heritage-reg", is_active=True)
+                db.add(col_heritage)
+            db.commit()
+
+            # Create test product assigned to suit-sets + festive-edit-reg + royal-heritage-reg
+            p = Product(
+                name="Multi Collection Garment",
+                slug="multi-collection-garment",
+                category="SUIT SET",
+                subcategory="Anarkali",
+                is_active=True,
+            )
+            p.collections = [col_suit, col_festive, col_heritage]
+            db.add(p)
+            db.commit()
+            prod_id = p.id
+        finally:
+            db.close()
+
+        # Simulate Save when collection fetch failed (collection_ids omitted from payload)
+        # and category is updated to 'TWO PIECES'
+        update_payload = {
+            "name": "Multi Collection Garment Updated",
+            "category": "TWO PIECES",
+            "subcategory": "Co-ord Sets",
+        }
+        res = client.patch(f"/admin/products/{prod_id}", json=update_payload, headers=headers)
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+
+        # Both editorial collections MUST be preserved
+        self.assertIn("Festive Edit Reg", data["collections"])
+        self.assertIn("Royal Heritage Reg", data["collections"])
+        # Canonical collection must be updated to Two Pieces
+        self.assertTrue(any(c.upper() in ["TWO PIECES", "TWO PIECE"] for c in data["collections"]))
+        # Old canonical collection Suit Sets must not be present
+        self.assertFalse(any(c.upper() in ["SUIT SET", "SUIT SETS"] for c in data["collections"]))
+
+    def test_unified_transactional_save_success_and_reload(self):
+        """Test unified save: saving product details and variant prices/MRPs/SKUs in a single atomic transaction."""
+        headers = get_owner_token()
+        db = SessionLocal()
+        try:
+            p = Product(
+                name="Unified Save Garment",
+                slug="unified-save-garment",
+                category="TWO PIECES",
+                subcategory="Co-ord Sets",
+                is_active=True,
+            )
+            db.add(p)
+            db.flush()
+
+            v1 = ProductVariant(product_id=p.id, size="S", selling_price=Decimal("2999.00"), mrp=Decimal("3999.00"), sku="USG-S", stock=10)
+            v2 = ProductVariant(product_id=p.id, size="M", selling_price=Decimal("3199.00"), mrp=Decimal("4199.00"), sku="USG-M", stock=10)
+            db.add_all([v1, v2])
+            db.commit()
+            prod_id = p.id
+            v1_id = v1.id
+            v2_id = v2.id
+        finally:
+            db.close()
+
+        # 1. Update product details AND variants in single request
+        payload = {
+            "name": "Unified Save Garment Premium",
+            "description": "Updated unified description",
+            "variants": [
+                {"variant_id": v1_id, "selling_price": 3490.00, "mrp": 4999.00, "sku": "USG-PREM-S"},
+                {"variant_id": v2_id, "selling_price": 3690.00, "mrp": 5199.00, "sku": "USG-PREM-M"},
+            ],
+        }
+        res = client.patch(f"/admin/products/{prod_id}", json=payload, headers=headers)
+        self.assertEqual(res.status_code, 200, res.text)
+        res_data = res.json()
+        self.assertEqual(res_data["name"], "Unified Save Garment Premium")
+        self.assertEqual(res_data["description"], "Updated unified description")
+
+        # 2. Verify reload from server confirms persistence
+        reload_res = client.get(f"/admin/products/{prod_id}", headers=headers)
+        self.assertEqual(reload_res.status_code, 200)
+        reload_data = reload_res.json()
+        self.assertEqual(reload_data["name"], "Unified Save Garment Premium")
+
+        var_map = {v["id"]: v for v in reload_data["variants"]}
+        self.assertEqual(float(var_map[v1_id]["selling_price"]), 3490.00)
+        self.assertEqual(float(var_map[v1_id]["mrp"]), 4999.00)
+        self.assertEqual(var_map[v1_id]["sku"], "USG-PREM-S")
+
+        self.assertEqual(float(var_map[v2_id]["selling_price"]), 3690.00)
+        self.assertEqual(float(var_map[v2_id]["mrp"]), 5199.00)
+        self.assertEqual(var_map[v2_id]["sku"], "USG-PREM-M")
+
+    def test_unified_transactional_save_validation_failure_rolls_back_entirely(self):
+        """Test failure case: invalid variant price (selling_price > mrp) rolls back entire product update."""
+        headers = get_owner_token()
+        db = SessionLocal()
+        try:
+            p = Product(
+                name="Rollback Test Garment",
+                slug="rollback-test-garment",
+                category="TWO PIECES",
+                subcategory="Co-ord Sets",
+                description="Original description",
+                is_active=True,
+            )
+            db.add(p)
+            db.flush()
+
+            v = ProductVariant(product_id=p.id, size="L", selling_price=Decimal("1999.00"), mrp=Decimal("2999.00"), sku="RTG-L", stock=5)
+            db.add(v)
+            db.commit()
+            prod_id = p.id
+            v_id = v.id
+        finally:
+            db.close()
+
+        # Send invalid update: selling_price (4000) > mrp (3000)
+        payload = {
+            "name": "SHOULD_NOT_BE_SAVED",
+            "description": "Corrupted description",
+            "variants": [
+                {"variant_id": v_id, "selling_price": 4000.00, "mrp": 3000.00},
+            ],
+        }
+        res = client.patch(f"/admin/products/{prod_id}", json=payload, headers=headers)
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("cannot exceed MRP", res.json()["detail"])
+
+        # Reload product: verify rollback (product name, description, variant price unchanged)
+        reload_res = client.get(f"/admin/products/{prod_id}", headers=headers)
+        self.assertEqual(reload_res.status_code, 200)
+        reload_data = reload_res.json()
+        self.assertEqual(reload_data["name"], "Rollback Test Garment")
+        self.assertEqual(reload_data["description"], "Original description")
+
+        var = reload_data["variants"][0]
+        self.assertEqual(float(var["selling_price"]), 1999.00)
+        self.assertEqual(float(var["mrp"]), 2999.00)
+
+    def test_custom_variant_sku_preservation_when_base_sku_updated(self):
+        """Test custom variant SKUs are preserved while standard pattern SKUs are updated with base SKU."""
+        headers = get_owner_token()
+        db = SessionLocal()
+        try:
+            p = Product(
+                name="Custom SKU Garment",
+                slug="custom-sku-garment",
+                category="TWO PIECES",
+                subcategory="Co-ord Sets",
+                is_active=True,
+            )
+            db.add(p)
+            db.flush()
+
+            # v1 has standard SKU (RL-BASE-S)
+            v1 = ProductVariant(product_id=p.id, size="S", selling_price=Decimal("2490.00"), mrp=Decimal("3490.00"), sku="RL-BASE-S", stock=5)
+            # v2 has custom SKU (RL-SPECIAL-HERITAGE-M)
+            v2 = ProductVariant(product_id=p.id, size="M", selling_price=Decimal("2490.00"), mrp=Decimal("3490.00"), sku="RL-SPECIAL-HERITAGE-M", stock=5)
+            db.add_all([v1, v2])
+            db.commit()
+            prod_id = p.id
+            v1_id = v1.id
+            v2_id = v2.id
+        finally:
+            db.close()
+
+        # Update base design SKU to 'RL-NEWBASE':
+        # v1 (standard pattern) gets 'RL-NEWBASE-S'
+        # v2 (custom pattern) preserves 'RL-SPECIAL-HERITAGE-M'
+        payload = {
+            "name": "Custom SKU Garment",
+            "variants": [
+                {"variant_id": v1_id, "sku": "RL-NEWBASE-S"},
+                {"variant_id": v2_id, "sku": "RL-SPECIAL-HERITAGE-M"},
+            ],
+        }
+        res = client.patch(f"/admin/products/{prod_id}", json=payload, headers=headers)
+        self.assertEqual(res.status_code, 200, res.text)
+
+        reload_res = client.get(f"/admin/products/{prod_id}", headers=headers)
+        data = reload_res.json()
+        var_map = {v["id"]: v for v in data["variants"]}
+
+        self.assertEqual(var_map[v1_id]["sku"], "RL-NEWBASE-S", "Standard pattern variant must receive new base SKU!")
+        self.assertEqual(var_map[v2_id]["sku"], "RL-SPECIAL-HERITAGE-M", "Custom variant SKU must be strictly preserved!")
 
 if __name__ == "__main__":
     unittest.main()

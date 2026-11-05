@@ -22,6 +22,7 @@ from app.services.product_service import (
     build_product_list_response,
     build_product_detail_response,
     build_variant_response,
+    sync_product_category_and_collections,
 )
 
 router = APIRouter(tags=["products"])
@@ -311,13 +312,19 @@ def admin_update_product(
         product.is_active = payload.is_active
         product.status = "PUBLISHED" if payload.is_active else "DRAFT"
 
-    if payload.collection_ids is not None:
-        collections = (
-            db.query(Collection)
-            .filter(Collection.id.in_(payload.collection_ids))
-            .all()
+    # Enforce category, subcategory and canonical collection consistency
+    fields_set = payload.model_fields_set
+    if "category" in fields_set or "subcategory" in fields_set or "collection_ids" in fields_set:
+        target_cat = payload.category if "category" in fields_set else product.category
+        target_sub = payload.subcategory if "subcategory" in fields_set else product.subcategory
+        target_col_ids = payload.collection_ids if "collection_ids" in fields_set else None
+        sync_product_category_and_collections(
+            product=product,
+            category=target_cat,
+            subcategory=target_sub,
+            explicit_collection_ids=target_col_ids,
+            db=db,
         )
-        product.collections = collections
 
     if payload.images is not None:
         product.images = [
@@ -334,6 +341,69 @@ def admin_update_product(
             )
             for idx, img in enumerate(payload.images)
         ]
+
+    if "variants" in fields_set and payload.variants is not None and len(payload.variants) > 0:
+        # Pre-validate all variant items before making any modifications
+        variant_ids = [item.variant_id for item in payload.variants]
+        if len(variant_ids) != len(set(variant_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Duplicate variant IDs detected in payload.",
+            )
+
+        existing_variants = {v.id: v for v in product.variants}
+        for item in payload.variants:
+            if item.variant_id not in existing_variants:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Variant ID {item.variant_id} does not belong to product {id}.",
+                )
+            v = existing_variants[item.variant_id]
+            new_sp = item.selling_price if item.selling_price is not None else v.selling_price
+            new_mrp = item.mrp if item.mrp is not None else v.mrp
+            if new_sp is not None and new_sp <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Variant {v.size} selling price must be greater than 0.",
+                )
+            if new_mrp is not None and new_mrp <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Variant {v.size} MRP must be greater than 0.",
+                )
+            if new_mrp is not None and new_sp is not None and new_sp > new_mrp:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{new_mrp}).",
+                )
+
+        # Check SKU uniqueness across database
+        for item in payload.variants:
+            if item.sku is not None:
+                clean_sku = item.sku.strip()
+                if clean_sku:
+                    conflict = (
+                        db.query(ProductVariant)
+                        .filter(ProductVariant.sku == clean_sku, ProductVariant.id != item.variant_id)
+                        .first()
+                    )
+                    if conflict:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"SKU '{clean_sku}' is already assigned to another variant.",
+                        )
+
+        # Apply updates to variants within the same transaction
+        for item in payload.variants:
+            v = existing_variants[item.variant_id]
+            if item.selling_price is not None:
+                v.selling_price = item.selling_price
+            if item.mrp is not None:
+                v.mrp = item.mrp
+            if item.sku is not None:
+                v.sku = item.sku.strip() if item.sku else None
+            if item.is_active is not None:
+                v.is_active = item.is_active
 
     db.commit()
     db.refresh(product)

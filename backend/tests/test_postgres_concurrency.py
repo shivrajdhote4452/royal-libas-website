@@ -60,7 +60,7 @@ class TestPostgresConcurrency(unittest.TestCase):
             from sqlalchemy.orm import sessionmaker
             from fastapi.testclient import TestClient
 
-            cls.engine = create_engine(pg_url, pool_pre_ping=True)
+            cls.engine = create_engine(pg_url, pool_pre_ping=True, connect_args={"client_encoding": "utf8"})
             # Test connection
             with cls.engine.connect() as conn:
                 pass
@@ -98,15 +98,30 @@ class TestPostgresConcurrency(unittest.TestCase):
             cls.client = TestClient(app)
 
             # Seed isolated test fixtures
-            from app.models import Admin, Product, ProductVariant
+            from app.models import Admin, Product, ProductVariant, StoreSetting, Order, OrderItem
             from app.auth import hash_password, create_access_token
 
             db = cls.SessionLocal()
             try:
                 # Clean up any residual test records from prior runs
+                db.query(OrderItem).delete()
+                db.query(Order).delete()
                 db.query(ProductVariant).delete()
                 db.query(Product).delete()
+                db.query(StoreSetting).delete()
                 db.query(Admin).filter(Admin.email == "pg_owner@royallibas.com").delete()
+                db.commit()
+
+                # Seed store setting for valid order checkout
+                setting = StoreSetting(
+                    online_payment_enabled=True,
+                    cod_enabled=True,
+                    standard_cod_free_threshold=Decimal("1500.00"),
+                    standard_shipping_fee=Decimal("99.00"),
+                    express_shipping_fee=Decimal("199.00"),
+                    announcement_text="COMPLIMENTARY SHIPPING ON ALL PREPAID ORDERS | FREE COD ABOVE RS 1500",
+                )
+                db.add(setting)
                 db.commit()
 
                 owner = Admin(
@@ -283,23 +298,25 @@ class TestPostgresConcurrency(unittest.TestCase):
         """Verify concurrency between customer order placement and admin stock update.
 
         Initial stock = 5.
-        Thread A: Customer order places order for 2 units (stock 5 -> 3).
+        Thread A: Customer places order via POST /orders for 2 units (stock 5 -> 3).
         Thread B: Admin adjusts stock with expected_stock=5 (to 6 units).
         Because row-level locking (with_for_update) is held, one transaction serializes before the other.
         - If customer order commits first: variant stock becomes 3. Admin attempt detects stock changed (3 != 5) and raises 409 Conflict. The order is preserved.
         - If admin commits first: stock becomes 6. Customer order sees 6 >= 2, deducts 2 -> final stock is 4.
-        In NEITHER case is customer stock reservation lost or overwritten by admin!
+        In BOTH outcomes, customer order MUST succeed (201 Created), admin gets either 200 or 409, and final stock is either 3 or 4.
         """
         from fastapi.testclient import TestClient
-        from app.models import ProductVariant, StockAdjustment
+        from app.models import ProductVariant, StockAdjustment, Order, OrderItem
 
-        # Reset variant stock to 5
+        # Reset variant stock to 5 and clean previous orders/adjustments
         db = self.SessionLocal()
         try:
+            db.query(OrderItem).delete()
+            db.query(Order).delete()
+            db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).delete()
             v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
             v.stock = 5
-            # Clean adjustments for fresh test
-            db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).delete()
+            v.is_active = True
             db.commit()
         finally:
             db.close()
@@ -311,21 +328,25 @@ class TestPostgresConcurrency(unittest.TestCase):
             c = TestClient(self.app)
             barrier.wait()
             res = c.post(
-                "/orders/checkout",
+                "/orders",
                 json={
-                    "customer_name": "PG Concurrency Shopper",
-                    "customer_email": "shopper@example.com",
-                    "customer_phone": "+919876543210",
-                    "delivery_address": {
-                        "address_line1": "123 Boutique St",
+                    "customer_name": "Priya Sharma",
+                    "phone": "9876543210",
+                    "payment_method": "PREPAID",
+                    "shipping_method": "STANDARD",
+                    "address": {
+                        "name": "Priya Sharma",
+                        "phone": "9876543210",
+                        "pincode": "400001",
+                        "line1": "Flat 402, Royal Residency",
+                        "line2": "Opposite Regal",
                         "city": "Mumbai",
                         "state": "Maharashtra",
-                        "pincode": "400001",
                     },
                     "items": [{"variant_id": self.variant_id, "quantity": 2}],
                 },
             )
-            results.append(("order", res.status_code, res.json() if res.status_code < 500 else None))
+            results.append(("order", res.status_code, res.json() if res.status_code < 500 else res.text))
 
         def admin_adjust():
             c = TestClient(self.app)
@@ -339,7 +360,7 @@ class TestPostgresConcurrency(unittest.TestCase):
                 },
                 headers=self.owner_headers,
             )
-            results.append(("admin", res.status_code, res.json() if res.status_code < 500 else None))
+            results.append(("admin", res.status_code, res.json() if res.status_code < 500 else res.text))
 
         t1 = threading.Thread(target=customer_order)
         t2 = threading.Thread(target=admin_adjust)
@@ -351,24 +372,148 @@ class TestPostgresConcurrency(unittest.TestCase):
         admin_res = [r for r in results if r[0] == "admin"][0]
         order_res = [r for r in results if r[0] == "order"][0]
 
+        # Customer order MUST succeed with 201 Created (never 404, 400, or 500)
+        self.assertEqual(order_res[1], 201, f"Customer order must return 201 Created: {order_res}")
+        self.assertIn(admin_res[1], [200, 409], f"Admin update must return either 200 OK or 409 Conflict: {admin_res}")
+
         db = self.SessionLocal()
         try:
             v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
-            if order_res[1] == 200 or order_res[1] == 201:
-                # Order succeeded.
-                if admin_res[1] == 409:
-                    # Order won race, admin was rejected with 409 Conflict: stock is 5 - 2 = 3
-                    self.assertEqual(v.stock, 3, "Customer reservation of 2 units must be preserved!")
-                else:
-                    # Admin won race (5 -> 6), then order placed (6 -> 4): stock is 4
-                    self.assertEqual(admin_res[1], 200)
-                    self.assertEqual(v.stock, 4, "Admin 6 minus order 2 units must equal 4!")
+            if admin_res[1] == 409:
+                # Order won race, admin was rejected with 409 Conflict: stock is 5 - 2 = 3
+                self.assertEqual(v.stock, 3, "Customer reservation of 2 units must be preserved!")
+                adj_count = db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).count()
+                self.assertEqual(adj_count, 0, "Failed admin adjustment must not leave audit entry!")
             else:
-                # If order somehow got serialized after admin or failed, admin must be 200
+                # Admin won race (5 -> 6), then order placed (6 -> 4): stock is 4
                 self.assertEqual(admin_res[1], 200)
+                self.assertEqual(v.stock, 4, "Admin 6 minus order 2 units must equal 4!")
+                adj_count = db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).count()
+                self.assertEqual(adj_count, 1, "Successful admin adjustment must log exactly 1 audit entry!")
 
             # In no case can stock be negative or stale overwritten
             self.assertGreaterEqual(v.stock, 0)
+        finally:
+            db.close()
+
+    def test_postgres_order_first_admin_gets_409(self):
+        """Explicit lock outcome A: Customer order commits first, admin gets 409 Conflict."""
+        from fastapi.testclient import TestClient
+        from app.models import ProductVariant, StockAdjustment, Order, OrderItem
+
+        db = self.SessionLocal()
+        try:
+            db.query(OrderItem).delete()
+            db.query(Order).delete()
+            db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).delete()
+            v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
+            v.stock = 5
+            v.is_active = True
+            db.commit()
+        finally:
+            db.close()
+
+        c = TestClient(self.app)
+
+        # 1. Customer order for 2 units
+        order_res = c.post(
+            "/orders",
+            json={
+                "customer_name": "Kavita Rao",
+                "phone": "9812345678",
+                "payment_method": "PREPAID",
+                "shipping_method": "STANDARD",
+                "address": {
+                    "name": "Kavita Rao",
+                    "phone": "9812345678",
+                    "pincode": "560001",
+                    "line1": "Flat 101, Palm Grove",
+                    "city": "Bengaluru",
+                    "state": "Karnataka",
+                },
+                "items": [{"variant_id": self.variant_id, "quantity": 2}],
+            },
+        )
+        self.assertEqual(order_res.status_code, 201, f"Expected 201 Created, got: {order_res.text}")
+        order_data = order_res.json()
+        self.assertIn("order_code", order_data)
+
+        # 2. Admin attempts update expecting stock 5
+        admin_res = c.patch(
+            f"/admin/variants/{self.variant_id}",
+            json={"stock": 6, "expected_stock": 5},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(admin_res.status_code, 409)
+        self.assertIn("Stock conflict detected", admin_res.json().get("detail", ""))
+
+        # 3. Verify final stock is 3 and no admin audit entry was committed
+        db = self.SessionLocal()
+        try:
+            v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
+            self.assertEqual(v.stock, 3)
+            adj = db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).all()
+            self.assertEqual(len(adj), 0)
+        finally:
+            db.close()
+
+    def test_postgres_admin_first_order_succeeds(self):
+        """Explicit lock outcome B: Admin commits first, customer order commits second."""
+        from fastapi.testclient import TestClient
+        from app.models import ProductVariant, StockAdjustment, Order, OrderItem
+
+        db = self.SessionLocal()
+        try:
+            db.query(OrderItem).delete()
+            db.query(Order).delete()
+            db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).delete()
+            v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
+            v.stock = 5
+            v.is_active = True
+            db.commit()
+        finally:
+            db.close()
+
+        c = TestClient(self.app)
+
+        # 1. Admin updates stock 5 -> 6 expecting 5
+        admin_res = c.patch(
+            f"/admin/variants/{self.variant_id}",
+            json={"stock": 6, "expected_stock": 5},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(admin_res.status_code, 200)
+
+        # 2. Customer order for 2 units
+        order_res = c.post(
+            "/orders",
+            json={
+                "customer_name": "Ananya Sen",
+                "phone": "9834567890",
+                "payment_method": "PREPAID",
+                "shipping_method": "STANDARD",
+                "address": {
+                    "name": "Ananya Sen",
+                    "phone": "9834567890",
+                    "pincode": "700001",
+                    "line1": "Flat 3A, Park Mansion",
+                    "city": "Kolkata",
+                    "state": "West Bengal",
+                },
+                "items": [{"variant_id": self.variant_id, "quantity": 2}],
+            },
+        )
+        self.assertEqual(order_res.status_code, 201, f"Expected 201 Created, got: {order_res.text}")
+
+        # 3. Verify final stock is 4 (6 - 2) and exactly 1 admin audit entry exists
+        db = self.SessionLocal()
+        try:
+            v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
+            self.assertEqual(v.stock, 4)
+            adj = db.query(StockAdjustment).filter(StockAdjustment.variant_id == self.variant_id).all()
+            self.assertEqual(len(adj), 1)
+            self.assertEqual(adj[0].previous_stock, 5)
+            self.assertEqual(adj[0].new_stock, 6)
         finally:
             db.close()
 

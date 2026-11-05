@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from app.services.cloudinary_service import get_video_poster_url
 from app.models import Product
 from app.schemas import (
@@ -25,8 +26,26 @@ CATEGORY_TO_COLLECTION_SLUG: Dict[str, str] = {
     "UNSTITCHED MATERIAL": "unstitched-material",
 }
 
-CANONICAL_COLLECTION_SLUGS: Set[str] = set(CATEGORY_TO_COLLECTION_SLUG.values())
-CANONICAL_COLLECTION_NAMES: Set[str] = set(CATEGORY_TO_COLLECTION_SLUG.keys())
+CANONICAL_COLLECTION_SLUGS: Set[str] = {
+    "two-pieces",
+    "two-piece",
+    "suit-set",
+    "suit-sets",
+    "heavy-dress",
+    "heavy-dresses",
+    "unstitched-material",
+    "unstitched",
+}
+CANONICAL_COLLECTION_NAMES: Set[str] = {
+    "TWO PIECES",
+    "TWO PIECE",
+    "SUIT SET",
+    "SUIT SETS",
+    "HEAVY DRESS",
+    "HEAVY DRESSES",
+    "UNSTITCHED MATERIAL",
+    "UNSTITCHED",
+}
 
 
 def validate_category_and_subcategory(
@@ -103,9 +122,14 @@ def sync_product_category_and_collections(
     effective_cat = (product.category or "").strip().upper()
     if effective_cat in CATEGORY_TO_COLLECTION_SLUG:
         target_slug = CATEGORY_TO_COLLECTION_SLUG[effective_cat]
-        canonical_col = db.query(Collection).filter(Collection.slug == target_slug).first()
-        if not canonical_col:
-            canonical_col = db.query(Collection).filter(Collection.name.ilike(effective_cat)).first()
+        canonical_col = db.query(Collection).filter(
+            or_(
+                Collection.slug == target_slug,
+                Collection.slug == f"{target_slug}s",
+                Collection.name.ilike(effective_cat),
+                Collection.name.ilike(f"{effective_cat}S"),
+            )
+        ).first()
         if canonical_col:
             product.collections = editorial_cols + [canonical_col]
         else:
