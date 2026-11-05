@@ -705,6 +705,174 @@ class TestFreeSizeAndStockLimits(unittest.TestCase):
         self.assertFalse(eval4["has_explicit_chart"])
         self.assertTrue(eval4["should_show_size_guide"], "Mixed-size product WITHOUT explicit chart MUST keep standard fallback Size Guide")
 
+    def test_09_create_product_and_add_variant_without_mrp(self):
+        """Case 9: Verify creating a product and adding Free Size variants with ONLY selling price (no MRP)."""
+        create_payload = {
+            "name": "Only Selling Price Chanderi Kurta",
+            "slug": "only-selling-price-chanderi-kurta",
+            "category": "TWO PIECES",
+            "fabric": "Chanderi Silk",
+            "status": "PUBLISHED",
+            "is_active": True,
+            "variants": [
+                {
+                    "size": "Free Size",
+                    "selling_price": 2799.00,
+                    # Note: mrp is omitted / not supplied
+                    "stock": 12,
+                    "sku": "OSP-CK-FS",
+                    "is_active": True,
+                }
+            ],
+        }
+
+        res = client.post("/admin/products", json=create_payload, headers=self.admin_headers)
+        self.assertEqual(res.status_code, 201)
+        created = res.json()
+        self.assertEqual(len(created["variants"]), 1)
+        v = created["variants"][0]
+        self.assertEqual(v["size"], "Free Size")
+        self.assertEqual(Decimal(str(v["selling_price"])), Decimal("2799.00"))
+        self.assertIsNone(v["mrp"], "New variant created without MRP must have null mrp")
+
+        # Now add another size variant (e.g. M) without MRP
+        add_res = client.post(
+            f"/admin/products/{created['id']}/variants",
+            json={
+                "size": "M",
+                "selling_price": 2799.00,
+                # mrp omitted
+                "stock": 6,
+                "sku": "OSP-CK-M",
+                "is_active": True,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(add_res.status_code, 201)
+        added_v = add_res.json()
+        self.assertEqual(added_v["size"], "M")
+        self.assertEqual(Decimal(str(added_v["selling_price"])), Decimal("2799.00"))
+        self.assertIsNone(added_v["mrp"])
+
+        # Verify Storefront GET /products/{slug} returns the selling price cleanly
+        detail = client.get(f"/products/{created['slug']}").json()
+        self.assertEqual(len(detail["variants"]), 2)
+        for var in detail["variants"]:
+            self.assertEqual(Decimal(str(var["selling_price"])), Decimal("2799.00"))
+            self.assertIsNone(var["mrp"])
+
+    def test_10_selling_price_increase_higher_than_stored_mrp_without_deleting_mrp(self):
+        """Case 10:
+        1. An existing variant price can be edited and remains correct after reload,
+           including when it is higher than the old stored MRP.
+        2. Existing hidden MRP data is NOT silently cleared or overwritten by a price save.
+        3. Explicit invalid MRPs (new_sp > explicit new_mrp) are still rejected.
+        """
+        # Seed product with existing stored MRP of ₹2500 and selling price ₹2000
+        p = Product(
+            name="Hidden MRP Protection Gown",
+            slug="hidden-mrp-protection-gown",
+            category="HEAVY DRESS",
+            status="PUBLISHED",
+            is_active=True,
+        )
+        self.db.add(p)
+        self.db.commit()
+        self.db.refresh(p)
+
+        v = ProductVariant(
+            product_id=p.id,
+            size="Free Size",
+            sku="HMPG-FS",
+            selling_price=Decimal("2000.00"),
+            mrp=Decimal("2500.00"),  # Old stored MRP
+            stock=10,
+            is_active=True,
+        )
+        self.db.add(v)
+        self.db.commit()
+        self.db.refresh(v)
+
+        # 1. Admin increases selling price to ₹3500 (HIGHER than old stored MRP ₹2500)
+        # via atomic bulk update without passing mrp
+        bulk_res = client.patch(
+            f"/admin/products/{p.id}/variants/bulk-update",
+            json={
+                "items": [
+                    {
+                        "variant_id": v.id,
+                        "selling_price": 3500.00,
+                        # "mrp" is omitted entirely
+                    }
+                ]
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(
+            bulk_res.status_code,
+            200,
+            f"Raising selling price above old stored MRP must succeed: {bulk_res.text}",
+        )
+        updated_bulk = bulk_res.json()["updated_variants"][0]
+        self.assertEqual(Decimal(str(updated_bulk["selling_price"])), Decimal("3500.00"))
+        # Crucial check: old stored MRP must NOT be cleared!
+        self.assertEqual(
+            Decimal(str(updated_bulk["mrp"])),
+            Decimal("2500.00"),
+            "Existing stored MRP must remain preserved!",
+        )
+
+        # 2. Reload after save: verify from database and API
+        self.db.expire_all()
+        reloaded_v = self.db.query(ProductVariant).filter(ProductVariant.id == v.id).first()
+        self.assertEqual(reloaded_v.selling_price, Decimal("3500.00"))
+        self.assertEqual(reloaded_v.mrp, Decimal("2500.00"), "Stored MRP in database must be preserved")
+
+        # 3. Same check on unified product update (PATCH /admin/products/{id})
+        unified_res = client.patch(
+            f"/admin/products/{p.id}",
+            json={
+                "name": "Hidden MRP Protection Gown (Refined)",
+                "variants": [
+                    {
+                        "variant_id": v.id,
+                        "selling_price": 3800.00,  # Even higher than old MRP 2500
+                        # mrp omitted
+                    }
+                ],
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(unified_res.status_code, 200)
+        unified_v = unified_res.json()["variants"][0]
+        self.assertEqual(Decimal(str(unified_v["selling_price"])), Decimal("3800.00"))
+        self.assertEqual(Decimal(str(unified_v["mrp"])), Decimal("2500.00"), "MRP must remain intact")
+
+        # 4. Same check on single variant update (PATCH /admin/variants/{id})
+        single_res = client.patch(
+            f"/admin/variants/{v.id}",
+            json={
+                "selling_price": 4200.00,
+                # mrp omitted
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(single_res.status_code, 200)
+        self.assertEqual(Decimal(str(single_res.json()["selling_price"])), Decimal("4200.00"))
+        self.assertEqual(Decimal(str(single_res.json()["mrp"])), Decimal("2500.00"))
+
+        # 5. Explicitly supplying an invalid MRP (where selling_price > new_mrp) is still rejected
+        invalid_res = client.patch(
+            f"/admin/variants/{v.id}",
+            json={
+                "selling_price": 5000.00,
+                "mrp": 4000.00,  # Explicitly supplied invalid MRP < selling price
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(invalid_res.status_code, 400)
+        self.assertIn("cannot exceed mrp", invalid_res.json()["detail"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -119,7 +119,6 @@ export const AdminProductEdit: React.FC = () => {
   const [addSizeModalOpen, setAddSizeModalOpen] = useState(false);
   const [newSize, setNewSize] = useState('XL');
   const [newSizePrice, setNewSizePrice] = useState('3490');
-  const [newSizeMrp, setNewSizeMrp] = useState('4999');
   const [newSizeStock, setNewSizeStock] = useState('10');
   const [newSizeSku, setNewSizeSku] = useState('');
   const [addingSizeLoading, setAddingSizeLoading] = useState(false);
@@ -486,7 +485,6 @@ export const AdminProductEdit: React.FC = () => {
     const itemsToUpdate: Array<{
       variant_id: number;
       selling_price: number;
-      mrp?: number | null;
       sku?: string | null;
     }> = [];
 
@@ -495,7 +493,6 @@ export const AdminProductEdit: React.FC = () => {
       if (!edits) continue;
 
       const p = parseFloat(edits.selling_price);
-      const m = edits.mrp ? parseFloat(edits.mrp) : undefined;
       const s = edits.sku.trim() || undefined;
 
       if (isNaN(p) || p <= 0) {
@@ -503,21 +500,10 @@ export const AdminProductEdit: React.FC = () => {
         setSavingProduct(false);
         return;
       }
-      if (m !== undefined && (isNaN(m) || m <= 0)) {
-        setSaveErrorMessage(`Validation error: Size '${v.size}' MRP must be greater than 0.`);
-        setSavingProduct(false);
-        return;
-      }
-      if (m !== undefined && p > m) {
-        setSaveErrorMessage(`Validation error: Size '${v.size}' selling price (₹${p}) cannot exceed MRP (₹${m}).`);
-        setSavingProduct(false);
-        return;
-      }
 
       itemsToUpdate.push({
         variant_id: v.id,
         selling_price: p,
-        mrp: m !== undefined ? m : null,
         sku: s ? s : null,
       });
     }
@@ -579,7 +565,6 @@ export const AdminProductEdit: React.FC = () => {
     setAddSizeError(null);
 
     const price = parseFloat(newSizePrice);
-    const mrp = newSizeMrp ? parseFloat(newSizeMrp) : undefined;
     const stock = parseInt(newSizeStock, 10) || 0;
     const normalizedSize = normalizeVariantSize(newSize);
 
@@ -604,16 +589,6 @@ export const AdminProductEdit: React.FC = () => {
       setAddingSizeLoading(false);
       return;
     }
-    if (mrp !== undefined && (isNaN(mrp) || mrp <= 0)) {
-      setAddSizeError('MRP must be greater than 0.');
-      setAddingSizeLoading(false);
-      return;
-    }
-    if (mrp !== undefined && price > mrp) {
-      setAddSizeError(`Selling price (₹${price}) cannot exceed MRP (₹${mrp}).`);
-      setAddingSizeLoading(false);
-      return;
-    }
 
     const sizeCode = normalizedSize === 'Free Size' ? 'FS' : normalizedSize.toUpperCase();
     const autoSku = newSizeSku.trim() || `${sku ? `${sku}-` : ''}${sizeCode}`;
@@ -622,7 +597,7 @@ export const AdminProductEdit: React.FC = () => {
       const added = await adminAddVariant(token, product.id, {
         size: normalizedSize,
         selling_price: price,
-        mrp: mrp || null,
+        mrp: null,
         stock: stock,
         sku: autoSku,
         is_active: true,
@@ -851,9 +826,7 @@ export const AdminProductEdit: React.FC = () => {
         const edit = variantPriceEdits[v.id];
 
         const spStr = edit?.selling_price !== undefined ? edit.selling_price : (initV?.selling_price || String(v.selling_price || ''));
-        const mrpStr = edit?.mrp !== undefined ? edit.mrp : (initV?.mrp || (v.mrp ? String(v.mrp) : ''));
         const p = parseFloat(spStr);
-        const m = mrpStr.trim() ? parseFloat(mrpStr) : undefined;
 
         // Determine target SKU
         let targetSku = edit?.sku !== undefined ? edit.sku.trim() : (initV?.sku || v.sku || '');
@@ -865,33 +838,21 @@ export const AdminProductEdit: React.FC = () => {
           }
         }
 
-        // Validate price and MRP
+        // Validate selling price
         if (isNaN(p) || p <= 0) {
           setSaveErrorMessage(`Validation error: Size '${v.size}' selling price must be greater than 0.`);
-          setSavingProduct(false);
-          return;
-        }
-        if (m !== undefined && (isNaN(m) || m <= 0)) {
-          setSaveErrorMessage(`Validation error: Size '${v.size}' MRP must be greater than 0.`);
-          setSavingProduct(false);
-          return;
-        }
-        if (m !== undefined && p > m) {
-          setSaveErrorMessage(`Validation error: Size '${v.size}' selling price (₹${p}) cannot exceed MRP (₹${m}).`);
           setSavingProduct(false);
           return;
         }
 
         // Detect if this variant has any change from initial snapshot
         const priceDiff = initV ? Math.abs(parseFloat(initV.selling_price || '0') - p) > 0.001 : true;
-        const mrpDiff = initV ? (initV.mrp || '') !== (m !== undefined ? String(m) : '') : true;
         const skuDiff = initV ? (initV.sku || '') !== targetSku : true;
         const activeDiff = initV ? initV.is_active !== (v.is_active !== false) : false;
 
-        if (priceDiff || mrpDiff || skuDiff || activeDiff) {
+        if (priceDiff || skuDiff || activeDiff) {
           const vUpdate: any = { variant_id: v.id };
           if (priceDiff) vUpdate.selling_price = p;
-          if (mrpDiff) vUpdate.mrp = m !== undefined ? m : null;
           if (skuDiff) vUpdate.sku = targetSku ? targetSku : null;
           if (activeDiff) vUpdate.is_active = v.is_active !== false;
           variantUpdates.push(vUpdate);
@@ -1652,14 +1613,13 @@ export const AdminProductEdit: React.FC = () => {
                       <th className="py-2 px-2.5">Size</th>
                       <th className="py-2 px-2.5 text-center">Stock</th>
                       <th className="py-2 px-2.5 text-right">Price (₹)</th>
-                      <th className="py-2 px-2.5 text-right">MRP (₹)</th>
                       <th className="py-2 px-2.5 text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {variants.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-5 text-center text-gray-400">
+                        <td colSpan={4} className="py-5 text-center text-gray-400">
                           No size variants created yet. Click "+ Add Size" to add garment sizes.
                         </td>
                       </tr>
@@ -1722,28 +1682,6 @@ export const AdminProductEdit: React.FC = () => {
                               ) : (
                                 <span className="font-semibold text-gray-900 text-xs">
                                   ₹{v.selling_price.toLocaleString('en-IN')}
-                                </span>
-                              )}
-                            </td>
-
-                            {/* MRP (₹) */}
-                            <td className="py-2 px-2.5 text-right">
-                              {isEditingAllPrices ? (
-                                <input
-                                  type="number"
-                                  value={edits.mrp}
-                                  placeholder="MRP"
-                                  onChange={(e) =>
-                                    setVariantPriceEdits((prev) => ({
-                                      ...prev,
-                                      [v.id]: { ...edits, mrp: e.target.value },
-                                    }))
-                                  }
-                                  className="w-20 px-1.5 py-0.5 text-right text-xs border border-gray-300 rounded text-gray-600 focus:ring-1 focus:ring-[#5E1224]"
-                                />
-                              ) : (
-                                <span className="text-gray-500 text-xs">
-                                  {v.mrp ? `₹${v.mrp.toLocaleString('en-IN')}` : '—'}
                                 </span>
                               )}
                             </td>
@@ -1991,22 +1929,6 @@ export const AdminProductEdit: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    MRP (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="4999"
-                    value={newSizeMrp}
-                    onChange={(e) => setNewSizeMrp(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#5E1224] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
                     Initial Stock Count
                   </label>
                   <input
@@ -2018,19 +1940,19 @@ export const AdminProductEdit: React.FC = () => {
                     className="w-full px-3.5 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#5E1224] focus:outline-none"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    SKU (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Auto-generated if empty"
-                    value={newSizeSku}
-                    onChange={(e) => setNewSizeSku(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#5E1224] focus:outline-none"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  SKU (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Auto-generated if empty"
+                  value={newSizeSku}
+                  onChange={(e) => setNewSizeSku(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#5E1224] focus:outline-none"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">

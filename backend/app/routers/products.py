@@ -380,23 +380,26 @@ def admin_update_product(
             v = existing_variants[item.variant_id]
             v_fields = item.model_fields_set
             new_sp = item.selling_price if ("selling_price" in v_fields and item.selling_price is not None) else v.selling_price
-            new_mrp = item.mrp if "mrp" in v_fields else v.mrp
 
             if new_sp is not None and new_sp <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Variant {v.size} selling price must be greater than 0.",
                 )
-            if new_mrp is not None and new_mrp <= 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Variant {v.size} MRP must be greater than 0.",
-                )
-            if new_mrp is not None and new_sp is not None and new_sp > new_mrp:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{new_mrp}).",
-                )
+
+            # Only validate MRP constraints if MRP was explicitly supplied in the update payload.
+            # Existing stored/hidden MRP values in DB must NOT block selling price increases.
+            if "mrp" in v_fields and item.mrp is not None:
+                if item.mrp <= 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant {v.size} MRP must be greater than 0.",
+                    )
+                if new_sp is not None and new_sp > item.mrp:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{item.mrp}).",
+                    )
 
         # Check SKU uniqueness across database
         for item in payload.variants:
@@ -575,7 +578,6 @@ def admin_update_variant(
 
     # Validate final effective pricing combination
     effective_price = payload.selling_price if payload.selling_price is not None else variant.selling_price
-    effective_mrp = payload.mrp if "mrp" in fields_set else variant.mrp
 
     if effective_price <= 0:
         raise HTTPException(
@@ -583,16 +585,18 @@ def admin_update_variant(
             detail="Selling price must be greater than 0.",
         )
 
-    if effective_mrp is not None:
-        if effective_mrp <= 0:
+    # Only validate MRP constraints if MRP was explicitly supplied in the update payload.
+    # Existing stored/hidden MRP values in DB must NOT block selling price increases.
+    if "mrp" in fields_set and payload.mrp is not None:
+        if payload.mrp <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="MRP must be greater than 0 when supplied.",
             )
-        if effective_price > effective_mrp:
+        if effective_price > payload.mrp:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Selling price (₹{effective_price}) cannot exceed MRP (₹{effective_mrp}).",
+                detail=f"Selling price (₹{effective_price}) cannot exceed MRP (₹{payload.mrp}).",
             )
 
     if payload.selling_price is not None:
@@ -705,23 +709,25 @@ def admin_bulk_update_variants(
         target_v = v_map[item.variant_id]
         item_fields = item.model_fields_set
         effective_price = item.selling_price if ("selling_price" in item_fields and item.selling_price is not None) else target_v.selling_price
-        effective_mrp = item.mrp if "mrp" in item_fields else target_v.mrp
 
         if effective_price <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Size {target_v.size} selling price must be greater than 0.",
             )
-        if effective_mrp is not None:
-            if effective_mrp <= 0:
+
+        # Only validate MRP constraints if MRP was explicitly supplied in the update payload.
+        # Existing stored/hidden MRP values in DB must NOT block selling price increases.
+        if "mrp" in item_fields and item.mrp is not None:
+            if item.mrp <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Size {target_v.size} MRP must be greater than 0.",
                 )
-            if effective_price > effective_mrp:
+            if effective_price > item.mrp:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Size {target_v.size} selling price (₹{effective_price}) cannot exceed MRP (₹{effective_mrp}).",
+                    detail=f"Size {target_v.size} selling price (₹{effective_price}) cannot exceed MRP (₹{item.mrp}).",
                 )
 
     # 2. Unique SKU pass: ensure proposed SKUs do not conflict internally or externally

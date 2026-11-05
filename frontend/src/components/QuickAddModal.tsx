@@ -54,11 +54,6 @@ export const QuickAddModal: React.FC = () => {
   const fallbackVariant = purchasable[0] || (activeProduct.variants || []).find((v) => v.is_active) || activeProduct.variants?.[0] || null;
   const currentVariant = selectedVariant || fallbackVariant;
   const displaySellingPrice = currentVariant ? currentVariant.selling_price : (activeProduct.min_price || 0);
-  const displayMrp = currentVariant ? currentVariant.mrp : null;
-  const discountPercent =
-    displayMrp && displayMrp > displaySellingPrice
-      ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
-      : null;
 
   const isSoldOut = activeProduct.total_stock === 0;
 
@@ -147,16 +142,6 @@ export const QuickAddModal: React.FC = () => {
               <span className="price-display text-base sm:text-lg font-bold text-[#5B111A]">
                 {formatPrice(displaySellingPrice)}
               </span>
-              {displayMrp && displayMrp > displaySellingPrice && (
-                <span className="price-display text-xs text-gray-400 line-through">
-                  {formatPrice(displayMrp)}
-                </span>
-              )}
-              {discountPercent && (
-                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
-                  {discountPercent}% OFF
-                </span>
-              )}
             </div>
           </div>
         </div>

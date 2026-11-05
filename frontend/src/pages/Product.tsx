@@ -206,11 +206,6 @@ export const ProductPage: React.FC = () => {
 
   const currentVariant = selectedVariant || fallbackVariant;
   const displaySellingPrice = currentVariant ? currentVariant.selling_price : (product.min_price || 0);
-  const displayMrp = currentVariant ? currentVariant.mrp : null;
-  const discountPercent =
-    displayMrp && displayMrp > displaySellingPrice
-      ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
-      : null;
 
   const isSoldOut = product.total_stock === 0;
   const inWishlist = isInWishlist(product.id);
@@ -678,16 +673,6 @@ export const ProductPage: React.FC = () => {
                 <span className="price-display text-2xl sm:text-3xl font-serif font-bold text-[#5E1224]">
                   {formatPrice(displaySellingPrice)}
                 </span>
-                {displayMrp && displayMrp > displaySellingPrice && (
-                  <span className="price-display text-sm text-gray-400 line-through">
-                    {formatPrice(displayMrp)}
-                  </span>
-                )}
-                {discountPercent && (
-                  <span className="px-2 py-0.5 text-[#5E1224] bg-[#5E1224]/10 text-xs font-bold border border-[#5E1224]/20">
-                    {discountPercent}% OFF
-                  </span>
-                )}
               </div>
               <span className="text-[11px] text-gray-500 font-medium">Inclusive of all taxes</span>
             </div>

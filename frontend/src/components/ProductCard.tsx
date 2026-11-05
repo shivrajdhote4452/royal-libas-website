@@ -85,9 +85,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     !hasPurchasableVariants ||
     Boolean(product.badges?.includes('Sold Out'));
 
-  // 2. Derive starting price and matching MRP
+  // 2. Derive starting selling price
   let displaySellingPrice: number | null = null;
-  let displayMrp: number | null = null;
   let hasPriceRange = false;
 
   if (hasPurchasableVariants) {
@@ -95,28 +94,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     const minPrice = Math.min(...eligiblePrices);
     const maxPrice = Math.max(...eligiblePrices);
     hasPriceRange = minPrice !== maxPrice;
-
-    // Pick representative variant matching lowest eligible price (do not combine values from different variants!)
-    const matchingVariants = purchasableVariants.filter((v) => Number(v.selling_price) === minPrice);
-    const chosenVariant = matchingVariants.reduce((best, curr) => {
-      const bestMrp = best.mrp ? Number(best.mrp) : 0;
-      const currMrp = curr.mrp ? Number(curr.mrp) : 0;
-      return currMrp > bestMrp ? curr : best;
-    }, matchingVariants[0]);
-
     displaySellingPrice = minPrice;
-    displayMrp = chosenVariant?.mrp ? Number(chosenVariant.mrp) : null;
   } else {
     // Sold out: fall back strictly for reference display; do not present as an active purchasable price
     const fallback = (product.variants || []).find((v) => v.is_active !== false) || product.variants?.[0] || null;
     displaySellingPrice = fallback ? Number(fallback.selling_price) : (product.min_price ? Number(product.min_price) : null);
-    displayMrp = fallback?.mrp ? Number(fallback.mrp) : null;
   }
-
-  const discountPercent =
-    displaySellingPrice && displayMrp && displayMrp > displaySellingPrice
-      ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
-      : null;
 
   const inWishlist = isInWishlist(product.id);
   const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
@@ -351,7 +334,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 Sold Out
               </span>
               {displaySellingPrice && displaySellingPrice > 0 && (
-                <span className="price-display text-[11px] sm:text-xs text-gray-400 line-through">
+                <span className="price-display text-[11px] sm:text-xs text-gray-400">
                   {formatPrice(displaySellingPrice)}
                 </span>
               )}
@@ -364,16 +347,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 )}
                 {formatPrice(displaySellingPrice)}
               </span>
-              {displayMrp && displayMrp > (displaySellingPrice || 0) && (
-                <span className="price-display text-[11px] sm:text-xs text-gray-400 line-through">
-                  {formatPrice(displayMrp)}
-                </span>
-              )}
-              {discountPercent && discountPercent > 0 && (
-                <span className="text-[9.5px] sm:text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/80">
-                  {discountPercent}% OFF
-                </span>
-              )}
             </div>
           )}
 
