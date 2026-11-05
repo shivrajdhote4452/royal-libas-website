@@ -2,18 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search,
-  Plus,
   RefreshCw,
   Clock,
   CheckCircle,
   Truck,
-  IndianRupee,
   X,
   Phone,
+  Shield,
 } from 'lucide-react';
 import {
   adminListReturns,
-  adminCreateReturn,
   adminUpdateReturnStatus,
 } from '../../lib/api';
 
@@ -55,16 +53,6 @@ export const AdminReturns: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Create Modal
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createOrderId, setCreateOrderId] = useState('');
-  const [createRequestType, setCreateRequestType] = useState('RETURN');
-  const [createReason, setCreateReason] = useState('Fit / Size Issue');
-  const [createComment, setCreateComment] = useState('');
-  const [createExchangeSize, setCreateExchangeSize] = useState('');
-  const [createResolution, setCreateResolution] = useState('REFUND_STORE_CREDIT');
-  const [submittingCreate, setSubmittingCreate] = useState(false);
-
   // Update Status Modal
   const [selectedReturn, setSelectedReturn] = useState<ReturnRequest | null>(null);
   const [updateStatus, setUpdateStatus] = useState('');
@@ -96,37 +84,6 @@ export const AdminReturns: React.FC = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchReturns();
-  };
-
-  const handleCreateReturnSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const oid = parseInt(createOrderId, 10);
-    if (isNaN(oid) || oid <= 0) {
-      setError('Please enter a valid numeric Order ID.');
-      return;
-    }
-    setSubmittingCreate(true);
-    setError(null);
-    try {
-      const res = await adminCreateReturn(token, {
-        order_id: oid,
-        request_type: createRequestType,
-        reason: createReason,
-        customer_comment: createComment || undefined,
-        exchange_size: createRequestType === 'EXCHANGE' ? createExchangeSize : undefined,
-        requested_resolution: createResolution || undefined,
-      });
-      setActionSuccess(`Return request #${res.return_code} opened successfully.`);
-      setIsCreateModalOpen(false);
-      setCreateOrderId('');
-      setCreateComment('');
-      setCreateExchangeSize('');
-      await fetchReturns();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create return request');
-    } finally {
-      setSubmittingCreate(false);
-    }
   };
 
   const openUpdateModal = (ret: ReturnRequest) => {
@@ -179,27 +136,33 @@ export const AdminReturns: React.FC = () => {
         <div>
           <h1 className="text-2xl font-serif font-bold text-gray-900 tracking-wide flex items-center gap-2">
             <RefreshCw className="w-6 h-6 text-[#5E1224]" />
-            Customer Exchanges
+            Customer Exchanges &amp; Returns
           </h1>
           <p className="text-xs text-gray-600 mt-1">
-            Review customer size and style exchange requests, schedule reverse pickups, inspect items, and coordinate replacements.
+            Historical records and inspection logs. Royal Libas operates under a strict <strong>No Returns and No Exchanges</strong> policy. Creation of new requests is disabled.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#5E1224] text-white rounded-lg text-xs font-semibold hover:bg-[#4A0E1C] transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            New Exchange Request
-          </button>
-          <button
             onClick={fetchReturns}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#E5D9C5] text-xs font-semibold text-gray-700 rounded-lg shadow-sm hover:bg-[#FCF8F0] transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#E5D9C5] text-xs font-semibold text-gray-700 rounded-lg shadow-sm hover:bg-[#FCF8F0] transition-colors disabled:opacity-50"
+            title="Refresh records"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </button>
+        </div>
+      </div>
+
+      {/* Atelier Policy Notice Banner */}
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-3 shadow-sm">
+        <Shield className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+        <div className="space-y-0.5">
+          <p className="font-bold text-amber-950">Atelier Policy Notice: No Returns and No Exchanges</p>
+          <p className="text-amber-800 leading-relaxed">
+            Royal Libas strictly enforces a final sale policy across all handcrafted garments. New return or exchange requests cannot be initiated by customers or staff. Existing historical requests remain accessible below for order audit, inspection records, and accounting.
+          </p>
         </div>
       </div>
 
@@ -258,181 +221,187 @@ export const AdminReturns: React.FC = () => {
       <div className="bg-white p-4 rounded-xl border border-[#E5D9C5]/80 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 bg-[#FCF8F0]/40 border border-[#E5D9C5] rounded-lg text-xs text-gray-800 font-medium focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="REQUESTED">Requested (Pending Review)</option>
-              <option value="APPROVED">Approved</option>
-              <option value="PICKUP_SCHEDULED">Pickup Scheduled</option>
-              <option value="RECEIVED_INSPECTION">Received for Inspection</option>
-              <option value="RESOLVED">Resolved (Completed)</option>
-              <option value="REJECTED">Rejected</option>
-            </select>
-
-            {/* Type Filter */}
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-1.5 bg-[#FCF8F0]/40 border border-[#E5D9C5] rounded-lg text-xs text-gray-800 font-medium focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-            >
-              <option value="ALL">All Types</option>
-              <option value="RETURN">Store Credit Exchange</option>
-              <option value="EXCHANGE">Size / Item Exchange</option>
-            </select>
+            <span className="text-xs font-semibold text-gray-500 mr-1">Status:</span>
+            {['ALL', 'REQUESTED', 'APPROVED', 'PICKUP_SCHEDULED', 'RECEIVED_INSPECTION', 'RESOLVED', 'REJECTED'].map(
+              (st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                    statusFilter === st
+                      ? 'bg-[#5E1224] text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {st.replace(/_/g, ' ')}
+                </button>
+              )
+            )}
           </div>
 
-          {/* Search Form */}
-          <form onSubmit={handleSearchSubmit} className="relative w-full md:w-72">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 mr-1">Type:</span>
+            {['ALL', 'EXCHANGE', 'RETURN'].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                  typeFilter === t
+                    ? 'bg-[#5E1224] text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
+              placeholder="Search by Return Code (RET-...), Order Code, Customer Name, or Phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search exchange code, order, customer..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#FCF8F0]/40 border border-[#E5D9C5] rounded-lg text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
+              className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224] bg-[#FCF8F0]/30"
             />
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
-          </form>
-        </div>
+          </div>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-gray-900 text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            Search
+          </button>
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                fetchReturns();
+              }}
+              className="px-3 py-2 bg-gray-100 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </form>
       </div>
 
-      {/* Returns Ledger Table */}
+      {/* Main Returns List Table */}
       <div className="bg-white rounded-xl border border-[#E5D9C5]/80 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
-            <RefreshCw className="w-6 h-6 text-[#5E1224] animate-spin" />
-            Loading exchange requests...
+          <div className="p-12 text-center text-gray-500 text-xs font-medium flex items-center justify-center gap-2">
+            <RefreshCw className="w-4 h-4 animate-spin text-[#5E1224]" />
+            Loading return and exchange records...
           </div>
         ) : returns.length === 0 ? (
-          <div className="p-12 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
-            <RefreshCw className="w-8 h-8 text-gray-300" />
-            No customer exchange requests found.
+          <div className="p-12 text-center text-gray-500 text-xs font-medium space-y-2">
+            <RefreshCw className="w-8 h-8 text-gray-300 mx-auto" />
+            <p className="text-gray-700 font-semibold">No exchange or return records found.</p>
+            <p className="text-gray-400">
+              Royal Libas enforces a strict No Returns/No Exchanges policy. Historical records appear here when present.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#FCF8F0] border-b border-[#E5D9C5] text-gray-600 font-semibold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Exchange ID</th>
-                  <th className="py-3 px-4">Order & Customer</th>
-                  <th className="py-3 px-4">Type & Exchange Reason</th>
+            <table className="w-full text-left text-xs text-gray-700">
+              <thead className="bg-[#FCF8F0] border-b border-[#E5D9C5] text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Request Code</th>
+                  <th className="py-3 px-4">Order Ref</th>
+                  <th className="py-3 px-4">Customer</th>
+                  <th className="py-3 px-4">Type &amp; Reason</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Pickup Logistics</th>
-                  <th className="py-3 px-4">Resolution / Replacement</th>
-                  <th className="py-3 px-4 text-right">Action</th>
+                  <th className="py-3 px-4">Reverse Logistics</th>
+                  <th className="py-3 px-4">Created Date</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {returns.map((r) => (
-                  <tr key={r.id} className="hover:bg-amber-50/20 transition-colors">
-                    {/* Return Code */}
-                    <td className="py-3 px-4">
-                      <div className="font-mono font-bold text-[#5E1224]">{r.return_code}</div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">
-                        {new Date(r.created_at).toLocaleDateString()}
-                      </div>
+                {returns.map((ret) => (
+                  <tr key={ret.id} className="hover:bg-gray-50/60 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-gray-900">
+                      {ret.return_code}
                     </td>
-
-                    {/* Order & Customer */}
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4 font-mono">
                       <Link
-                        to={`/admin/orders/${r.order_id}`}
-                        className="font-mono text-gray-900 font-semibold hover:underline"
+                        to={`/admin/orders/${ret.order_id}`}
+                        className="text-[#5E1224] hover:underline font-bold"
                       >
-                        #{r.order_code}
+                        {ret.order_code}
                       </Link>
-                      <div className="text-gray-700 font-medium text-xs mt-0.5">{r.customer_name}</div>
-                      <div className="text-[11px] text-gray-500 flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-gray-400" />
-                        {r.customer_phone}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-gray-900">{ret.customer_name}</div>
+                      <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
+                        <Phone className="w-3 h-3" />
+                        {ret.customer_phone}
                       </div>
                     </td>
-
-                    {/* Type & Reason */}
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4 space-y-0.5">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            r.request_type === 'EXCHANGE'
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            ret.request_type === 'EXCHANGE'
                               ? 'bg-purple-100 text-purple-800'
-                              : 'bg-rose-100 text-rose-800'
+                              : 'bg-amber-100 text-amber-800'
                           }`}
                         >
-                          {r.request_type}
+                          {ret.request_type}
                         </span>
-                        {r.exchange_size && (
-                          <span className="text-[10px] bg-gray-100 px-1 py-0.5 rounded text-gray-700">
-                            Size: {r.exchange_size}
-                          </span>
-                        )}
+                        <span className="font-medium text-gray-800">{ret.reason}</span>
                       </div>
-                      <div className="font-medium text-gray-800 mt-1">{r.reason}</div>
-                      {r.customer_comment && (
-                        <div className="text-[11px] text-gray-500 italic mt-0.5 max-w-xs truncate">
-                          &quot;{r.customer_comment}&quot;
+                      {ret.exchange_size && (
+                        <div className="text-[11px] text-gray-500">
+                          Target Size: <strong className="text-gray-800">{ret.exchange_size}</strong>
                         </div>
                       )}
+                      {ret.customer_comment && (
+                        <p className="text-[11px] text-gray-500 italic max-w-xs truncate">
+                          &ldquo;{ret.customer_comment}&rdquo;
+                        </p>
+                      )}
                     </td>
-
-                    {/* Status */}
-                    <td className="py-3 px-4">
+                    <td className="py-3.5 px-4">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          r.status === 'RESOLVED'
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          ret.status === 'APPROVED'
                             ? 'bg-emerald-100 text-emerald-800'
-                            : r.status === 'APPROVED' || r.status === 'RECEIVED_INSPECTION'
-                            ? 'bg-sky-100 text-sky-800'
-                            : r.status === 'REJECTED'
+                            : ret.status === 'RESOLVED'
+                            ? 'bg-blue-100 text-blue-800'
+                            : ret.status === 'REJECTED'
                             ? 'bg-rose-100 text-rose-800'
-                            : 'bg-amber-100 text-amber-800'
+                            : ret.status === 'REQUESTED'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-indigo-100 text-indigo-800'
                         }`}
                       >
-                        {r.status}
+                        {ret.status.replace(/_/g, ' ')}
                       </span>
                     </td>
-
-                    {/* Pickup Logistics */}
-                    <td className="py-3 px-4">
-                      {r.pickup_awb ? (
+                    <td className="py-3.5 px-4 space-y-0.5">
+                      {ret.pickup_awb ? (
                         <div>
-                          <div className="font-medium text-gray-900">{r.pickup_courier || 'Reverse Carrier'}</div>
-                          <div className="font-mono text-[10px] text-gray-600">AWB: {r.pickup_awb}</div>
+                          <div className="font-mono text-[11px] font-bold text-gray-900">{ret.pickup_awb}</div>
+                          <div className="text-[10px] text-gray-500">{ret.pickup_courier || 'Courier'}</div>
                         </div>
                       ) : (
-                        <span className="text-gray-400 italic text-[11px]">No pickup scheduled</span>
+                        <span className="text-gray-400 text-[11px]">No reverse AWB</span>
                       )}
                     </td>
-
-                    {/* Refund Info */}
-                    <td className="py-3 px-4">
-                      {r.refund_amount ? (
-                        <div>
-                          <div className="font-semibold text-gray-900 flex items-center">
-                            <IndianRupee className="w-3 h-3" />
-                            {r.refund_amount.toLocaleString('en-IN')}
-                          </div>
-                          <div className="text-[10px] text-gray-500 mt-0.5">
-                            Status: <span className="font-semibold">{r.refund_status || 'PENDING'}</span>
-                          </div>
-                          {r.refund_reference && (
-                            <div className="text-[10px] text-gray-400 font-mono truncate max-w-[120px]">
-                              Ref: {r.refund_reference}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-[11px]">-</span>
-                      )}
+                    <td className="py-3.5 px-4 text-gray-500 text-[11px]">
+                      {new Date(ret.created_at).toLocaleDateString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
                     </td>
-
-                    {/* Action */}
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-3.5 px-4 text-right">
                       <button
-                        onClick={() => openUpdateModal(r)}
-                        className="px-2.5 py-1 bg-white border border-[#E5D9C5] text-[#5E1224] rounded text-xs font-semibold hover:bg-[#FCF8F0] transition-colors"
+                        onClick={() => openUpdateModal(ret)}
+                        className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded text-[11px] transition-colors"
                       >
                         Manage
                       </button>
@@ -444,133 +413,6 @@ export const AdminReturns: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Create Return Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-5 border border-[#E5D9C5] shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                <Plus className="w-4 h-4 text-[#5E1224]" />
-                Initiate Size / Style Exchange Request
-              </h3>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateReturnSubmit} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">
-                  Order ID (Database ID) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  required
-                  placeholder="e.g., 104"
-                  value={createOrderId}
-                  onChange={(e) => setCreateOrderId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Request Type</label>
-                <select
-                  value={createRequestType}
-                  onChange={(e) => setCreateRequestType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                >
-                  <option value="RETURN">Store Credit Exchange</option>
-                  <option value="EXCHANGE">Size Exchange</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Requested Resolution</label>
-                <select
-                  value={createResolution}
-                  onChange={(e) => setCreateResolution(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                >
-                  <option value="REFUND_STORE_CREDIT">Store Credit Voucher</option>
-                  <option value="REFUND_ORIGINAL_SOURCE">Original Payment Source Refund</option>
-                  <option value="EXCHANGE_SAME_PRODUCT">Size Exchange</option>
-                </select>
-              </div>
-
-              {createRequestType === 'EXCHANGE' && (
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Requested Exchange Size</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., XL, M"
-                    value={createExchangeSize}
-                    onChange={(e) => setCreateExchangeSize(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Reason for Exchange</label>
-                <select
-                  value={createReason}
-                  onChange={(e) => setCreateReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                >
-                  <option value="Fit / Size Issue">Fit / Size Issue</option>
-                  <option value="Fabric Quality Not as Expected">Fabric Quality Not as Expected</option>
-                  <option value="Defective / Damaged Garment">Defective / Damaged Garment</option>
-                  <option value="Wrong Item Received">Wrong Item Received</option>
-                  <option value="Changed Mind">Changed Mind</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Requested Resolution</label>
-                <select
-                  value={createResolution}
-                  onChange={(e) => setCreateResolution(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                >
-                  <option value="REFUND_STORE_CREDIT">Store Credit Voucher</option>
-                  <option value="REFUND_ORIGINAL_SOURCE">Original Payment Source Refund</option>
-                  <option value="EXCHANGE_SAME_PRODUCT">Size Exchange</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Customer Comments / Notes</label>
-                <textarea
-                  rows={2}
-                  value={createComment}
-                  onChange={(e) => setCreateComment(e.target.value)}
-                  placeholder="Additional context from customer phone call or email..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                />
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-3 py-1.5 font-semibold text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingCreate}
-                  className="px-4 py-1.5 bg-[#5E1224] text-white font-semibold rounded-lg hover:bg-[#4A0E1C] disabled:opacity-50"
-                >
-                  {submittingCreate ? 'Saving...' : 'Create Request'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Update Status / Refund Recording Modal */}
       {selectedReturn && (
@@ -606,19 +448,6 @@ export const AdminReturns: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">Requested Resolution</label>
-                <select
-                  value={createResolution}
-                  onChange={(e) => setCreateResolution(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                >
-                  <option value="REFUND_STORE_CREDIT">Store Credit Voucher</option>
-                  <option value="REFUND_ORIGINAL_SOURCE">Original Payment Source Refund</option>
-                  <option value="EXCHANGE_SAME_PRODUCT">Size Exchange</option>
-                </select>
-              </div>
-
               {/* Reverse Logistics */}
               <div className="grid grid-cols-2 gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
                 <div>
@@ -643,7 +472,7 @@ export const AdminReturns: React.FC = () => {
                 </div>
               </div>
 
-              {/* Refund Details */}
+              {/* Refund / Credit Details */}
               <div className="grid grid-cols-3 gap-2 bg-amber-50/50 p-2.5 rounded-lg border border-amber-200/60">
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Refund Amount (₹)</label>
@@ -652,7 +481,7 @@ export const AdminReturns: React.FC = () => {
                     step="0.01"
                     placeholder="0.00"
                     value={updateRefundAmount}
-                    onChange={(e) => setUpdateRefundAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    onChange={(e) => setUpdateRefundAmount(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
                   />
                 </div>
@@ -661,19 +490,19 @@ export const AdminReturns: React.FC = () => {
                   <select
                     value={updateRefundStatus}
                     onChange={(e) => setUpdateRefundStatus(e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
                   >
                     <option value="">None</option>
-                    <option value="INITIATED">INITIATED</option>
-                    <option value="PROCESSED">PROCESSED</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="ISSUED">ISSUED</option>
                     <option value="FAILED">FAILED</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Gateway / Bank Ref</label>
+                  <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Reference / Txn ID</label>
                   <input
                     type="text"
-                    placeholder="UTR / CF Refund ID"
+                    placeholder="e.g., CF-REF-992"
                     value={updateRefundRef}
                     onChange={(e) => setUpdateRefundRef(e.target.value)}
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
@@ -683,12 +512,12 @@ export const AdminReturns: React.FC = () => {
 
               {/* Staff Notes */}
               <div>
-                <label className="block font-semibold text-gray-700 mb-1">Staff Notes / Inspection Summary</label>
+                <label className="block font-semibold text-gray-700 mb-1">Internal Staff Notes</label>
                 <textarea
                   rows={2}
                   value={updateStaffNotes}
                   onChange={(e) => setUpdateStaffNotes(e.target.value)}
-                  placeholder="Notes on garment condition, tags intact, reason for approval or rejection..."
+                  placeholder="Record defect check result, customer communication, or store manager approval..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
                 />
               </div>
@@ -706,7 +535,7 @@ export const AdminReturns: React.FC = () => {
                   disabled={submittingUpdate}
                   className="px-4 py-1.5 bg-[#5E1224] text-white font-semibold rounded-lg hover:bg-[#4A0E1C] disabled:opacity-50"
                 >
-                  {submittingUpdate ? 'Saving...' : 'Update Request'}
+                  {submittingUpdate ? 'Saving...' : 'Update Record'}
                 </button>
               </div>
             </form>
