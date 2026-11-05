@@ -48,6 +48,22 @@ CANONICAL_COLLECTION_NAMES: Set[str] = {
 }
 
 
+def normalize_variant_size(size_str: Optional[str]) -> str:
+    """Normalize variant size to standard boutique naming.
+
+    Ensures 'Free Size' is consistently capitalized and formatted across the application,
+    while standard sizes (XS, S, M, L, XL, XXL, 3XL) remain uppercase.
+    """
+    if not size_str:
+        return ""
+    clean = size_str.strip()
+    if clean.lower() in ("free size", "freesize", "free-size", "fs"):
+        return "Free Size"
+    if len(clean) <= 4:
+        return clean.upper()
+    return clean
+
+
 def validate_category_and_subcategory(
     category: Optional[str], subcategory: Optional[str]
 ) -> Tuple[Optional[str], Optional[str]]:

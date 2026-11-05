@@ -386,7 +386,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               {product.variants.filter((v) => v.is_active).slice(0, 4).map((v) => (
                 <span
                   key={v.id}
-                  className={`w-5 h-5 rounded text-[9px] flex items-center justify-center font-medium border ${
+                  className={`min-w-[20px] px-1 h-5 rounded text-[9px] flex items-center justify-center font-medium border whitespace-nowrap ${
                     v.stock > 0
                       ? 'bg-[#FCF8F0] text-gray-700 border-[#E8DFD0]'
                       : 'bg-gray-100 text-gray-400 line-through border-gray-200'

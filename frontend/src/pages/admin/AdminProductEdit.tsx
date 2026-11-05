@@ -41,6 +41,16 @@ import {
 } from '../../types/product';
 import { MediaLibraryPickerModal, getAssetKey } from '../../components/admin/MediaLibraryPickerModal';
 
+const PRESET_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
+
+const normalizeVariantSize = (raw: string): string => {
+  const clean = raw.trim();
+  if (['free size', 'freesize', 'free-size', 'fs'].includes(clean.toLowerCase())) {
+    return 'Free Size';
+  }
+  return clean.length <= 4 ? clean.toUpperCase() : clean;
+};
+
 export const AdminProductEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -570,12 +580,24 @@ export const AdminProductEdit: React.FC = () => {
     const price = parseFloat(newSizePrice);
     const mrp = newSizeMrp ? parseFloat(newSizeMrp) : undefined;
     const stock = parseInt(newSizeStock, 10) || 0;
+    const normalizedSize = normalizeVariantSize(newSize);
 
-    if (!newSize.trim()) {
-      setAddSizeError('Please enter a size name.');
+    if (!normalizedSize) {
+      setAddSizeError('Please enter or select a size name.');
       setAddingSizeLoading(false);
       return;
     }
+
+    // Duplicate check on size
+    const isDuplicate = variants.some(
+      (v) => v.size.trim().toLowerCase() === normalizedSize.toLowerCase()
+    );
+    if (isDuplicate) {
+      setAddSizeError(`Variant for size "${normalizedSize}" already exists on this product.`);
+      setAddingSizeLoading(false);
+      return;
+    }
+
     if (isNaN(price) || price <= 0) {
       setAddSizeError('Selling price must be greater than 0.');
       setAddingSizeLoading(false);
@@ -592,13 +614,16 @@ export const AdminProductEdit: React.FC = () => {
       return;
     }
 
+    const sizeCode = normalizedSize === 'Free Size' ? 'FS' : normalizedSize.toUpperCase();
+    const autoSku = newSizeSku.trim() || `${sku ? `${sku}-` : ''}${sizeCode}`;
+
     try {
       const added = await adminAddVariant(token, product.id, {
-        size: newSize.trim().toUpperCase(),
+        size: normalizedSize,
         selling_price: price,
         mrp: mrp || null,
         stock: stock,
-        sku: newSizeSku.trim() || `${sku ? `${sku}-` : ''}${newSize.trim().toUpperCase()}`,
+        sku: autoSku,
         is_active: true,
       });
 
@@ -1903,13 +1928,42 @@ export const AdminProductEdit: React.FC = () => {
 
             <form onSubmit={handleAddSizeSubmit} className="space-y-3.5">
               <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Available Size Choices
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  {PRESET_SIZES.map((sz) => {
+                    const exists = variants.some((v) => v.size.trim().toLowerCase() === sz.toLowerCase());
+                    const isSelected = normalizeVariantSize(newSize) === sz;
+                    return (
+                      <button
+                        key={sz}
+                        type="button"
+                        disabled={exists}
+                        onClick={() => setNewSize(sz)}
+                        title={exists ? `Size ${sz} is already added to this product` : `Select ${sz}`}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                          exists
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through opacity-60'
+                            : isSelected
+                            ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-[#5E1224] hover:bg-amber-50/40'
+                        }`}
+                      >
+                        {sz}
+                        {exists && <span className="ml-1 text-[10px] no-underline opacity-60">(Added)</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Size Name *
+                  Selected Size Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. XS, S, M, L, XL, XXL, 3XL, Custom"
+                  placeholder="e.g. Free Size, XS, S, M, L, XL"
                   value={newSize}
                   onChange={(e) => setNewSize(e.target.value)}
                   className="w-full px-3.5 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#5E1224] focus:outline-none"

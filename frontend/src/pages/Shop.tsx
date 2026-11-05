@@ -416,11 +416,13 @@ export const Shop: React.FC = () => {
         if (v.size) sizeSet.add(v.size);
       });
     });
-    const order = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    const order = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
     return Array.from(sizeSet).sort((a, b) => {
       const ia = order.indexOf(a);
       const ib = order.indexOf(b);
       if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
       return a.localeCompare(b);
     });
   }, [catalogReference]);
@@ -636,20 +638,25 @@ export const Shop: React.FC = () => {
               <div className="space-y-2.5 pt-4 border-t border-gray-100">
                 <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
                 <div className="grid grid-cols-4 gap-2">
-                  {availableSizes.map((sz) => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
-                      className={`h-9 rounded-none border text-xs font-semibold transition-all ${
-                        currentSize === sz
-                          ? 'bg-[#5E1224] text-white border-[#5E1224]'
-                          : 'bg-white text-gray-700 border-[#E8DFD0] hover:border-[#B58A3C]'
-                      }`}
-                    >
-                      {sz}
-                    </button>
-                  ))}
+                  {availableSizes.map((sz) => {
+                    const isFreeSize = sz.toLowerCase() === 'free size';
+                    return (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
+                        className={`h-9 rounded-none border font-semibold transition-all ${
+                          isFreeSize ? 'col-span-2 text-[11px] px-1.5' : 'text-xs'
+                        } ${
+                          currentSize === sz
+                            ? 'bg-[#5E1224] text-white border-[#5E1224]'
+                            : 'bg-white text-gray-700 border-[#E8DFD0] hover:border-[#B58A3C]'
+                        }`}
+                      >
+                        {sz}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1046,20 +1053,25 @@ export const Shop: React.FC = () => {
                 <div className="space-y-2 pt-3 border-t border-gray-200">
                   <h4 className="text-xs uppercase tracking-wider font-bold text-gray-800">Size</h4>
                   <div className="grid grid-cols-4 gap-2">
-                    {availableSizes.map((sz) => (
-                      <button
-                        key={sz}
-                        type="button"
-                        onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
-                        className={`h-10 rounded-none border text-xs font-semibold ${
-                          currentSize === sz
-                            ? 'bg-[#5E1224] text-white border-[#5E1224]'
-                            : 'bg-white text-gray-700 border-[#E8DFD0]'
-                        }`}
-                      >
-                        {sz}
-                      </button>
-                    ))}
+                    {availableSizes.map((sz) => {
+                      const isFreeSize = sz.toLowerCase() === 'free size';
+                      return (
+                        <button
+                          key={sz}
+                          type="button"
+                          onClick={() => updateParam('size', currentSize === sz ? '' : sz)}
+                          className={`h-10 rounded-none border font-semibold ${
+                            isFreeSize ? 'col-span-2 text-[11px] px-1.5' : 'text-xs'
+                          } ${
+                            currentSize === sz
+                              ? 'bg-[#5E1224] text-white border-[#5E1224]'
+                              : 'bg-white text-gray-700 border-[#E8DFD0]'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

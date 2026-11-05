@@ -713,7 +713,7 @@ export const ProductPage: React.FC = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-6 gap-2">
+              <div className="flex flex-wrap gap-2">
                 {(() => {
                   const matchingVariants = selectedColor
                     ? product.variants.filter((v) => v.colour === selectedColor)
@@ -723,6 +723,7 @@ export const ProductPage: React.FC = () => {
                   return variantsToDisplay.map((v) => {
                     const isUnavailable = !v.is_active || v.stock <= 0;
                     const isSelected = selectedVariant?.id === v.id;
+                    const isFreeSize = v.size.toLowerCase() === 'free size';
 
                     return (
                       <button
@@ -737,14 +738,14 @@ export const ProductPage: React.FC = () => {
                             ? `Size ${v.size} is sold out`
                             : `Select size ${v.size} — ₹${v.selling_price.toLocaleString('en-IN')}`
                         }
-                        className={`h-10 sm:h-11 rounded-none border text-center transition-all duration-200 ${isUnavailable
+                        className={`h-10 sm:h-11 px-3 ${isFreeSize ? 'min-w-[96px]' : 'min-w-[46px]'} rounded-none border text-center transition-all duration-200 flex items-center justify-center ${isUnavailable
                             ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
                             : isSelected
                               ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-md font-bold'
                               : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-[#B58A3C] font-semibold'
                           }`}
                       >
-                        <span className="text-xs sm:text-sm">{v.size}</span>
+                        <span className="text-xs sm:text-sm whitespace-nowrap">{v.size}</span>
                       </button>
                     );
                   });
@@ -752,7 +753,7 @@ export const ProductPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Quantity Selector & Real Low-Stock Message */}
+            {/* Quantity Selector & Real Inventory Status */}
             <div className="flex items-center justify-between pt-1">
               <div className="space-y-1">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-900 block">Quantity</span>
@@ -785,11 +786,6 @@ export const ProductPage: React.FC = () => {
                   <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-bold">
                     <span className="w-2 h-2 rounded-full bg-red-600" />
                     {isColorSoldOut ? `Sold Out in ${selectedColor}` : 'Sold Out'}
-                  </span>
-                ) : selectedVariant && selectedVariant.stock <= 5 ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-bold">
-                    <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
-                    Only {selectedVariant.stock} left in stock
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">

@@ -144,6 +144,7 @@ from app.services.product_service import (
     build_variant_response,
     validate_category_and_subcategory,
     sync_product_category_and_collections,
+    normalize_variant_size,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -4637,14 +4638,24 @@ def admin_create_product(
     )
 
     if payload.variants:
+        seen_sizes = set()
         for v in payload.variants:
+            v_size = normalize_variant_size(v.size)
+            size_key = (v_size.lower(), (v.colour or "").strip().lower())
+            if size_key in seen_sizes:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Duplicate variant for size '{v_size}' in request.",
+                )
+            seen_sizes.add(size_key)
+
             if v.mrp and v.selling_price > v.mrp:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Selling price (₹{v.selling_price}) cannot exceed MRP (₹{v.mrp}) for size {v.size}.",
+                    detail=f"Selling price (₹{v.selling_price}) cannot exceed MRP (₹{v.mrp}) for size {v_size}.",
                 )
             variant = ProductVariant(
-                size=v.size,
+                size=v_size,
                 colour=v.colour,
                 sku=v.sku,
                 mrp=v.mrp,

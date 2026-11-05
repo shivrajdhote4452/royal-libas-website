@@ -64,6 +64,7 @@ export const AdminProducts: React.FC = () => {
     L: { enabled: true, stock: '5', price: '' },
     XL: { enabled: false, stock: '0', price: '' },
     XXL: { enabled: false, stock: '0', price: '' },
+    'Free Size': { enabled: false, stock: '0', price: '' },
   });
 
   // Delete Confirmation State
@@ -148,10 +149,11 @@ export const AdminProducts: React.FC = () => {
       .map(([size, data]) => {
         const sprice = parseFloat(data.price || initialPrice) || 2999;
         const mrpVal = newMrp ? parseFloat(newMrp) : undefined;
+        const sizeCode = size === 'Free Size' ? 'FS' : size.replace(/\s+/g, '').toUpperCase();
         return {
           size,
           colour: null,
-          sku: `${generatedSlug.slice(0, 10).toUpperCase()}-${size}`,
+          sku: `${generatedSlug.slice(0, 10).toUpperCase()}-${sizeCode}`,
           selling_price: sprice,
           mrp: mrpVal,
           stock: parseInt(data.stock, 10) || 0,
@@ -789,45 +791,48 @@ export const AdminProducts: React.FC = () => {
               {/* Size Checkboxes */}
               <div>
                 <label className="block font-bold text-gray-700 mb-2">Initial Sizes & Stock</label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                  {Object.entries(newSizeStock).map(([sz, data]) => (
-                    <div
-                      key={sz}
-                      className={`p-2 rounded-xl border text-center transition-all ${
-                        data.enabled ? 'border-[#5E1224] bg-amber-50/40 shadow-sm' : 'border-gray-200 bg-gray-50 opacity-60'
-                      }`}
-                    >
-                      <label className="flex items-center justify-center gap-1 font-bold text-xs cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={data.enabled}
-                          onChange={(e) =>
-                            setNewSizeStock((prev) => ({
-                              ...prev,
-                              [sz]: { ...prev[sz], enabled: e.target.checked },
-                            }))
-                          }
-                          className="rounded text-[#5E1224] focus:ring-[#5E1224]"
-                        />
-                        <span>{sz}</span>
-                      </label>
-                      {data.enabled && (
-                        <input
-                          type="number"
-                          placeholder="Qty"
-                          min="0"
-                          value={data.stock}
-                          onChange={(e) =>
-                            setNewSizeStock((prev) => ({
-                              ...prev,
-                              [sz]: { ...prev[sz], stock: e.target.value },
-                            }))
-                          }
-                          className="w-full mt-1.5 px-1 py-0.5 text-center text-xs border rounded bg-white"
-                        />
-                      )}
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                  {Object.entries(newSizeStock).map(([sz, data]) => {
+                    const isFreeSize = sz.toLowerCase() === 'free size';
+                    return (
+                      <div
+                        key={sz}
+                        className={`p-2 rounded-xl border text-center transition-all ${
+                          data.enabled ? 'border-[#5E1224] bg-amber-50/40 shadow-sm' : 'border-gray-200 bg-gray-50 opacity-60'
+                        }`}
+                      >
+                        <label className="flex items-center justify-center gap-1 font-bold text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={data.enabled}
+                            onChange={(e) =>
+                              setNewSizeStock((prev) => ({
+                                ...prev,
+                                [sz]: { ...prev[sz], enabled: e.target.checked },
+                              }))
+                            }
+                            className="rounded text-[#5E1224] focus:ring-[#5E1224]"
+                          />
+                          <span className={isFreeSize ? 'text-[11px] whitespace-nowrap leading-tight' : ''}>{sz}</span>
+                        </label>
+                        {data.enabled && (
+                          <input
+                            type="number"
+                            placeholder="Qty"
+                            min="0"
+                            value={data.stock}
+                            onChange={(e) =>
+                              setNewSizeStock((prev) => ({
+                                ...prev,
+                                [sz]: { ...prev[sz], stock: e.target.value },
+                              }))
+                            }
+                            className="w-full mt-1.5 px-1 py-0.5 text-center text-xs border rounded bg-white"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
