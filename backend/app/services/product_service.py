@@ -248,6 +248,7 @@ def build_product_detail_response(product: Product) -> ProductDetailResponse:
     ]
 
     collection_names = [c.name for c in product.collections]
+    collection_ids = [c.id for c in product.collections]
 
     return ProductDetailResponse(
         id=product.id,
@@ -270,6 +271,7 @@ def build_product_detail_response(product: Product) -> ProductDetailResponse:
         images=images,
         variants=variants,
         collections=collection_names,
+        collection_ids=collection_ids,
         created_at=product.created_at,
         updated_at=product.updated_at,
     )

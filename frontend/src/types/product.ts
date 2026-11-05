@@ -21,6 +21,7 @@ export interface ProductImage {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  media_asset_id?: number | null;
 }
 
 export interface MediaAssetProductUsage {
@@ -202,6 +203,7 @@ export interface Product {
   images?: ProductImage[];
   variants: ProductVariant[];
   collections: string[];
+  collection_ids?: number[];
   created_at?: string;
   updated_at?: string;
 }

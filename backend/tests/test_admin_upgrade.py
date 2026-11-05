@@ -422,5 +422,80 @@ class TestAdminUpgradeIsolated(unittest.TestCase):
         self.assertEqual(res_404.status_code, 404)
 
 
+def test_admin_save_without_changes_preserves_collections_and_metadata(self):
+        """Regression test for non-destructive product save.
+
+        Loading an existing product and saving without edits must not:
+        - clear or change collection assignments
+        - blank fabric, fit, or care fields
+        - drop media_asset_id or image metadata
+        """
+        headers = get_owner_token()
+
+        # 1. Fetch initial product
+        res = client.get("/admin/products/1", headers=headers)
+        self.assertEqual(res.status_code, 200)
+        initial = res.json()
+
+        self.assertIn("collection_ids", initial)
+        self.assertIn("collections", initial)
+
+        orig_collections = list(initial["collections"])
+        orig_col_ids = list(initial["collection_ids"])
+        orig_fabric = initial.get("fabric")
+        orig_fit = initial.get("fit")
+        orig_care = initial.get("care")
+        orig_images = initial.get("images", [])
+
+        # 2. Simulate Save without changes (passing exact fields as loaded)
+        save_payload = {
+            "name": initial["name"],
+            "slug": initial["slug"],
+            "description": initial.get("description"),
+            "category": initial.get("category"),
+            "subcategory": initial.get("subcategory"),
+            "fabric": orig_fabric,
+            "fit": orig_fit,
+            "care": orig_care,
+            "status": initial.get("status"),
+            "is_bestseller": initial.get("is_bestseller", False),
+            "images": [
+                {
+                    "url": img["url"],
+                    "sort_order": img.get("sort_order", idx),
+                    "alt_text": img.get("alt_text"),
+                    "resource_type": img.get("resource_type", "image"),
+                    "public_id": img.get("public_id"),
+                    "width": img.get("width"),
+                    "height": img.get("height"),
+                    "duration": img.get("duration"),
+                    "media_asset_id": img.get("media_asset_id"),
+                }
+                for idx, img in enumerate(orig_images)
+            ],
+        }
+
+        # Case A: collection_ids omitted (e.g. collection fetch failed or untouched)
+        res_save_a = client.patch("/admin/products/1", json=save_payload, headers=headers)
+        self.assertEqual(res_save_a.status_code, 200, res_save_a.text)
+        after_a = res_save_a.json()
+
+        self.assertEqual(after_a["collections"], orig_collections, "Collections must remain untouched when collection_ids omitted!")
+        self.assertEqual(after_a["collection_ids"], orig_col_ids, "Collection IDs must remain untouched!")
+        self.assertEqual(after_a["fabric"], orig_fabric, "Fabric must not be blanked!")
+        self.assertEqual(after_a["fit"], orig_fit, "Fit must not be blanked!")
+        self.assertEqual(after_a["care"], orig_care, "Care must not be blanked!")
+        self.assertEqual(len(after_a["images"]), len(orig_images), "Images must not be dropped!")
+
+        # Case B: explicit collection_ids passed matching existing
+        save_payload_b = dict(save_payload)
+        save_payload_b["collection_ids"] = orig_col_ids
+        res_save_b = client.patch("/admin/products/1", json=save_payload_b, headers=headers)
+        self.assertEqual(res_save_b.status_code, 200, res_save_b.text)
+        after_b = res_save_b.json()
+
+        self.assertEqual(after_b["collections"], orig_collections, "Collections must match original when saved with same IDs!")
+        self.assertEqual(after_b["collection_ids"], orig_col_ids)
+
 if __name__ == "__main__":
     unittest.main()

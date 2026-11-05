@@ -27,6 +27,7 @@ import {
   adminDeleteProduct,
   adminAddVariant,
   adminUpdateVariant,
+  adminBulkUpdateVariants,
   adminUploadProductImage,
   fetchCollections,
 } from '../../lib/api';
@@ -59,11 +60,31 @@ export const AdminProductEdit: React.FC = () => {
   const [subcategory, setSubcategory] = useState('Co-ord Sets');
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('');
   const [sku, setSku] = useState('');
-  const [fabric, setFabric] = useState('Pure Chanderi Silk');
-  const [fit, setFit] = useState('Tailored Regular Fit');
-  const [care, setCare] = useState('Dry clean only');
+  const [fabric, setFabric] = useState('');
+  const [fit, setFit] = useState('');
+  const [care, setCare] = useState('');
   const [status, setStatus] = useState<'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('DRAFT');
   const [isBestseller, setIsBestseller] = useState(false);
+
+  // Non-destructive collections and initial snapshot tracking
+  const [collectionsFetchError, setCollectionsFetchError] = useState(false);
+  const [initialCollectionIds, setInitialCollectionIds] = useState<number[]>([]);
+  const initialStateRef = useRef<{
+    name: string;
+    slug: string;
+    description: string;
+    category: string;
+    subcategory: string;
+    fabric: string;
+    fit: string;
+    care: string;
+    status: string;
+    isBestseller: boolean;
+    selectedCollectionId: string;
+    sku: string;
+    photosJson: string;
+    priceEditsJson: string;
+  } | null>(null);
 
   // Media / Gallery State
   const [photos, setPhotos] = useState<ProductMediaItem[]>([]);
@@ -117,53 +138,79 @@ export const AdminProductEdit: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const [prod, cols] = await Promise.all([
-          fetchAdminProduct(token, productId),
-          fetchCollections().catch(() => [] as Collection[]),
-        ]);
+        let cols: Collection[] = [];
+        try {
+          cols = await fetchCollections();
+        } catch {
+          setCollectionsFetchError(true);
+        }
+
+        const prod = await fetchAdminProduct(token, productId);
 
         if (!isMounted) return;
         setProduct(prod);
         setCollections(cols);
 
-        // Populate Form Fields
-        setName(prod.name || '');
-        setSlug(prod.slug || '');
-        setDescription(prod.description || '');
+        // Populate Form Fields (preserve untouched values without fake defaults)
+        const initName = prod.name || '';
+        const initSlug = prod.slug || '';
+        const initDesc = prod.description || '';
         const cat = prod.category?.toUpperCase() || 'TWO PIECES';
-        setCategory(cat);
-        setSubcategory(prod.subcategory || (CATEGORY_GROUPS[cat]?.[0] || ''));
-        setFabric(prod.fabric || 'Pure Chanderi Silk');
-        setFit(prod.fit || 'Tailored Regular Fit');
-        setCare(prod.care || 'Dry clean only');
-        setStatus((prod.status as 'PUBLISHED' | 'DRAFT' | 'ARCHIVED') || (prod.is_active ? 'PUBLISHED' : 'DRAFT'));
-        setIsBestseller(!!prod.is_bestseller);
+        const initSub = prod.subcategory || (CATEGORY_GROUPS[cat]?.[0] || '');
+        const initFabric = prod.fabric ?? '';
+        const initFit = prod.fit ?? '';
+        const initCare = prod.care ?? '';
+        const initStatus = (prod.status as 'PUBLISHED' | 'DRAFT' | 'ARCHIVED') || (prod.is_active ? 'PUBLISHED' : 'DRAFT');
+        const initBestseller = !!prod.is_bestseller;
 
-        // Find primary collection
-        if (prod.collections && prod.collections.length > 0) {
-          const matched = cols.find((c) => prod.collections.includes(c.name));
-          if (matched) {
-            setSelectedCollectionId(String(matched.id));
+        setName(initName);
+        setSlug(initSlug);
+        setDescription(initDesc);
+        setCategory(cat);
+        setSubcategory(initSub);
+        setFabric(initFabric);
+        setFit(initFit);
+        setCare(initCare);
+        setStatus(initStatus);
+        setIsBestseller(initBestseller);
+
+        // Preserve collections: store exact collection IDs from backend
+        const existingColIds = prod.collection_ids || [];
+        setInitialCollectionIds(existingColIds);
+        let matchedColId = '';
+        if (cols.length > 0) {
+          if (existingColIds.length > 0) {
+            const matched = cols.find((c) => existingColIds.includes(c.id));
+            if (matched) matchedColId = String(matched.id);
+          } else if (prod.collections && prod.collections.length > 0) {
+            const matched = cols.find((c) => prod.collections.includes(c.name));
+            if (matched) matchedColId = String(matched.id);
           }
         }
+        setSelectedCollectionId(matchedColId);
 
-        // Set SKU from first variant if available
+        // Derive Base SKU from variants
+        let initialBaseSku = '';
         if (prod.variants && prod.variants.length > 0) {
-          const firstSku = prod.variants[0].sku;
-          if (firstSku) setSku(firstSku);
+          const firstSku = prod.variants[0].sku || '';
+          if (firstSku) {
+            initialBaseSku = firstSku.replace(/-[A-Za-z0-9]+$/, '');
+          }
         }
+        setSku(initialBaseSku);
 
-        // Populate Media
+        // Populate Media: preserve media_asset_id and metadata
         const mediaList: ProductMediaItem[] = (prod.images || []).map((img, idx) => ({
           id: img.id,
+          media_asset_id: img.media_asset_id ?? null,
           url: img.url,
-          sort_order: idx,
-          alt_text: img.alt_text,
+          sort_order: img.sort_order ?? idx,
+          alt_text: img.alt_text ?? null,
           resource_type: img.resource_type || 'image',
-          public_id: img.public_id,
-          width: img.width,
-          height: img.height,
-          duration: img.duration,
+          public_id: img.public_id ?? null,
+          width: img.width ?? null,
+          height: img.height ?? null,
+          duration: img.duration ?? null,
         }));
         setPhotos(mediaList);
         setSelectedPhotoIndex(0);
@@ -181,6 +228,25 @@ export const AdminProductEdit: React.FC = () => {
           };
         });
         setVariantPriceEdits(editsMap);
+
+        const photosJson = JSON.stringify(mediaList.map((p, idx) => ({ url: p.url, sort_order: idx, media_asset_id: p.media_asset_id })));
+        const priceEditsJson = JSON.stringify(editsMap);
+        initialStateRef.current = {
+          name: initName,
+          slug: initSlug,
+          description: initDesc,
+          category: cat,
+          subcategory: initSub,
+          fabric: initFabric,
+          fit: initFit,
+          care: initCare,
+          status: initStatus,
+          isBestseller: initBestseller,
+          selectedCollectionId: matchedColId,
+          sku: initialBaseSku,
+          photosJson,
+          priceEditsJson,
+        };
         setIsDirty(false);
       } catch (err: any) {
         if (!isMounted) return;
@@ -195,6 +261,103 @@ export const AdminProductEdit: React.FC = () => {
       isMounted = false;
     };
   }, [id, token]);
+
+  // Dynamic Unsaved Changes Detection
+  useEffect(() => {
+    if (!initialStateRef.current) return;
+    const init = initialStateRef.current;
+    const currentPhotosJson = JSON.stringify(
+      photos.map((p, idx) => ({ url: p.url, sort_order: idx, media_asset_id: p.media_asset_id }))
+    );
+    const currentPriceEditsJson = JSON.stringify(variantPriceEdits);
+
+    const dirty =
+      name.trim() !== init.name.trim() ||
+      slug.trim() !== init.slug.trim() ||
+      description.trim() !== init.description.trim() ||
+      category !== init.category ||
+      subcategory !== init.subcategory ||
+      fabric.trim() !== init.fabric.trim() ||
+      fit.trim() !== init.fit.trim() ||
+      care.trim() !== init.care.trim() ||
+      status !== init.status ||
+      isBestseller !== init.isBestseller ||
+      selectedCollectionId !== init.selectedCollectionId ||
+      sku.trim() !== init.sku.trim() ||
+      currentPhotosJson !== init.photosJson ||
+      currentPriceEditsJson !== init.priceEditsJson;
+
+    setIsDirty(dirty);
+  }, [
+    name,
+    slug,
+    description,
+    category,
+    subcategory,
+    fabric,
+    fit,
+    care,
+    status,
+    isBestseller,
+    selectedCollectionId,
+    sku,
+    photos,
+    variantPriceEdits,
+  ]);
+
+  // 1. Browser refresh & tab close guard
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // 2. Browser Back / Forward buttons guard
+  useEffect(() => {
+    if (!isDirty) return;
+    const handlePopState = () => {
+      const confirmed = window.confirm(
+        'You have unsaved changes in Product Details, Photos, or Prices. Are you sure you want to leave without saving?'
+      );
+      if (!confirmed) {
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isDirty]);
+
+  // 3. In-app navigation (sidebar & top links) click interceptor
+  useEffect(() => {
+    if (!isDirty || !id) return;
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('a');
+      if (target && target.getAttribute('href') && !target.getAttribute('href')?.startsWith('#')) {
+        const href = target.getAttribute('href') || '';
+        if (!href.includes(`/admin/products/${id}`)) {
+          const confirmed = window.confirm(
+            'You have unsaved changes in Product Details, Photos, or Prices. Are you sure you want to leave without saving?'
+          );
+          if (!confirmed) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }
+      }
+    };
+    document.addEventListener('click', handleDocumentClick, true);
+    return () => {
+      document.removeEventListener('click', handleDocumentClick, true);
+    };
+  }, [isDirty, id]);
 
   // Available subcategories for current category
   const availableSubcategories = useMemo(() => {
@@ -223,27 +386,54 @@ export const AdminProductEdit: React.FC = () => {
     return { totalStock, totalSizes, priceRange };
   }, [variants]);
 
-  // Immediate Stock Step (+ / -)
+  // Immediate Stock Step (+ / -) with Concurrency Protection
   const handleStockStep = async (variantId: number, delta: number) => {
     const target = variants.find((v) => v.id === variantId);
-    if (!target || !token) return;
+    if (!target || !token || !product) return;
 
-    const nextStock = Math.max(0, target.stock + delta);
-    if (nextStock === target.stock) return;
+    const nextStock = target.stock + delta;
+    if (nextStock < 0 || delta === 0) return;
 
-    // Optimistic UI Update
-    setVariants((prev) =>
-      prev.map((v) => (v.id === variantId ? { ...v, stock: nextStock, is_available: v.is_active && nextStock > 0 } : v))
-    );
     setUpdatingVariantId(variantId);
+    setSaveErrorMessage(null);
     try {
-      await adminUpdateVariant(token, variantId, { stock: nextStock });
-    } catch (err: any) {
-      // Revert on error
+      // Send atomic stock_delta and expected_stock to prevent overwriting orders or concurrent admin edits
+      const updated = await adminUpdateVariant(token, variantId, {
+        stock_delta: delta,
+        expected_stock: target.stock,
+      });
+
+      // Update local state with authoritative server stock
       setVariants((prev) =>
-        prev.map((v) => (v.id === variantId ? { ...v, stock: target.stock, is_available: target.is_available } : v))
+        prev.map((v) =>
+          v.id === variantId
+            ? {
+                ...v,
+                stock: updated.stock,
+                is_available: updated.is_available,
+              }
+            : v
+        )
       );
-      setSaveErrorMessage(err.message || 'Failed to update stock');
+    } catch (err: any) {
+      const isConflict = err.status === 409 || (err.message && err.message.toLowerCase().includes('conflict'));
+      if (isConflict) {
+        // Reload fresh product inventory from server
+        try {
+          const fresh = await fetchAdminProduct(token, product.id);
+          setProduct(fresh);
+          setVariants(fresh.variants || []);
+          const freshVar = fresh.variants?.find((v) => v.id === variantId);
+          const liveStock = freshVar ? freshVar.stock : 'updated';
+          setSaveErrorMessage(
+            `Stock conflict detected: Inventory was changed by a customer order or another administrator (live stock is now ${liveStock}). Latest inventory reloaded.`
+          );
+        } catch {
+          setSaveErrorMessage(err.message || 'Stock conflict detected. Please reload.');
+        }
+      } else {
+        setSaveErrorMessage(err.message || 'Failed to update stock');
+      }
     } finally {
       setUpdatingVariantId(null);
     }
@@ -288,56 +478,83 @@ export const AdminProductEdit: React.FC = () => {
     }
   };
 
-  // Save All Variant Prices & MRPs
+  // Save All Variant Prices & MRPs with Pre-flight Validation & Atomic DB Execution
   const handleSaveAllVariantPrices = async () => {
-    if (!token) return;
+    if (!token || !product) return;
     setSavingProduct(true);
     setSaveErrorMessage(null);
 
-    try {
-      for (const v of variants) {
-        const edits = variantPriceEdits[v.id];
-        if (!edits) continue;
+    // Step 1: Pre-flight validation on every changed variant BEFORE writing to server
+    const itemsToUpdate: Array<{
+      variant_id: number;
+      selling_price: number;
+      mrp?: number;
+      sku?: string;
+    }> = [];
 
-        const newSellingPrice = parseFloat(edits.selling_price);
-        const newMrp = edits.mrp ? parseFloat(edits.mrp) : undefined;
-        const newSku = edits.sku.trim() || undefined;
+    for (const v of variants) {
+      const edits = variantPriceEdits[v.id];
+      if (!edits) continue;
 
-        if (isNaN(newSellingPrice) || newSellingPrice <= 0) {
-          throw new Error(`Size ${v.size} selling price must be greater than 0.`);
-        }
-        if (newMrp !== undefined && newMrp <= 0) {
-          throw new Error(`Size ${v.size} MRP must be greater than 0.`);
-        }
-        if (newMrp !== undefined && newSellingPrice > newMrp) {
-          throw new Error(`Size ${v.size} selling price (₹${newSellingPrice}) cannot exceed MRP (₹${newMrp}).`);
-        }
+      const p = parseFloat(edits.selling_price);
+      const m = edits.mrp ? parseFloat(edits.mrp) : undefined;
+      const s = edits.sku.trim() || undefined;
 
-        await adminUpdateVariant(token, v.id, {
-          selling_price: newSellingPrice,
-          mrp: newMrp,
-          sku: newSku,
-        });
+      if (isNaN(p) || p <= 0) {
+        setSaveErrorMessage(`Validation error: Size '${v.size}' selling price must be greater than 0.`);
+        setSavingProduct(false);
+        return;
+      }
+      if (m !== undefined && (isNaN(m) || m <= 0)) {
+        setSaveErrorMessage(`Validation error: Size '${v.size}' MRP must be greater than 0.`);
+        setSavingProduct(false);
+        return;
+      }
+      if (m !== undefined && p > m) {
+        setSaveErrorMessage(`Validation error: Size '${v.size}' selling price (₹${p}) cannot exceed MRP (₹${m}).`);
+        setSavingProduct(false);
+        return;
       }
 
-      // Refresh variants
-      setVariants((prev) =>
-        prev.map((v) => {
-          const edits = variantPriceEdits[v.id];
-          if (!edits) return v;
-          return {
-            ...v,
-            selling_price: parseFloat(edits.selling_price),
-            mrp: edits.mrp ? parseFloat(edits.mrp) : null,
-            sku: edits.sku.trim() || null,
-          };
-        })
-      );
+      itemsToUpdate.push({
+        variant_id: v.id,
+        selling_price: p,
+        mrp: m,
+        sku: s,
+      });
+    }
+
+    if (itemsToUpdate.length === 0) {
       setIsEditingAllPrices(false);
-      setSaveSuccessMessage('Variant pricing and SKUs updated successfully!');
+      setSavingProduct(false);
+      return;
+    }
+
+    // Step 2: Atomic bulk update in single transaction
+    try {
+      const res = await adminBulkUpdateVariants(token, product.id, itemsToUpdate);
+      setVariants(res.updated_variants);
+
+      // Refresh edit map with server truth
+      const updatedEdits: Record<number, { selling_price: string; mrp: string; sku: string }> = {};
+      res.updated_variants.forEach((v: any) => {
+        updatedEdits[v.id] = {
+          selling_price: String(v.selling_price),
+          mrp: v.mrp ? String(v.mrp) : '',
+          sku: v.sku || '',
+        };
+      });
+      setVariantPriceEdits(updatedEdits);
+      setIsEditingAllPrices(false);
+      setSaveSuccessMessage('All variant prices and SKUs updated atomically!');
       setTimeout(() => setSaveSuccessMessage(null), 3000);
     } catch (err: any) {
-      setSaveErrorMessage(err.message || 'Failed to update variant prices');
+      setSaveErrorMessage(err.message || 'Failed to update variant prices. No partial changes were applied.');
+      // Reload server state so user sees true server state
+      try {
+        const fresh = await fetchAdminProduct(token, product.id);
+        setVariants(fresh.variants || []);
+      } catch {}
     } finally {
       setSavingProduct(false);
     }
@@ -521,7 +738,7 @@ export const AdminProductEdit: React.FC = () => {
     setIsDirty(true);
   };
 
-  // Main Save Product Handler
+  // Main Save Product Handler (Non-destructive: preserves collections, untouched fabric/fit/care, and media_asset_id)
   const handleSaveProduct = async () => {
     if (!product || !token) return;
 
@@ -538,33 +755,85 @@ export const AdminProductEdit: React.FC = () => {
     setSaveErrorMessage(null);
 
     try {
+      // Preserve untouched fabric/fit/care values without blanking
+      const effectiveFabric = fabric.trim() ? fabric.trim() : (initialStateRef.current?.fabric === '' ? null : product.fabric);
+      const effectiveFit = fit.trim() ? fit.trim() : (initialStateRef.current?.fit === '' ? null : product.fit);
+      const effectiveCare = care.trim() ? care.trim() : (initialStateRef.current?.care === '' ? null : product.care);
+
       const payload: any = {
         name: name.trim(),
         slug: slug.trim() || undefined,
         description: description.trim() || null,
         category,
         subcategory: subcategory || null,
-        fabric: fabric.trim() || null,
-        fit: fit.trim() || null,
-        care: care.trim() || null,
+        fabric: effectiveFabric,
+        fit: effectiveFit,
+        care: effectiveCare,
         status,
         is_bestseller: isBestseller,
-        collection_ids: selectedCollectionId ? [parseInt(selectedCollectionId, 10)] : [],
         images: photos.map((p, idx) => ({
-          media_asset_id: p.media_asset_id || null,
+          media_asset_id: p.media_asset_id ?? null,
           url: p.url,
           sort_order: idx,
-          alt_text: p.alt_text || name,
+          alt_text: p.alt_text || name.trim(),
           resource_type: p.resource_type || 'image',
           public_id: p.public_id || null,
-          width: p.width || null,
-          height: p.height || null,
-          duration: p.duration || null,
+          width: p.width ?? null,
+          height: p.height ?? null,
+          duration: p.duration ?? null,
         })),
       };
 
+      // Non-destructive collection preservation:
+      // If collection fetch failed, DO NOT pass collection_ids (backend leaves existing collections intact)
+      // If user did not change collection selection, pass initialCollectionIds or omit to prevent wipeout
+      if (!collectionsFetchError) {
+        const initialCol = initialStateRef.current?.selectedCollectionId || '';
+        if (selectedCollectionId !== initialCol) {
+          payload.collection_ids = selectedCollectionId ? [parseInt(selectedCollectionId, 10)] : [];
+        } else if (initialCollectionIds.length > 0) {
+          payload.collection_ids = initialCollectionIds;
+        }
+      }
+
+      // If Base Design SKU was modified, persist to variant SKUs in single atomic transaction
+      const initialSku = initialStateRef.current?.sku || '';
+      if (sku.trim() && sku.trim() !== initialSku) {
+        const cleanBase = sku.trim();
+        const skuUpdates = variants.map((v) => ({
+          variant_id: v.id,
+          sku: `${cleanBase}-${v.size}`,
+        }));
+        await adminBulkUpdateVariants(token, product.id, skuUpdates);
+      }
+
       const updated = await adminUpdateProduct(token, product.id, payload);
       setProduct(updated);
+      setVariants(updated.variants || []);
+      setInitialCollectionIds(updated.collection_ids || []);
+
+      // Refresh snapshot
+      const currentPhotosJson = JSON.stringify(
+        photos.map((p, idx) => ({ url: p.url, sort_order: idx, media_asset_id: p.media_asset_id }))
+      );
+      const currentPriceEditsJson = JSON.stringify(variantPriceEdits);
+      initialStateRef.current = {
+        name: updated.name,
+        slug: updated.slug,
+        description: updated.description || '',
+        category: updated.category || category,
+        subcategory: updated.subcategory || subcategory,
+        fabric: updated.fabric || '',
+        fit: updated.fit || '',
+        care: updated.care || '',
+        status: (updated.status as any) || status,
+        isBestseller: !!updated.is_bestseller,
+        selectedCollectionId,
+        sku: sku.trim(),
+        photosJson: currentPhotosJson,
+        priceEditsJson: currentPriceEditsJson,
+      };
+
       setIsDirty(false);
       setSaveSuccessMessage('Product updated successfully!');
       setTimeout(() => setSaveSuccessMessage(null), 4000);
@@ -974,9 +1243,14 @@ export const AdminProductEdit: React.FC = () => {
             {/* Card 1: Product Details */}
             <div className="bg-white rounded-2xl border border-[#E8DFD0] p-5 sm:p-6 shadow-sm space-y-5">
               <div className="flex items-center justify-between border-b border-[#E8DFD0] pb-3">
-                <h2 className="font-serif font-bold text-base sm:text-lg text-gray-900 text-[#5E1224]">
-                  Product Details
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-serif font-bold text-base sm:text-lg text-gray-900 text-[#5E1224]">
+                    Product Details
+                  </h2>
+                  <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 font-semibold inline-flex items-center gap-1">
+                    💾 Requires Save
+                  </span>
+                </div>
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-gray-600 font-medium cursor-pointer flex items-center gap-1.5">
                     <input
@@ -1050,6 +1324,11 @@ export const AdminProductEdit: React.FC = () => {
                         </option>
                       ))}
                     </select>
+                    {collectionsFetchError && (
+                      <p className="text-[11px] text-amber-700 mt-1">
+                        ⚠️ Collections list could not be loaded. Existing assignments will be preserved on save.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1077,7 +1356,7 @@ export const AdminProductEdit: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Design SKU / Code
+                      Base Design SKU
                     </label>
                     <input
                       type="text"
@@ -1087,8 +1366,11 @@ export const AdminProductEdit: React.FC = () => {
                         setIsDirty(true);
                       }}
                       placeholder="e.g. RLB-CS-1047"
-                      className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all"
+                      className="w-full px-3.5 py-2.5 bg-gray-50/50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5E1224] focus:bg-white transition-all font-mono"
                     />
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      Base design code persisted to variant SKUs (e.g. {sku || 'SKU'}-S)
+                    </p>
                   </div>
                 </div>
 
@@ -1200,11 +1482,16 @@ export const AdminProductEdit: React.FC = () => {
             <div className="bg-white rounded-2xl border border-[#E8DFD0] p-5 sm:p-6 shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8DFD0] pb-3">
                 <div>
-                  <h2 className="font-serif font-bold text-base sm:text-lg text-gray-900 text-[#5E1224]">
-                    Sizes, Stock & Pricing
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-serif font-bold text-base sm:text-lg text-gray-900 text-[#5E1224]">
+                      Sizes, Stock & Pricing
+                    </h2>
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold inline-flex items-center gap-1">
+                      <Check className="w-2.5 h-2.5" /> ⚡ Saved Live
+                    </span>
+                  </div>
                   <p className="text-[11px] text-gray-500">
-                    Live stock stepper and ON/OFF availability update instantly.
+                    Live stock stepper and availability toggles save instantly to server with concurrency protection.
                   </p>
                 </div>
 
@@ -1416,14 +1703,14 @@ export const AdminProductEdit: React.FC = () => {
 
           <div className="flex items-center gap-3">
             {isDirty ? (
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-amber-700 font-medium">
+              <span className="hidden sm:inline-flex items-center gap-2 text-xs text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                Unsaved product changes
+                Unsaved changes in Product Details / Photos / Pricing
               </span>
             ) : (
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 font-semibold">
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
-                All product details saved
+                All changes saved
               </span>
             )}
 

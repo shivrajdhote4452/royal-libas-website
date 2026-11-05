@@ -15,6 +15,8 @@ from app.schemas import (
     ProductVariantCreate,
     ProductVariantUpdate,
     ProductVariantResponse,
+    BulkVariantUpdateRequest,
+    BulkVariantUpdateResponse,
 )
 from app.services.product_service import (
     build_product_list_response,
@@ -328,6 +330,7 @@ def admin_update_product(
                 width=getattr(img, "width", None),
                 height=getattr(img, "height", None),
                 duration=getattr(img, "duration", None),
+                media_asset_id=getattr(img, "media_asset_id", None),
             )
             for idx, img in enumerate(payload.images)
         ]
@@ -439,7 +442,7 @@ def admin_update_variant(
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Update price, stock, or attributes for an existing variant with validation and audit trail."""
-    variant = db.query(ProductVariant).filter(ProductVariant.id == id).first()
+    variant = db.query(ProductVariant).with_for_update().filter(ProductVariant.id == id).first()
     if not variant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -447,6 +450,27 @@ def admin_update_variant(
         )
 
     fields_set = payload.model_fields_set
+
+    # Concurrency check: verify expected_stock matches live database stock
+    if payload.expected_stock is not None and variant.stock != payload.expected_stock:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Stock conflict detected! Current stock for size '{variant.size}' is {variant.stock}, "
+                f"but request expected {payload.expected_stock}. Live stock has been updated by an order "
+                f"or another admin. Please reload before saving."
+            ),
+        )
+
+    # Relative delta calculation with negative-stock prevention
+    if payload.stock_delta is not None:
+        target_stock = variant.stock + payload.stock_delta
+        if target_stock < 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Stock cannot be negative (current: {variant.stock}, delta: {payload.stock_delta}).",
+            )
+        payload.stock = target_stock
 
     # Validate final effective pricing combination
     effective_price = payload.selling_price if payload.selling_price is not None else variant.selling_price
@@ -499,7 +523,19 @@ def admin_update_variant(
         variant.stock = new_stock
 
     if payload.sku is not None:
-        variant.sku = payload.sku
+        clean_sku = payload.sku.strip() if payload.sku.strip() else None
+        if clean_sku is not None and clean_sku != variant.sku:
+            existing_sku = (
+                db.query(ProductVariant)
+                .filter(ProductVariant.sku == clean_sku, ProductVariant.id != variant.id)
+                .first()
+            )
+            if existing_sku:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"SKU '{clean_sku}' is already assigned to another variant.",
+                )
+        variant.sku = clean_sku
     if payload.colour is not None:
         variant.colour = payload.colour
     if payload.size is not None:
@@ -511,3 +547,103 @@ def admin_update_variant(
     db.refresh(variant)
 
     return build_variant_response(variant)
+
+
+@router.patch("/admin/products/{id}/variants/bulk-update", response_model=BulkVariantUpdateResponse)
+def admin_bulk_update_variants(
+    id: int,
+    payload: BulkVariantUpdateRequest,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Atomically update prices, MRPs, and SKUs across multiple variants in a single transaction."""
+    product = db.query(Product).filter(Product.id == id).first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with id {id} not found.",
+        )
+
+    variants = (
+        db.query(ProductVariant)
+        .with_for_update()
+        .filter(ProductVariant.product_id == id)
+        .all()
+    )
+    v_map = {v.id: v for v in variants}
+
+    # 1. Validation pass: verify all items belong to product and have valid pricing
+    for item in payload.items:
+        if item.variant_id not in v_map:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Variant ID {item.variant_id} does not belong to product '{product.name}'.",
+            )
+        target_v = v_map[item.variant_id]
+        effective_price = item.selling_price if item.selling_price is not None else target_v.selling_price
+        effective_mrp = item.mrp if item.mrp is not None else target_v.mrp
+
+        if effective_price <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Size {target_v.size} selling price must be greater than 0.",
+            )
+        if effective_mrp is not None:
+            if effective_mrp <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Size {target_v.size} MRP must be greater than 0.",
+                )
+            if effective_price > effective_mrp:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Size {target_v.size} selling price (₹{effective_price}) cannot exceed MRP (₹{effective_mrp}).",
+                )
+
+    # 2. Unique SKU pass: ensure proposed SKUs do not conflict internally or externally
+    proposed_skus = {}
+    for item in payload.items:
+        if item.sku is not None and item.sku.strip():
+            clean = item.sku.strip()
+            if clean in proposed_skus:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Duplicate SKU '{clean}' in update payload.",
+                )
+            proposed_skus[clean] = item.variant_id
+
+    if proposed_skus:
+        clashing = (
+            db.query(ProductVariant)
+            .filter(ProductVariant.sku.in_(list(proposed_skus.keys())))
+            .all()
+        )
+        for c in clashing:
+            if c.id != proposed_skus.get(c.sku):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"SKU '{c.sku}' is already assigned to another variant (ID {c.id}).",
+                )
+
+    # 3. Execution pass: apply all updates within this single transaction
+    for item in payload.items:
+        v = v_map[item.variant_id]
+        if item.selling_price is not None:
+            v.selling_price = item.selling_price
+        if item.mrp is not None:
+            v.mrp = item.mrp
+        if item.sku is not None:
+            v.sku = item.sku.strip() if item.sku.strip() else None
+        if item.is_active is not None:
+            v.is_active = item.is_active
+
+    db.commit()
+
+    for v in variants:
+        db.refresh(v)
+
+    return BulkVariantUpdateResponse(
+        product_id=product.id,
+        updated_variants=[build_variant_response(v) for v in variants],
+        message=f"Successfully updated {len(payload.items)} variant(s).",
+    )
