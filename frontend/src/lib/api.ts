@@ -325,6 +325,17 @@ export async function fetchAdminProducts(token: string): Promise<Product[]> {
   return response.json();
 }
 
+export async function fetchAdminProduct(token: string, id: number): Promise<Product> {
+  const response = await fetch(`${API_BASE_URL}/admin/products/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to load product details');
+  }
+  return response.json();
+}
+
 export async function adminCreateProduct(token: string, payload: any): Promise<Product> {
   const response = await fetch(`${API_BASE_URL}/admin/products`, {
     method: 'POST',

@@ -407,6 +407,20 @@ class TestAdminUpgradeIsolated(unittest.TestCase):
         self.assertIsInstance(logs, list)
         self.assertGreater(len(logs), 0)
 
+    def test_admin_get_single_product(self):
+        headers = get_owner_token()
+        # Verify single product retrieval by ID
+        res = client.get("/admin/products/1", headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["id"], 1)
+        self.assertIn("name", data)
+        self.assertIn("variants", data)
+
+        # Verify 404 for non-existent product
+        res_404 = client.get("/admin/products/99999", headers=headers)
+        self.assertEqual(res_404.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()

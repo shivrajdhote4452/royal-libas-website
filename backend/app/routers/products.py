@@ -421,7 +421,6 @@ def admin_add_variant(
             change_amount=variant.stock,
             reason="INITIAL_SETUP",
             note="Initial stock on variant creation",
-            actor_admin_id=current_admin.id,
             actor_email=current_admin.email,
         )
         db.add(adj)
@@ -494,7 +493,6 @@ def admin_update_variant(
             change_amount=delta,
             reason="QUICK_EDIT",
             note="Quick stock adjustment from Products management",
-            actor_admin_id=current_admin.id,
             actor_email=current_admin.email,
         )
         db.add(adj)

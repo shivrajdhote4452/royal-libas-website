@@ -30,6 +30,7 @@ import { AdminPayments } from './pages/admin/AdminPayments';
 import { AdminShipping } from './pages/admin/AdminShipping';
 import { AdminReturns } from './pages/admin/AdminReturns';
 import { AdminProducts } from './pages/admin/AdminProducts';
+import { AdminProductEdit } from './pages/admin/AdminProductEdit';
 import { AdminCollections } from './pages/admin/AdminCollections';
 import { AdminInventory } from './pages/admin/AdminInventory';
 import { AdminMedia } from './pages/admin/AdminMedia';
@@ -105,6 +106,7 @@ export const App: React.FC = () => {
             <Route path="returns" element={<AdminReturns />} />
             <Route path="exchanges" element={<AdminReturns />} />
             <Route path="products" element={<AdminProducts />} />
+            <Route path="products/:id" element={<AdminProductEdit />} />
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="collections" element={<AdminCollections />} />
             <Route path="size-charts" element={<Navigate to="/admin/products" replace />} />

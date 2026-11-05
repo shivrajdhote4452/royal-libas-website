@@ -4376,6 +4376,31 @@ def admin_list_products(
     return [build_product_detail_response(p) for p in products]
 
 
+@router.get("/products/{id}", response_model=ProductDetailResponse)
+def admin_get_product(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve a single product by ID (including draft and archived) for admin editing."""
+    product = (
+        db.query(Product)
+        .options(
+            joinedload(Product.variants),
+            joinedload(Product.images),
+            joinedload(Product.collections),
+        )
+        .filter(Product.id == id)
+        .first()
+    )
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with id {id} not found.",
+        )
+    return build_product_detail_response(product)
+
+
 def _process_product_images(
     images_payload: List[ProductImageCreate],
     db: Session,
