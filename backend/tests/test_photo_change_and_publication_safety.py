@@ -21,7 +21,8 @@ if backend_dir not in sys.path:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.config import CLOUDINARY_CLOUD_NAME
+from app.config import CLOUDINARY_CLOUD_NAME as _RAW_CLOUDINARY_CLOUD_NAME
+CLOUDINARY_CLOUD_NAME = _RAW_CLOUDINARY_CLOUD_NAME or "galbyoxi"
 from app.models import (
     Base,
     Collection,

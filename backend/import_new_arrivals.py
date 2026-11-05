@@ -52,9 +52,10 @@ if backend_dir not in sys.path:
 
 from sqlalchemy.orm import Session
 from app.config import (
-    CLOUDINARY_CLOUD_NAME,
+    CLOUDINARY_CLOUD_NAME as _CONFIG_CLOUDINARY_CLOUD_NAME,
     is_cloudinary_configured,
 )
+CLOUDINARY_CLOUD_NAME = _CONFIG_CLOUDINARY_CLOUD_NAME or "galbyoxi"
 
 CLOUDINARY_CUSTOM_DOMAIN = os.getenv("CLOUDINARY_CUSTOM_DOMAIN", "").strip() or None
 from app.database import SessionLocal
