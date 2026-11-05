@@ -81,9 +81,10 @@ export const ProductPage: React.FC = () => {
             navigate(`/product/${data.slug}`, { replace: true });
           }
           setError(null);
-          // Pre-select first available active variant
+          // Pre-select first available active variant, or active fallback
           const firstAvailable = data.variants.find((v) => v.is_active && v.stock > 0);
-          setSelectedVariant(firstAvailable || null);
+          const fallbackActive = data.variants.find((v) => v.is_active) || data.variants[0] || null;
+          setSelectedVariant(firstAvailable || fallbackActive || null);
           setActiveImageIndex(0);
 
           // Track in Recently Viewed (Point 25)
@@ -188,8 +189,14 @@ export const ProductPage: React.FC = () => {
 
   const activeImageUrl = galleryImages[activeImageIndex] || galleryImages[0] || null;
 
-  const displaySellingPrice = selectedVariant ? selectedVariant.selling_price : product.min_price || 0;
-  const displayMrp = selectedVariant?.mrp ?? (product.variants[0]?.mrp || null);
+  const fallbackVariant = product.variants.find((v) => v.is_active && v.stock > 0)
+    || product.variants.find((v) => v.is_active)
+    || product.variants[0]
+    || null;
+
+  const currentVariant = selectedVariant || fallbackVariant;
+  const displaySellingPrice = currentVariant ? currentVariant.selling_price : (product.min_price || 0);
+  const displayMrp = currentVariant ? currentVariant.mrp : null;
   const discountPercent =
     displayMrp && displayMrp > displaySellingPrice
       ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
@@ -728,7 +735,7 @@ export const ProductPage: React.FC = () => {
                             ? `Size ${v.size} is currently unavailable`
                             : v.stock <= 0
                             ? `Size ${v.size} is sold out`
-                            : `Select size ${v.size}`
+                            : `Select size ${v.size} — ₹${v.selling_price.toLocaleString('en-IN')}`
                         }
                         className={`h-10 sm:h-11 rounded-none border text-center transition-all duration-200 ${isUnavailable
                             ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'

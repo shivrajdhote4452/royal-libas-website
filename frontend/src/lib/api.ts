@@ -33,7 +33,12 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
   if (filters.sort) params.append('sort', filters.sort);
 
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await fetch(`${API_BASE_URL}/products${queryString}`);
+  const response = await fetch(`${API_BASE_URL}/products${queryString}`, {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache',
+    },
+  });
   
   if (!response.ok) {
     throw new Error(`Failed to load products: ${response.statusText}`);
@@ -43,11 +48,14 @@ export async function fetchProducts(filters: ProductFilters = {}): Promise<Produ
 
 export async function fetchProductBySlug(slug: string): Promise<Product> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('royal_libas_admin_token') : null;
-  const headers: HeadersInit = {};
+  const headers: HeadersInit = {
+    'Cache-Control': 'no-cache',
+  };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
   const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(slug.trim())}`, {
+    cache: 'no-store',
     headers,
   });
   if (!response.ok) {

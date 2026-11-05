@@ -139,18 +139,18 @@ def sync_product_category_and_collections(
 
 
 
-def derive_badges(product: Product, total_stock: int) -> List[str]:
+def derive_badges(product: Product, total_stock: int, purchasable_count: Optional[int] = None) -> List[str]:
     """Derive product badges based on stock level, bestseller flag, and recency.
     
     Badges:
-    - 'Sold Out': total stock across all variants is 0.
+    - 'Sold Out': total stock across active variants is 0 or no purchasable variants exist.
     - 'Low Stock': total stock is between 1 and 5 inclusive.
     - 'Bestseller': product.is_bestseller flag is True.
     - 'New': product was added within the last 14 days.
     """
     badges: List[str] = []
 
-    if total_stock == 0:
+    if total_stock == 0 or (purchasable_count is not None and purchasable_count == 0):
         badges.append("Sold Out")
     elif total_stock <= 5:
         badges.append("Low Stock")
@@ -192,10 +192,17 @@ def build_variant_response(variant) -> ProductVariantResponse:
 def build_product_list_response(product: Product) -> ProductListResponse:
     """Build list response item with derived prices, badges, and primary image."""
     variants = [build_variant_response(v) for v in product.variants]
-    total_stock = sum(v.stock for v in variants)
-    prices = [v.selling_price for v in variants]
-    min_price = min(prices) if prices else None
-    max_price = max(prices) if prices else None
+    total_stock = sum(v.stock for v in variants if getattr(v, "is_active", True))
+
+    # Purchasable variants must be active AND in stock
+    purchasable_variants = [v for v in variants if getattr(v, "is_active", True) and v.stock > 0]
+    if purchasable_variants:
+        prices = [v.selling_price for v in purchasable_variants]
+        min_price = min(prices)
+        max_price = max(prices)
+    else:
+        min_price = None
+        max_price = None
 
     # Get primary image (prefers first image, or video poster if only videos exist)
     primary_img_url: Optional[str] = None
@@ -241,7 +248,7 @@ def build_product_list_response(product: Product) -> ProductListResponse:
         min_price=min_price,
         max_price=max_price,
         total_stock=total_stock,
-        badges=derive_badges(product, total_stock),
+        badges=derive_badges(product, total_stock, len(purchasable_variants)),
         primary_image=primary_img_url,
         images=images_list,
         collections=collection_names,
@@ -252,7 +259,8 @@ def build_product_list_response(product: Product) -> ProductListResponse:
 def build_product_detail_response(product: Product) -> ProductDetailResponse:
     """Build full product detail response with ordered images, variants, and badges."""
     variants = [build_variant_response(v) for v in product.variants]
-    total_stock = sum(v.stock for v in variants)
+    total_stock = sum(v.stock for v in variants if getattr(v, "is_active", True))
+    purchasable_count = sum(1 for v in variants if getattr(v, "is_active", True) and v.stock > 0)
 
     sorted_images = sorted(product.images, key=lambda img: img.sort_order)
     images = [
@@ -291,7 +299,7 @@ def build_product_detail_response(product: Product) -> ProductDetailResponse:
         is_bestseller=product.is_bestseller,
         is_active=product.is_active,
         total_stock=total_stock,
-        badges=derive_badges(product, total_stock),
+        badges=derive_badges(product, total_stock, purchasable_count),
         images=images,
         variants=variants,
         collections=collection_names,

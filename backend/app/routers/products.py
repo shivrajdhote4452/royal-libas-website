@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 
@@ -34,6 +34,7 @@ router = APIRouter(tags=["products"])
 
 @router.get("/products", response_model=List[ProductListResponse])
 def list_products(
+    response: Response,
     category: Optional[str] = Query(None, description="Filter by category"),
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
     collection: Optional[str] = Query(None, description="Filter by collection slug or name"),
@@ -49,6 +50,9 @@ def list_products(
     Unauthenticated customers can NEVER see draft, inactive, or archived products, even if they pass include_inactive=True.
     Only an authenticated, active admin with a valid Bearer token who explicitly passes include_inactive=True may see them.
     """
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     query = (
         db.query(Product)
         .options(
@@ -128,10 +132,15 @@ def list_products(
 @router.get("/products/{slug}", response_model=ProductDetailResponse)
 def get_product_by_slug(
     slug: str,
+    response: Response,
     db: Session = Depends(get_db),
     admin: Optional[Admin] = Depends(get_current_admin_optional),
 ):
     """Retrieve complete product details, ordered images, live variant stock, and fabric info by slug or ID."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
     clean_slug = slug.strip()
     norm_slug = clean_slug.replace(" ", "-").lower()
 

@@ -318,8 +318,8 @@ export const Shop: React.FC = () => {
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const price = p.min_price ?? 0;
-      // Only filter if user actively set a maximum price
-      if (activeUserMaxPrice !== null && price > activeUserMaxPrice) return false;
+      // Only filter if user actively set a maximum price (exclude items with no active price)
+      if (activeUserMaxPrice !== null && (p.min_price === null || price > activeUserMaxPrice)) return false;
       if (inStockOnly && p.total_stock <= 0) return false;
       if (wishlistOnly && !wishlist.includes(p.id)) return false;
 
