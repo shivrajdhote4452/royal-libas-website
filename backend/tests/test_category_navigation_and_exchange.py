@@ -304,6 +304,18 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
         self.assertEqual(res2.status_code, 400)
         self.assertIn("no returns and no exchanges policy", res2.json()["detail"].lower())
 
+        # Staff/Admin attempt to create return/exchange via POST /admin/returns also fails with 400
+        headers = {"Authorization": f"Bearer {self.admin_token}"}
+        admin_create_res = client.post("/admin/returns", json={
+            "order_id": self.test_order.id,
+            "order_item_id": self.test_item.id,
+            "request_type": "RETURN",
+            "reason": "SIZE_FIT",
+            "requested_resolution": "REFUND",
+        }, headers=headers)
+        self.assertEqual(admin_create_res.status_code, 400)
+        self.assertIn("no returns and no exchanges policy", admin_create_res.json()["detail"].lower())
+
     def test_06_historical_exchanges_viewable_in_tracking_and_admin(self):
         """Historical exchange records in the database remain viewable in tracking and admin."""
         # Seed a historical return request directly in test database

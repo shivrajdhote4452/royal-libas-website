@@ -1890,61 +1890,14 @@ def admin_create_return_request(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """Initiate a return or exchange request on behalf of a customer."""
-    order = db.query(Order).filter(Order.id == payload.order_id).first()
-    if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+    """Initiate a return or exchange request on behalf of a customer.
 
-    item = None
-    if payload.order_item_id:
-        item = db.query(OrderItem).filter(OrderItem.id == payload.order_item_id, OrderItem.order_id == order.id).first()
-        if not item:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order item not found on this order.")
-
-    rand_code = "".join(random.choices(string.digits, k=6))
-    return_code = f"RET-2026-{rand_code}"
-
-    ret = ReturnRequest(
-        return_code=return_code,
-        order_id=order.id,
-        order_item_id=item.id if item else None,
-        request_type=payload.request_type.upper().strip(),
-        reason=payload.reason.strip(),
-        customer_comment=payload.customer_comment.strip() if payload.customer_comment else None,
-        requested_resolution=payload.requested_resolution.upper().strip(),
-        exchange_size=payload.exchange_size.strip() if payload.exchange_size else None,
-        status="REQUESTED",
-    )
-    db.add(ret)
-    db.commit()
-    db.refresh(ret)
-
-    log_activity(db, current_admin, "RETURN_REQUESTED", "return", ret.id, f"Created {return_code} for order {order.order_code}")
-
-    return ReturnRequestResponse(
-        id=ret.id,
-        return_code=ret.return_code,
-        order_id=order.id,
-        order_code=order.order_code,
-        customer_name=order.customer_name,
-        customer_phone=order.phone,
-        item_name=item.product_name_snapshot if item else None,
-        item_size=item.size_snapshot if item else None,
-        item_colour=item.colour_snapshot if item else None,
-        request_type=ret.request_type,
-        reason=ret.reason,
-        customer_comment=ret.customer_comment,
-        requested_resolution=ret.requested_resolution,
-        exchange_size=ret.exchange_size,
-        status=ret.status,
-        pickup_awb=ret.pickup_awb,
-        pickup_courier=ret.pickup_courier,
-        refund_amount=ret.refund_amount,
-        refund_status=ret.refund_status,
-        refund_reference=ret.refund_reference,
-        staff_notes=ret.staff_notes,
-        created_at=ret.created_at,
-        updated_at=ret.updated_at,
+    Royal Libas strictly enforces a 'No Returns and No Exchanges' policy on all handcrafted garments.
+    Creation of new return or exchange requests is permanently disabled for both customers and staff.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Royal Libas strictly enforces a No Returns and No Exchanges policy on all artisanal boutique garments. Creation of new return or exchange requests is disabled.",
     )
 
 

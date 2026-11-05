@@ -43,7 +43,7 @@ if backend_dir not in sys.path:
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import SessionLocal, Base, engine
-from app.models import Admin, Product, ProductVariant, Order, OrderItem, Address, StoreSetting
+from app.models import Admin, Product, ProductVariant, Order, OrderItem, Address, StoreSetting, ReturnRequest
 from app.auth import hash_password
 
 client = TestClient(app)
@@ -273,6 +273,7 @@ class TestAdminUpgradeIsolated(unittest.TestCase):
         finally:
             db.close()
 
+        # Policy enforcement: new return or exchange request creation is disabled via API
         create_res = client.post(
             "/admin/returns",
             json={
@@ -284,8 +285,27 @@ class TestAdminUpgradeIsolated(unittest.TestCase):
             },
             headers=headers,
         )
-        self.assertEqual(create_res.status_code, 200)
-        ret_id = create_res.json()["id"]
+        self.assertEqual(create_res.status_code, 400)
+        self.assertIn("No Returns and No Exchanges", create_res.json()["detail"])
+
+        # Historical return/exchange management remains fully functional for audit purposes
+        db = SessionLocal()
+        try:
+            hist_ret = ReturnRequest(
+                return_code="RET-HIST-TEST-001",
+                order_id=oid,
+                request_type="RETURN",
+                reason="SIZE_FIT",
+                customer_comment="Legacy return record",
+                requested_resolution="REFUND",
+                status="REQUESTED",
+            )
+            db.add(hist_ret)
+            db.commit()
+            db.refresh(hist_ret)
+            ret_id = hist_ret.id
+        finally:
+            db.close()
 
         patch_res = client.patch(
             f"/admin/returns/{ret_id}/status",

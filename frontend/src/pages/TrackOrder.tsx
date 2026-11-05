@@ -397,7 +397,7 @@ export const TrackOrder: React.FC = () => {
             <div className="bg-white p-5 rounded-none border border-[#E8DFD0] shadow-sm space-y-3">
               <div className="flex items-center gap-2 border-b border-gray-100 pb-2 text-xs font-bold text-gray-900">
                 <RotateCcw className="w-4 h-4 text-[#B58A3C]" />
-                <span>Size & Style Exchange Requests</span>
+                <span>Exchange & Return History (Archived)</span>
               </div>
               <div className="space-y-3">
                 {order.exchanges!.map((exch) => (
@@ -424,7 +424,7 @@ export const TrackOrder: React.FC = () => {
                       <p className="text-gray-500 italic text-[11px]">&ldquo;{exch.customer_notes}&rdquo;</p>
                     )}
                     <p className="text-[10px] text-gray-400 border-t border-[#E8DFD0]/60 pt-1">
-                      Exchange requests are reviewed by our team. Conditions will be confirmed by the store.
+                      Historical record. Royal Libas operates under a strict No Returns and No Exchanges policy.
                     </p>
                   </div>
                 ))}
