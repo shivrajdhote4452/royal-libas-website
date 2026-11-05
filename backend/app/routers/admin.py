@@ -4756,8 +4756,10 @@ def admin_update_product(
                     detail=f"Variant ID {item.variant_id} does not belong to product {id}.",
                 )
             v = existing_variants[item.variant_id]
-            new_sp = item.selling_price if item.selling_price is not None else v.selling_price
-            new_mrp = item.mrp if item.mrp is not None else v.mrp
+            v_fields = item.model_fields_set
+            new_sp = item.selling_price if ("selling_price" in v_fields and item.selling_price is not None) else v.selling_price
+            new_mrp = item.mrp if "mrp" in v_fields else v.mrp
+
             if new_sp is not None and new_sp <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -4776,7 +4778,8 @@ def admin_update_product(
 
         # Check SKU uniqueness across database
         for item in payload.variants:
-            if item.sku is not None:
+            v_fields = item.model_fields_set
+            if "sku" in v_fields and item.sku is not None:
                 clean_sku = item.sku.strip()
                 if clean_sku:
                     conflict = (
@@ -4793,13 +4796,14 @@ def admin_update_product(
         # Apply updates to variants within the same transaction
         for item in payload.variants:
             v = existing_variants[item.variant_id]
-            if item.selling_price is not None:
+            v_fields = item.model_fields_set
+            if "selling_price" in v_fields and item.selling_price is not None:
                 v.selling_price = item.selling_price
-            if item.mrp is not None:
+            if "mrp" in v_fields:
                 v.mrp = item.mrp
-            if item.sku is not None:
-                v.sku = item.sku.strip() if item.sku else None
-            if item.is_active is not None:
+            if "sku" in v_fields:
+                v.sku = item.sku.strip() if item.sku and item.sku.strip() else None
+            if "is_active" in v_fields and item.is_active is not None:
                 v.is_active = item.is_active
 
     db.commit()

@@ -475,8 +475,8 @@ export const AdminProductEdit: React.FC = () => {
     const itemsToUpdate: Array<{
       variant_id: number;
       selling_price: number;
-      mrp?: number;
-      sku?: string;
+      mrp?: number | null;
+      sku?: string | null;
     }> = [];
 
     for (const v of variants) {
@@ -506,8 +506,8 @@ export const AdminProductEdit: React.FC = () => {
       itemsToUpdate.push({
         variant_id: v.id,
         selling_price: p,
-        mrp: m,
-        sku: s,
+        mrp: m !== undefined ? m : null,
+        sku: s ? s : null,
       });
     }
 
@@ -754,10 +754,27 @@ export const AdminProductEdit: React.FC = () => {
     setSaveErrorMessage(null);
 
     try {
-      // Preserve untouched fabric/fit/care values without blanking
-      const effectiveFabric = fabric.trim() ? fabric.trim() : (initialStateRef.current?.fabric === '' ? null : product.fabric);
-      const effectiveFit = fit.trim() ? fit.trim() : (initialStateRef.current?.fit === '' ? null : product.fit);
-      const effectiveCare = care.trim() ? care.trim() : (initialStateRef.current?.care === '' ? null : product.care);
+      // Distinguish untouched Fabric, Fit, or Care fields from fields the user intentionally cleared.
+      // - If untouched: preserve existing product value
+      // - If edited and non-empty: update to trimmed string
+      // - If edited and cleared (empty): persist as null according to data model
+      const initFabric = initialStateRef.current?.fabric ?? '';
+      const isFabricTouched = fabric.trim() !== initFabric.trim();
+      const effectiveFabric = isFabricTouched
+        ? (fabric.trim() ? fabric.trim() : null)
+        : (product.fabric ?? null);
+
+      const initFit = initialStateRef.current?.fit ?? '';
+      const isFitTouched = fit.trim() !== initFit.trim();
+      const effectiveFit = isFitTouched
+        ? (fit.trim() ? fit.trim() : null)
+        : (product.fit ?? null);
+
+      const initCare = initialStateRef.current?.care ?? '';
+      const isCareTouched = care.trim() !== initCare.trim();
+      const effectiveCare = isCareTouched
+        ? (care.trim() ? care.trim() : null)
+        : (product.care ?? null);
 
       const payload: any = {
         name: name.trim(),
@@ -846,13 +863,12 @@ export const AdminProductEdit: React.FC = () => {
         const activeDiff = initV ? initV.is_active !== (v.is_active !== false) : false;
 
         if (priceDiff || mrpDiff || skuDiff || activeDiff) {
-          variantUpdates.push({
-            variant_id: v.id,
-            selling_price: p,
-            mrp: m || null,
-            sku: targetSku || null,
-            is_active: v.is_active !== false,
-          });
+          const vUpdate: any = { variant_id: v.id };
+          if (priceDiff) vUpdate.selling_price = p;
+          if (mrpDiff) vUpdate.mrp = m !== undefined ? m : null;
+          if (skuDiff) vUpdate.sku = targetSku ? targetSku : null;
+          if (activeDiff) vUpdate.is_active = v.is_active !== false;
+          variantUpdates.push(vUpdate);
         }
       }
 

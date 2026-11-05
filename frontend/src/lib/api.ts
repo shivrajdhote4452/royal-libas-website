@@ -409,8 +409,8 @@ export async function adminBulkUpdateVariants(
   items: Array<{
     variant_id: number;
     selling_price?: number;
-    mrp?: number;
-    sku?: string;
+    mrp?: number | null;
+    sku?: string | null;
     is_active?: boolean;
   }>
 ): Promise<{ product_id: number; updated_variants: any[]; message: string }> {

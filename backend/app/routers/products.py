@@ -283,25 +283,25 @@ def admin_update_product(
             )
         product.slug = payload.slug
 
-    if payload.name is not None:
-        product.name = payload.name
-    if payload.description is not None:
-        product.description = payload.description
-    if payload.fabric is not None:
-        product.fabric = payload.fabric
-    if payload.care is not None:
-        product.care = payload.care
-    if payload.size_chart is not None:
+    fields_set = payload.model_fields_set
+
+    if "name" in fields_set and payload.name is not None:
+        product.name = payload.name.strip()
+    if "description" in fields_set:
+        product.description = payload.description.strip() if payload.description else None
+    if "fabric" in fields_set:
+        product.fabric = payload.fabric.strip() if payload.fabric else None
+    if "care" in fields_set:
+        product.care = payload.care.strip() if payload.care else None
+    if "fit" in fields_set:
+        product.fit = payload.fit.strip() if payload.fit else None
+    if "size_chart" in fields_set:
         product.size_chart = payload.size_chart
-    if payload.category is not None:
-        product.category = payload.category
-    if payload.subcategory is not None:
-        product.subcategory = payload.subcategory
-    if payload.fit is not None:
-        product.fit = payload.fit
-    if payload.size_chart_id is not None:
+    if "size_chart_id" in fields_set:
         product.size_chart_id = payload.size_chart_id
-    if payload.is_bestseller is not None:
+    if "source_folder" in fields_set:
+        product.source_folder = payload.source_folder
+    if "is_bestseller" in fields_set and payload.is_bestseller is not None:
         product.is_bestseller = payload.is_bestseller
 
     if payload.status is not None:
@@ -359,8 +359,10 @@ def admin_update_product(
                     detail=f"Variant ID {item.variant_id} does not belong to product {id}.",
                 )
             v = existing_variants[item.variant_id]
-            new_sp = item.selling_price if item.selling_price is not None else v.selling_price
-            new_mrp = item.mrp if item.mrp is not None else v.mrp
+            v_fields = item.model_fields_set
+            new_sp = item.selling_price if ("selling_price" in v_fields and item.selling_price is not None) else v.selling_price
+            new_mrp = item.mrp if "mrp" in v_fields else v.mrp
+
             if new_sp is not None and new_sp <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -379,7 +381,8 @@ def admin_update_product(
 
         # Check SKU uniqueness across database
         for item in payload.variants:
-            if item.sku is not None:
+            v_fields = item.model_fields_set
+            if "sku" in v_fields and item.sku is not None:
                 clean_sku = item.sku.strip()
                 if clean_sku:
                     conflict = (
@@ -396,13 +399,14 @@ def admin_update_product(
         # Apply updates to variants within the same transaction
         for item in payload.variants:
             v = existing_variants[item.variant_id]
-            if item.selling_price is not None:
+            v_fields = item.model_fields_set
+            if "selling_price" in v_fields and item.selling_price is not None:
                 v.selling_price = item.selling_price
-            if item.mrp is not None:
+            if "mrp" in v_fields:
                 v.mrp = item.mrp
-            if item.sku is not None:
-                v.sku = item.sku.strip() if item.sku else None
-            if item.is_active is not None:
+            if "sku" in v_fields:
+                v.sku = item.sku.strip() if item.sku and item.sku.strip() else None
+            if "is_active" in v_fields and item.is_active is not None:
                 v.is_active = item.is_active
 
     db.commit()
@@ -592,8 +596,8 @@ def admin_update_variant(
         db.add(adj)
         variant.stock = new_stock
 
-    if payload.sku is not None:
-        clean_sku = payload.sku.strip() if payload.sku.strip() else None
+    if "sku" in fields_set:
+        clean_sku = payload.sku.strip() if payload.sku and payload.sku.strip() else None
         if clean_sku is not None and clean_sku != variant.sku:
             existing_sku = (
                 db.query(ProductVariant)
@@ -650,8 +654,9 @@ def admin_bulk_update_variants(
                 detail=f"Variant ID {item.variant_id} does not belong to product '{product.name}'.",
             )
         target_v = v_map[item.variant_id]
-        effective_price = item.selling_price if item.selling_price is not None else target_v.selling_price
-        effective_mrp = item.mrp if item.mrp is not None else target_v.mrp
+        item_fields = item.model_fields_set
+        effective_price = item.selling_price if ("selling_price" in item_fields and item.selling_price is not None) else target_v.selling_price
+        effective_mrp = item.mrp if "mrp" in item_fields else target_v.mrp
 
         if effective_price <= 0:
             raise HTTPException(
@@ -673,7 +678,8 @@ def admin_bulk_update_variants(
     # 2. Unique SKU pass: ensure proposed SKUs do not conflict internally or externally
     proposed_skus = {}
     for item in payload.items:
-        if item.sku is not None and item.sku.strip():
+        item_fields = item.model_fields_set
+        if "sku" in item_fields and item.sku is not None and item.sku.strip():
             clean = item.sku.strip()
             if clean in proposed_skus:
                 raise HTTPException(
@@ -698,13 +704,14 @@ def admin_bulk_update_variants(
     # 3. Execution pass: apply all updates within this single transaction
     for item in payload.items:
         v = v_map[item.variant_id]
-        if item.selling_price is not None:
+        item_fields = item.model_fields_set
+        if "selling_price" in item_fields and item.selling_price is not None:
             v.selling_price = item.selling_price
-        if item.mrp is not None:
+        if "mrp" in item_fields:
             v.mrp = item.mrp
-        if item.sku is not None:
-            v.sku = item.sku.strip() if item.sku.strip() else None
-        if item.is_active is not None:
+        if "sku" in item_fields:
+            v.sku = item.sku.strip() if item.sku and item.sku.strip() else None
+        if "is_active" in item_fields and item.is_active is not None:
             v.is_active = item.is_active
 
     db.commit()
