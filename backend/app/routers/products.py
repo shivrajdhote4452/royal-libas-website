@@ -474,26 +474,26 @@ def admin_add_variant(
     clean_size = normalize_variant_size(payload.size)
     clean_colour = payload.colour.strip() if payload.colour else None
 
-    # Check unique constraint on product + size + colour (case-insensitive)
+    # Check unique constraint on product + size + colour (normalizing legacy formats like FS, freesize, etc.)
     colour_filter = (
         ProductVariant.colour.is_(None)
         if clean_colour is None
         else func.lower(ProductVariant.colour) == clean_colour.lower()
     )
-    existing_variant = (
+    existing_variants = (
         db.query(ProductVariant)
         .filter(
             ProductVariant.product_id == id,
-            func.lower(func.trim(ProductVariant.size)) == clean_size.lower(),
             colour_filter,
         )
-        .first()
+        .all()
     )
-    if existing_variant:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Variant for size '{clean_size}' already exists on this product",
-        )
+    for ev in existing_variants:
+        if normalize_variant_size(ev.size).lower() == clean_size.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Variant for size '{clean_size}' already exists on this product",
+            )
 
     # SKU uniqueness check if provided
     if payload.sku:
@@ -647,21 +647,21 @@ def admin_update_variant(
                 if variant.colour is None
                 else func.lower(ProductVariant.colour) == variant.colour.lower()
             )
-            existing_size = (
+            existing_variants = (
                 db.query(ProductVariant)
                 .filter(
                     ProductVariant.product_id == variant.product_id,
                     ProductVariant.id != variant.id,
-                    func.lower(func.trim(ProductVariant.size)) == clean_size.lower(),
                     colour_filter,
                 )
-                .first()
+                .all()
             )
-            if existing_size:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Variant for size '{clean_size}' already exists on this product",
-                )
+            for ev in existing_variants:
+                if normalize_variant_size(ev.size).lower() == clean_size.lower():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant for size '{clean_size}' already exists on this product",
+                    )
         variant.size = clean_size
     if payload.is_active is not None:
         variant.is_active = payload.is_active

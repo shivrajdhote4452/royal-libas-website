@@ -191,7 +191,7 @@ class TestFreeSizeAndStockLimits(unittest.TestCase):
         self.assertIn("Free Size", sizes)
 
     def test_03_prevent_duplicate_free_size_variant(self):
-        """Case 3: Duplicate Free Size variant creation must be rejected."""
+        """Case 3: Duplicate Free Size variant creation must be rejected against both modern and legacy formats."""
         p = Product(
             name="Dup Protection Dress",
             slug="dup-protection-dress",
@@ -257,6 +257,84 @@ class TestFreeSizeAndStockLimits(unittest.TestCase):
         )
         self.assertEqual(res3.status_code, 400)
         self.assertIn("duplicate", res3.json()["detail"].lower())
+
+    def test_03b_legacy_variant_duplicate_protection_and_colour_rules(self):
+        """Case 3b: Prevent duplicate Free Size against legacy records ('FS', 'freesize', 'free-size') while preserving colour rules."""
+        p_legacy = Product(
+            name="Legacy Anarkali Ensemble",
+            slug="legacy-anarkali-ensemble",
+            category="SUIT SET",
+            status="PUBLISHED",
+            is_active=True,
+        )
+        self.db.add(p_legacy)
+        self.db.commit()
+        self.db.refresh(p_legacy)
+
+        # Seed legacy variant stored as "FS" with colour "Ruby Red"
+        legacy_v = ProductVariant(
+            product_id=p_legacy.id,
+            size="FS",  # Legacy stored abbreviation
+            colour="Ruby Red",
+            sku="LAE-FS-RED",
+            selling_price=Decimal("5490.00"),
+            mrp=Decimal("7990.00"),
+            stock=4,
+            is_active=True,
+        )
+        self.db.add(legacy_v)
+        self.db.commit()
+        self.db.refresh(legacy_v)
+
+        # 1. Attempting to add "Free Size" for the same colour "Ruby Red" must be rejected
+        res_dup1 = client.post(
+            f"/admin/products/{p_legacy.id}/variants",
+            json={
+                "size": "Free Size",
+                "colour": "Ruby Red",
+                "selling_price": 5490.00,
+                "stock": 2,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(res_dup1.status_code, 400)
+        self.assertIn("already exists", res_dup1.json()["detail"].lower())
+
+        # 2. Attempting to add with whitespace/hyphen variation "  free - size  " for "Ruby Red" must be rejected
+        res_dup2 = client.post(
+            f"/admin/products/{p_legacy.id}/variants",
+            json={
+                "size": "  free - size  ",
+                "colour": "ruby red",
+                "selling_price": 5490.00,
+                "stock": 2,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(res_dup2.status_code, 400)
+        self.assertIn("already exists", res_dup2.json()["detail"].lower())
+
+        # 3. Preserving size-and-colour rules: Adding Free Size for a different colour "Emerald Green" succeeds
+        res_diff_colour = client.post(
+            f"/admin/products/{p_legacy.id}/variants",
+            json={
+                "size": "Free Size",
+                "colour": "Emerald Green",
+                "selling_price": 5490.00,
+                "stock": 6,
+                "sku": "LAE-FS-GRN",
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(res_diff_colour.status_code, 201)
+        created_data = res_diff_colour.json()
+        self.assertEqual(created_data["size"], "Free Size")
+        self.assertEqual(created_data["colour"], "Emerald Green")
+
+        # 4. Existing legacy record MUST NOT be modified in the database
+        self.db.expire_all()
+        refreshed_legacy = self.db.query(ProductVariant).filter(ProductVariant.id == legacy_v.id).first()
+        self.assertEqual(refreshed_legacy.size, "FS")  # Preserved as-is without destructive rewrite
 
     def test_04_free_size_stock_price_availability_persistence(self):
         """Case 4: Free Size stock, price, and availability edits persist after save and reload."""

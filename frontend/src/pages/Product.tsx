@@ -33,6 +33,16 @@ import { setCanonicalUrl, setMetaDescription } from '../lib/seo';
 
 const RECENTLY_VIEWED_KEY = 'royal_libas_recently_viewed';
 
+const normalizeVariantSize = (raw?: string | null): string => {
+  if (!raw) return '';
+  const clean = raw.trim();
+  const simplified = clean.replace(/[\s\-_.]+/g, '').toLowerCase();
+  if (simplified === 'freesize' || simplified === 'fs') {
+    return 'Free Size';
+  }
+  return clean.length <= 4 ? clean.toUpperCase() : clean;
+};
+
 export const ProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -700,7 +710,7 @@ export const ProductPage: React.FC = () => {
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-900">
                   SIZE:{' '}
                   {selectedVariant && (
-                    <strong className="text-[#5E1224] font-bold">({selectedVariant.size})</strong>
+                    <strong className="text-[#5E1224] font-bold">({normalizeVariantSize(selectedVariant.size)})</strong>
                   )}
                 </span>
                 <button
@@ -723,7 +733,8 @@ export const ProductPage: React.FC = () => {
                   return variantsToDisplay.map((v) => {
                     const isUnavailable = !v.is_active || v.stock <= 0;
                     const isSelected = selectedVariant?.id === v.id;
-                    const isFreeSize = v.size.toLowerCase() === 'free size';
+                    const displaySize = normalizeVariantSize(v.size);
+                    const isFreeSize = displaySize.toLowerCase() === 'free size';
 
                     return (
                       <button
@@ -733,10 +744,10 @@ export const ProductPage: React.FC = () => {
                         onClick={() => handleSizeChange(v)}
                         title={
                           !v.is_active
-                            ? `Size ${v.size} is currently unavailable`
+                            ? `Size ${displaySize} is currently unavailable`
                             : v.stock <= 0
-                            ? `Size ${v.size} is sold out`
-                            : `Select size ${v.size} — ₹${v.selling_price.toLocaleString('en-IN')}`
+                            ? `Size ${displaySize} is sold out`
+                            : `Select size ${displaySize} — ₹${v.selling_price.toLocaleString('en-IN')}`
                         }
                         className={`h-10 sm:h-11 px-3 ${isFreeSize ? 'min-w-[96px]' : 'min-w-[46px]'} rounded-none border text-center transition-all duration-200 flex items-center justify-center ${isUnavailable
                             ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
@@ -745,7 +756,7 @@ export const ProductPage: React.FC = () => {
                               : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-[#B58A3C] font-semibold'
                           }`}
                       >
-                        <span className="text-xs sm:text-sm whitespace-nowrap">{v.size}</span>
+                        <span className="text-xs sm:text-sm whitespace-nowrap">{displaySize}</span>
                       </button>
                     );
                   });
@@ -790,7 +801,7 @@ export const ProductPage: React.FC = () => {
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
                     <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                    In Stock (Ships within 2-3 business days)
+                    In Stock
                   </span>
                 )}
               </div>

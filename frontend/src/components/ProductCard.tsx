@@ -11,6 +11,16 @@ interface ProductCardProps {
   product: Product;
 }
 
+const normalizeVariantSize = (raw?: string | null): string => {
+  if (!raw) return '';
+  const clean = raw.trim();
+  const simplified = clean.replace(/[\s\-_.]+/g, '').toLowerCase();
+  if (simplified === 'freesize' || simplified === 'fs') {
+    return 'Free Size';
+  }
+  return clean.length <= 4 ? clean.toUpperCase() : clean;
+};
+
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { openQuickAdd } = useQuickAdd();
@@ -383,19 +393,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {/* Sizes available preview for desktop */}
           {product.variants && product.variants.length > 0 && (
             <div className="hidden sm:flex gap-1 no-motion">
-              {product.variants.filter((v) => v.is_active).slice(0, 4).map((v) => (
-                <span
-                  key={v.id}
-                  className={`min-w-[20px] px-1 h-5 rounded text-[9px] flex items-center justify-center font-medium border whitespace-nowrap ${
-                    v.stock > 0
-                      ? 'bg-[#FCF8F0] text-gray-700 border-[#E8DFD0]'
-                      : 'bg-gray-100 text-gray-400 line-through border-gray-200'
-                  }`}
-                  title={`${v.size}: ${v.stock > 0 ? `${v.stock} in stock` : 'Sold out'}`}
-                >
-                  {v.size}
-                </span>
-              ))}
+              {product.variants.filter((v) => v.is_active).slice(0, 4).map((v) => {
+                const displaySize = normalizeVariantSize(v.size);
+                return (
+                  <span
+                    key={v.id}
+                    className={`min-w-[20px] px-1 h-5 rounded text-[9px] flex items-center justify-center font-medium border whitespace-nowrap ${
+                      v.stock > 0
+                        ? 'bg-[#FCF8F0] text-gray-700 border-[#E8DFD0]'
+                        : 'bg-gray-100 text-gray-400 line-through border-gray-200'
+                    }`}
+                    title={`${displaySize}: ${v.stock > 0 ? `${v.stock} in stock` : 'Sold out'}`}
+                  >
+                    {displaySize}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>

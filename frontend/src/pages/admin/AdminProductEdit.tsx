@@ -45,7 +45,8 @@ const PRESET_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
 
 const normalizeVariantSize = (raw: string): string => {
   const clean = raw.trim();
-  if (['free size', 'freesize', 'free-size', 'fs'].includes(clean.toLowerCase())) {
+  const simplified = clean.replace(/[\s\-_.]+/g, '').toLowerCase();
+  if (simplified === 'freesize' || simplified === 'fs') {
     return 'Free Size';
   }
   return clean.length <= 4 ? clean.toUpperCase() : clean;
@@ -588,9 +589,9 @@ export const AdminProductEdit: React.FC = () => {
       return;
     }
 
-    // Duplicate check on size
+    // Duplicate check on size normalizing existing variants
     const isDuplicate = variants.some(
-      (v) => v.size.trim().toLowerCase() === normalizedSize.toLowerCase()
+      (v) => normalizeVariantSize(v.size).toLowerCase() === normalizedSize.toLowerCase()
     );
     if (isDuplicate) {
       setAddSizeError(`Variant for size "${normalizedSize}" already exists on this product.`);
@@ -1933,8 +1934,10 @@ export const AdminProductEdit: React.FC = () => {
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2.5">
                   {PRESET_SIZES.map((sz) => {
-                    const exists = variants.some((v) => v.size.trim().toLowerCase() === sz.toLowerCase());
-                    const isSelected = normalizeVariantSize(newSize) === sz;
+                    const exists = variants.some(
+                      (v) => normalizeVariantSize(v.size).toLowerCase() === normalizeVariantSize(sz).toLowerCase()
+                    );
+                    const isSelected = normalizeVariantSize(newSize).toLowerCase() === normalizeVariantSize(sz).toLowerCase();
                     return (
                       <button
                         key={sz}
