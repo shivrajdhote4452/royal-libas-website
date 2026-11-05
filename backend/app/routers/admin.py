@@ -144,6 +144,7 @@ from app.services.product_service import (
     build_variant_response,
     validate_category_and_subcategory,
     sync_product_category_and_collections,
+    normalize_variant_size,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -4637,14 +4638,24 @@ def admin_create_product(
     )
 
     if payload.variants:
+        seen_sizes = set()
         for v in payload.variants:
+            v_size = normalize_variant_size(v.size)
+            size_key = (v_size.lower(), (v.colour or "").strip().lower())
+            if size_key in seen_sizes:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Duplicate variant for size '{v_size}' in request.",
+                )
+            seen_sizes.add(size_key)
+
             if v.mrp and v.selling_price > v.mrp:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Selling price (₹{v.selling_price}) cannot exceed MRP (₹{v.mrp}) for size {v.size}.",
+                    detail=f"Selling price (₹{v.selling_price}) cannot exceed MRP (₹{v.mrp}) for size {v_size}.",
                 )
             variant = ProductVariant(
-                size=v.size,
+                size=v_size,
                 colour=v.colour,
                 sku=v.sku,
                 mrp=v.mrp,
@@ -4758,23 +4769,26 @@ def admin_update_product(
             v = existing_variants[item.variant_id]
             v_fields = item.model_fields_set
             new_sp = item.selling_price if ("selling_price" in v_fields and item.selling_price is not None) else v.selling_price
-            new_mrp = item.mrp if "mrp" in v_fields else v.mrp
 
             if new_sp is not None and new_sp <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Variant {v.size} selling price must be greater than 0.",
                 )
-            if new_mrp is not None and new_mrp <= 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Variant {v.size} MRP must be greater than 0.",
-                )
-            if new_mrp is not None and new_sp is not None and new_sp > new_mrp:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{new_mrp}).",
-                )
+
+            # Only validate MRP constraints if MRP was explicitly supplied in the update payload.
+            # Existing stored/hidden MRP values in DB must NOT block selling price increases.
+            if "mrp" in v_fields and item.mrp is not None:
+                if item.mrp <= 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant {v.size} MRP must be greater than 0.",
+                    )
+                if new_sp is not None and new_sp > item.mrp:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{item.mrp}).",
+                    )
 
         # Check SKU uniqueness across database
         for item in payload.variants:

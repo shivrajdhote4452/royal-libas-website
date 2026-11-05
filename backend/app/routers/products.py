@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
 from app.auth import get_current_admin, get_current_admin_optional, require_roles
 from app.database import get_db
@@ -23,6 +23,7 @@ from app.services.product_service import (
     build_product_detail_response,
     build_variant_response,
     sync_product_category_and_collections,
+    normalize_variant_size,
 )
 
 router = APIRouter(tags=["products"])
@@ -231,9 +232,18 @@ def admin_create_product(
 
     # Attach variants
     if payload.variants:
+        seen_sizes = set()
         for v in payload.variants:
+            v_size = normalize_variant_size(v.size)
+            size_key = (v_size.lower(), (v.colour or "").strip().lower())
+            if size_key in seen_sizes:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Duplicate variant for size '{v_size}' in product creation payload",
+                )
+            seen_sizes.add(size_key)
             variant = ProductVariant(
-                size=v.size,
+                size=v_size,
                 colour=v.colour,
                 sku=v.sku,
                 mrp=v.mrp,
@@ -370,23 +380,26 @@ def admin_update_product(
             v = existing_variants[item.variant_id]
             v_fields = item.model_fields_set
             new_sp = item.selling_price if ("selling_price" in v_fields and item.selling_price is not None) else v.selling_price
-            new_mrp = item.mrp if "mrp" in v_fields else v.mrp
 
             if new_sp is not None and new_sp <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Variant {v.size} selling price must be greater than 0.",
                 )
-            if new_mrp is not None and new_mrp <= 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Variant {v.size} MRP must be greater than 0.",
-                )
-            if new_mrp is not None and new_sp is not None and new_sp > new_mrp:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{new_mrp}).",
-                )
+
+            # Only validate MRP constraints if MRP was explicitly supplied in the update payload.
+            # Existing stored/hidden MRP values in DB must NOT block selling price increases.
+            if "mrp" in v_fields and item.mrp is not None:
+                if item.mrp <= 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant {v.size} MRP must be greater than 0.",
+                    )
+                if new_sp is not None and new_sp > item.mrp:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant {v.size} selling price (₹{new_sp}) cannot exceed MRP (₹{item.mrp}).",
+                    )
 
         # Check SKU uniqueness across database
         for item in payload.variants:
@@ -461,21 +474,29 @@ def admin_add_variant(
                 detail=f"Selling price (₹{payload.selling_price}) cannot exceed MRP (₹{payload.mrp}).",
             )
 
-    # Check unique constraint on product + size + colour
-    existing_variant = (
+    clean_size = normalize_variant_size(payload.size)
+    clean_colour = payload.colour.strip() if payload.colour else None
+
+    # Check unique constraint on product + size + colour (normalizing legacy formats like FS, freesize, etc.)
+    colour_filter = (
+        ProductVariant.colour.is_(None)
+        if clean_colour is None
+        else func.lower(ProductVariant.colour) == clean_colour.lower()
+    )
+    existing_variants = (
         db.query(ProductVariant)
         .filter(
             ProductVariant.product_id == id,
-            ProductVariant.size == payload.size,
-            ProductVariant.colour == payload.colour,
+            colour_filter,
         )
-        .first()
+        .all()
     )
-    if existing_variant:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Variant for size '{payload.size}' and colour '{payload.colour}' already exists on this product",
-        )
+    for ev in existing_variants:
+        if normalize_variant_size(ev.size).lower() == clean_size.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Variant for size '{clean_size}' already exists on this product",
+            )
 
     # SKU uniqueness check if provided
     if payload.sku:
@@ -488,8 +509,8 @@ def admin_add_variant(
 
     variant = ProductVariant(
         product_id=id,
-        size=payload.size,
-        colour=payload.colour,
+        size=clean_size,
+        colour=clean_colour,
         sku=payload.sku,
         mrp=payload.mrp,
         selling_price=payload.selling_price,
@@ -557,7 +578,6 @@ def admin_update_variant(
 
     # Validate final effective pricing combination
     effective_price = payload.selling_price if payload.selling_price is not None else variant.selling_price
-    effective_mrp = payload.mrp if "mrp" in fields_set else variant.mrp
 
     if effective_price <= 0:
         raise HTTPException(
@@ -565,16 +585,18 @@ def admin_update_variant(
             detail="Selling price must be greater than 0.",
         )
 
-    if effective_mrp is not None:
-        if effective_mrp <= 0:
+    # Only validate MRP constraints if MRP was explicitly supplied in the update payload.
+    # Existing stored/hidden MRP values in DB must NOT block selling price increases.
+    if "mrp" in fields_set and payload.mrp is not None:
+        if payload.mrp <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="MRP must be greater than 0 when supplied.",
             )
-        if effective_price > effective_mrp:
+        if effective_price > payload.mrp:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Selling price (₹{effective_price}) cannot exceed MRP (₹{effective_mrp}).",
+                detail=f"Selling price (₹{effective_price}) cannot exceed MRP (₹{payload.mrp}).",
             )
 
     if payload.selling_price is not None:
@@ -622,7 +644,29 @@ def admin_update_variant(
     if payload.colour is not None:
         variant.colour = payload.colour
     if payload.size is not None:
-        variant.size = payload.size
+        clean_size = normalize_variant_size(payload.size)
+        if clean_size != variant.size:
+            colour_filter = (
+                ProductVariant.colour.is_(None)
+                if variant.colour is None
+                else func.lower(ProductVariant.colour) == variant.colour.lower()
+            )
+            existing_variants = (
+                db.query(ProductVariant)
+                .filter(
+                    ProductVariant.product_id == variant.product_id,
+                    ProductVariant.id != variant.id,
+                    colour_filter,
+                )
+                .all()
+            )
+            for ev in existing_variants:
+                if normalize_variant_size(ev.size).lower() == clean_size.lower():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Variant for size '{clean_size}' already exists on this product",
+                    )
+        variant.size = clean_size
     if payload.is_active is not None:
         variant.is_active = payload.is_active
 
@@ -665,23 +709,25 @@ def admin_bulk_update_variants(
         target_v = v_map[item.variant_id]
         item_fields = item.model_fields_set
         effective_price = item.selling_price if ("selling_price" in item_fields and item.selling_price is not None) else target_v.selling_price
-        effective_mrp = item.mrp if "mrp" in item_fields else target_v.mrp
 
         if effective_price <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Size {target_v.size} selling price must be greater than 0.",
             )
-        if effective_mrp is not None:
-            if effective_mrp <= 0:
+
+        # Only validate MRP constraints if MRP was explicitly supplied in the update payload.
+        # Existing stored/hidden MRP values in DB must NOT block selling price increases.
+        if "mrp" in item_fields and item.mrp is not None:
+            if item.mrp <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Size {target_v.size} MRP must be greater than 0.",
                 )
-            if effective_price > effective_mrp:
+            if effective_price > item.mrp:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Size {target_v.size} selling price (₹{effective_price}) cannot exceed MRP (₹{effective_mrp}).",
+                    detail=f"Size {target_v.size} selling price (₹{effective_price}) cannot exceed MRP (₹{item.mrp}).",
                 )
 
     # 2. Unique SKU pass: ensure proposed SKUs do not conflict internally or externally

@@ -56,7 +56,6 @@ export const AdminProducts: React.FC = () => {
   const [newStatus, setNewStatus] = useState<'PUBLISHED' | 'DRAFT' | 'ARCHIVED'>('DRAFT');
   const [newDescription, setNewDescription] = useState('');
   const [initialPrice, setInitialPrice] = useState('2999');
-  const [newMrp, setNewMrp] = useState('3999');
   const [newSizeStock, setNewSizeStock] = useState<Record<string, { enabled: boolean; stock: string; price: string }>>({
     XS: { enabled: false, stock: '0', price: '' },
     S: { enabled: true, stock: '5', price: '' },
@@ -64,6 +63,7 @@ export const AdminProducts: React.FC = () => {
     L: { enabled: true, stock: '5', price: '' },
     XL: { enabled: false, stock: '0', price: '' },
     XXL: { enabled: false, stock: '0', price: '' },
+    'Free Size': { enabled: false, stock: '0', price: '' },
   });
 
   // Delete Confirmation State
@@ -147,13 +147,13 @@ export const AdminProducts: React.FC = () => {
       .filter(([_, data]) => data.enabled)
       .map(([size, data]) => {
         const sprice = parseFloat(data.price || initialPrice) || 2999;
-        const mrpVal = newMrp ? parseFloat(newMrp) : undefined;
+        const sizeCode = size === 'Free Size' ? 'FS' : size.replace(/\s+/g, '').toUpperCase();
         return {
           size,
           colour: null,
-          sku: `${generatedSlug.slice(0, 10).toUpperCase()}-${size}`,
+          sku: `${generatedSlug.slice(0, 10).toUpperCase()}-${sizeCode}`,
           selling_price: sprice,
-          mrp: mrpVal,
+          mrp: null,
           stock: parseInt(data.stock, 10) || 0,
           is_active: true,
         };
@@ -738,27 +738,16 @@ export const AdminProducts: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Initial Selling Price (₹)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={initialPrice}
-                    onChange={(e) => setInitialPrice(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">MRP (₹)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newMrp}
-                    onChange={(e) => setNewMrp(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224]"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Initial Selling Price (₹)</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 2999"
+                  value={initialPrice}
+                  onChange={(e) => setInitialPrice(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224]"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -789,45 +778,53 @@ export const AdminProducts: React.FC = () => {
               {/* Size Checkboxes */}
               <div>
                 <label className="block font-bold text-gray-700 mb-2">Initial Sizes & Stock</label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                  {Object.entries(newSizeStock).map(([sz, data]) => (
-                    <div
-                      key={sz}
-                      className={`p-2 rounded-xl border text-center transition-all ${
-                        data.enabled ? 'border-[#5E1224] bg-amber-50/40 shadow-sm' : 'border-gray-200 bg-gray-50 opacity-60'
-                      }`}
-                    >
-                      <label className="flex items-center justify-center gap-1 font-bold text-xs cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={data.enabled}
-                          onChange={(e) =>
-                            setNewSizeStock((prev) => ({
-                              ...prev,
-                              [sz]: { ...prev[sz], enabled: e.target.checked },
-                            }))
-                          }
-                          className="rounded text-[#5E1224] focus:ring-[#5E1224]"
-                        />
-                        <span>{sz}</span>
-                      </label>
-                      {data.enabled && (
-                        <input
-                          type="number"
-                          placeholder="Qty"
-                          min="0"
-                          value={data.stock}
-                          onChange={(e) =>
-                            setNewSizeStock((prev) => ({
-                              ...prev,
-                              [sz]: { ...prev[sz], stock: e.target.value },
-                            }))
-                          }
-                          className="w-full mt-1.5 px-1 py-0.5 text-center text-xs border rounded bg-white"
-                        />
-                      )}
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {Object.entries(newSizeStock).map(([sz, data]) => {
+                    const isFreeSize = sz.toLowerCase() === 'free size';
+                    return (
+                      <div
+                        key={sz}
+                        className={`p-2.5 rounded-xl border text-center transition-all ${
+                          data.enabled ? 'border-[#5E1224] bg-amber-50/40 shadow-sm' : 'border-gray-200 bg-gray-50 opacity-60'
+                        }`}
+                      >
+                        <label className="flex items-center justify-center gap-1.5 font-bold text-xs cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={data.enabled}
+                            onChange={(e) =>
+                              setNewSizeStock((prev) => ({
+                                ...prev,
+                                [sz]: { ...prev[sz], enabled: e.target.checked },
+                              }))
+                            }
+                            className="rounded text-[#5E1224] focus:ring-[#5E1224] w-3.5 h-3.5"
+                          />
+                          <span className={isFreeSize ? 'text-xs whitespace-nowrap text-gray-900' : 'text-xs text-gray-900'}>
+                            {sz}
+                          </span>
+                        </label>
+                        {data.enabled && (
+                          <div className="mt-2 flex items-center justify-center gap-1">
+                            <span className="text-[10px] text-gray-500 font-semibold uppercase">Qty:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder="0"
+                              value={data.stock}
+                              onChange={(e) =>
+                                setNewSizeStock((prev) => ({
+                                  ...prev,
+                                  [sz]: { ...prev[sz], stock: e.target.value },
+                                }))
+                              }
+                              className="w-16 px-1.5 py-0.5 text-center text-xs font-semibold border border-gray-300 rounded bg-white focus:ring-1 focus:ring-[#5E1224]"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

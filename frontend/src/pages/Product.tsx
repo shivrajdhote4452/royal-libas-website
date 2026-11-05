@@ -33,6 +33,16 @@ import { setCanonicalUrl, setMetaDescription } from '../lib/seo';
 
 const RECENTLY_VIEWED_KEY = 'royal_libas_recently_viewed';
 
+const normalizeVariantSize = (raw?: string | null): string => {
+  if (!raw) return '';
+  const clean = raw.trim();
+  const simplified = clean.replace(/[\s\-_.]+/g, '').toLowerCase();
+  if (simplified === 'freesize' || simplified === 'fs') {
+    return 'Free Size';
+  }
+  return clean.length <= 4 ? clean.toUpperCase() : clean;
+};
+
 export const ProductPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -196,11 +206,6 @@ export const ProductPage: React.FC = () => {
 
   const currentVariant = selectedVariant || fallbackVariant;
   const displaySellingPrice = currentVariant ? currentVariant.selling_price : (product.min_price || 0);
-  const displayMrp = currentVariant ? currentVariant.mrp : null;
-  const discountPercent =
-    displayMrp && displayMrp > displaySellingPrice
-      ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
-      : null;
 
   const isSoldOut = product.total_stock === 0;
   const inWishlist = isInWishlist(product.id);
@@ -214,6 +219,62 @@ export const ProductPage: React.FC = () => {
       parsedSizeChart = null;
     }
   }
+
+  // Extract explicit size chart rows if present
+  const explicitChartRows: Array<{ size: string; bust?: any; waist?: any; hip?: any; length?: any }> = (() => {
+    if (!parsedSizeChart || typeof parsedSizeChart !== 'object') return [];
+
+    let source = parsedSizeChart.measurements;
+    if (Array.isArray(parsedSizeChart)) {
+      source = parsedSizeChart;
+    } else if (!source) {
+      const metadataKeys = new Set(['name', 'title', 'unit', 'description', 'notes', 'advice']);
+      const filteredEntries = Object.entries(parsedSizeChart).filter(([k]) => !metadataKeys.has(k.toLowerCase()));
+      if (filteredEntries.length > 0) {
+        return filteredEntries.map(([k, v]: [string, any]) => ({
+          size: k,
+          bust: typeof v === 'object' && v !== null ? v.bust : v,
+          waist: typeof v === 'object' && v !== null ? v.waist : undefined,
+          hip: typeof v === 'object' && v !== null ? v.hip : undefined,
+          length: typeof v === 'object' && v !== null ? v.length : undefined,
+        }));
+      }
+      return [];
+    }
+
+    if (Array.isArray(source)) {
+      return source.map((item: any) => ({
+        size: item.size || item.sizeKey || item.name || 'Free Size',
+        bust: item.bust,
+        waist: item.waist,
+        hip: item.hip,
+        length: item.length,
+      }));
+    }
+    if (typeof source === 'object' && source !== null) {
+      return Object.entries(source).map(([k, v]: [string, any]) => ({
+        size: k,
+        bust: typeof v === 'object' && v !== null ? v.bust : v,
+        waist: typeof v === 'object' && v !== null ? v.waist : undefined,
+        hip: typeof v === 'object' && v !== null ? v.hip : undefined,
+        length: typeof v === 'object' && v !== null ? v.length : undefined,
+      }));
+    }
+    return [];
+  })();
+
+  const hasExplicitSizeChart = explicitChartRows.length > 0;
+
+  // Determine if the product has ONLY Free Size variants
+  const isOnlyFreeSize = Boolean(
+    product.variants &&
+    product.variants.length > 0 &&
+    product.variants.every((v) => normalizeVariantSize(v.size).toLowerCase() === 'free size')
+  );
+
+  // Free Size-only products only show size guide if an explicit chart is configured;
+  // Standard and mixed-size products always keep the size guide option.
+  const shouldShowSizeGuide = !isOnlyFreeSize || hasExplicitSizeChart;
 
   // Variant availability checks (enforcing product-wise size active status)
   const variantsForSelectedColor = selectedColor
@@ -612,16 +673,6 @@ export const ProductPage: React.FC = () => {
                 <span className="price-display text-2xl sm:text-3xl font-serif font-bold text-[#5E1224]">
                   {formatPrice(displaySellingPrice)}
                 </span>
-                {displayMrp && displayMrp > displaySellingPrice && (
-                  <span className="price-display text-sm text-gray-400 line-through">
-                    {formatPrice(displayMrp)}
-                  </span>
-                )}
-                {discountPercent && (
-                  <span className="px-2 py-0.5 text-[#5E1224] bg-[#5E1224]/10 text-xs font-bold border border-[#5E1224]/20">
-                    {discountPercent}% OFF
-                  </span>
-                )}
               </div>
               <span className="text-[11px] text-gray-500 font-medium">Inclusive of all taxes</span>
             </div>
@@ -700,20 +751,22 @@ export const ProductPage: React.FC = () => {
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-900">
                   SIZE:{' '}
                   {selectedVariant && (
-                    <strong className="text-[#5E1224] font-bold">({selectedVariant.size})</strong>
+                    <strong className="text-[#5E1224] font-bold">({normalizeVariantSize(selectedVariant.size)})</strong>
                   )}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowSizeChart(true)}
-                  className="inline-flex items-center gap-1 text-xs text-[#5E1224] hover:underline font-semibold"
-                >
-                  <Ruler className="w-3.5 h-3.5 text-[#B58A3C]" />
-                  <span>Size Guide (cm)</span>
-                </button>
+                {shouldShowSizeGuide && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSizeChart(true)}
+                    className="inline-flex items-center gap-1 text-xs text-[#5E1224] hover:underline font-semibold"
+                  >
+                    <Ruler className="w-3.5 h-3.5 text-[#B58A3C]" />
+                    <span>Size Guide (cm)</span>
+                  </button>
+                )}
               </div>
 
-              <div className="grid grid-cols-6 gap-2">
+              <div className="flex flex-wrap gap-2">
                 {(() => {
                   const matchingVariants = selectedColor
                     ? product.variants.filter((v) => v.colour === selectedColor)
@@ -723,6 +776,8 @@ export const ProductPage: React.FC = () => {
                   return variantsToDisplay.map((v) => {
                     const isUnavailable = !v.is_active || v.stock <= 0;
                     const isSelected = selectedVariant?.id === v.id;
+                    const displaySize = normalizeVariantSize(v.size);
+                    const isFreeSize = displaySize.toLowerCase() === 'free size';
 
                     return (
                       <button
@@ -732,19 +787,19 @@ export const ProductPage: React.FC = () => {
                         onClick={() => handleSizeChange(v)}
                         title={
                           !v.is_active
-                            ? `Size ${v.size} is currently unavailable`
+                            ? `Size ${displaySize} is currently unavailable`
                             : v.stock <= 0
-                            ? `Size ${v.size} is sold out`
-                            : `Select size ${v.size} — ₹${v.selling_price.toLocaleString('en-IN')}`
+                            ? `Size ${displaySize} is sold out`
+                            : `Select size ${displaySize} — ₹${v.selling_price.toLocaleString('en-IN')}`
                         }
-                        className={`h-10 sm:h-11 rounded-none border text-center transition-all duration-200 ${isUnavailable
+                        className={`h-10 sm:h-11 px-3 ${isFreeSize ? 'min-w-[96px]' : 'min-w-[46px]'} rounded-none border text-center transition-all duration-200 flex items-center justify-center ${isUnavailable
                             ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
                             : isSelected
                               ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-md font-bold'
                               : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-[#B58A3C] font-semibold'
                           }`}
                       >
-                        <span className="text-xs sm:text-sm">{v.size}</span>
+                        <span className="text-xs sm:text-sm whitespace-nowrap">{displaySize}</span>
                       </button>
                     );
                   });
@@ -752,7 +807,7 @@ export const ProductPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Quantity Selector & Real Low-Stock Message */}
+            {/* Quantity Selector & Real Inventory Status */}
             <div className="flex items-center justify-between pt-1">
               <div className="space-y-1">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-900 block">Quantity</span>
@@ -786,15 +841,10 @@ export const ProductPage: React.FC = () => {
                     <span className="w-2 h-2 rounded-full bg-red-600" />
                     {isColorSoldOut ? `Sold Out in ${selectedColor}` : 'Sold Out'}
                   </span>
-                ) : selectedVariant && selectedVariant.stock <= 5 ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-bold">
-                    <span className="w-2 h-2 rounded-full bg-amber-600 animate-pulse" />
-                    Only {selectedVariant.stock} left in stock
-                  </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
                     <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                    In Stock (Ships within 2-3 business days)
+                    In Stock
                   </span>
                 )}
               </div>
@@ -1034,7 +1084,7 @@ export const ProductPage: React.FC = () => {
       {/* ========================================================
           5. SIZE CHART MODAL (In cm)
           ======================================================== */}
-      {showSizeChart && (
+      {shouldShowSizeGuide && showSizeChart && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white rounded-none max-w-lg w-full p-6 shadow-2xl relative border border-[#E8DFD0]">
             <button
@@ -1047,7 +1097,9 @@ export const ProductPage: React.FC = () => {
             </button>
             <div className="flex items-center gap-2 mb-1">
               <Ruler className="w-5 h-5 text-[#B58A3C]" />
-              <h3 className="font-serif text-xl font-bold text-[#5E1224]">Standard Size Chart</h3>
+              <h3 className="font-serif text-xl font-bold text-[#5E1224]">
+                {parsedSizeChart?.name || parsedSizeChart?.title || 'Standard Size Chart'}
+              </h3>
             </div>
             <p className="text-xs text-gray-500 mb-4">
               All garment measurements are recorded in <strong>centimetres (cm)</strong>.
@@ -1065,14 +1117,21 @@ export const ProductPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 font-medium text-gray-800">
-                  {parsedSizeChart?.measurements ? (
-                    Object.entries(parsedSizeChart.measurements).map(([sizeKey, m]: any) => (
-                      <tr key={sizeKey} className={selectedVariant?.size === sizeKey ? 'bg-amber-50/60 font-bold' : ''}>
-                        <td className="p-3 font-bold text-[#5E1224]">{sizeKey}</td>
-                        <td className="p-3">{m.bust}</td>
-                        <td className="p-3">{m.waist}</td>
-                        <td className="p-3">{m.hip}</td>
-                        <td className="p-3">{m.length}</td>
+                  {explicitChartRows.length > 0 ? (
+                    explicitChartRows.map((row) => (
+                      <tr
+                        key={row.size}
+                        className={
+                          normalizeVariantSize(selectedVariant?.size) === normalizeVariantSize(row.size)
+                            ? 'bg-amber-50/60 font-bold'
+                            : ''
+                        }
+                      >
+                        <td className="p-3 font-bold text-[#5E1224]">{normalizeVariantSize(row.size)}</td>
+                        <td className="p-3">{row.bust ?? '—'}</td>
+                        <td className="p-3">{row.waist ?? '—'}</td>
+                        <td className="p-3">{row.hip ?? '—'}</td>
+                        <td className="p-3">{row.length ?? '—'}</td>
                       </tr>
                     ))
                   ) : (
@@ -1089,7 +1148,9 @@ export const ProductPage: React.FC = () => {
 
             <div className="mt-4 p-3 rounded-none bg-[#FCF8F0] text-[11px] text-gray-600">
               <span className="font-semibold text-gray-800 block mb-0.5">Measurement Advice:</span>
-              Measure around the fullest part of your bust and natural waistline. If you fall between sizes, we recommend sizing up.
+              {parsedSizeChart?.advice ||
+                parsedSizeChart?.notes ||
+                'Measure around the fullest part of your bust and natural waistline. If you fall between sizes, we recommend sizing up.'}
             </div>
           </div>
         </div>

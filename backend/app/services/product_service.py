@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 from fastapi import HTTPException, status
@@ -46,6 +47,25 @@ CANONICAL_COLLECTION_NAMES: Set[str] = {
     "UNSTITCHED MATERIAL",
     "UNSTITCHED",
 }
+
+
+def normalize_variant_size(size_str: Optional[str]) -> str:
+    """Normalize variant size to standard boutique naming.
+
+    Ensures 'Free Size' is consistently capitalized and formatted across the application,
+    normalizing legacy formats like 'FS', 'freesize', 'free-size', 'Free Size', 'f.s.',
+    and case/whitespace variations, while standard sizes (XS, S, M, L, XL, XXL, 3XL)
+    remain uppercase.
+    """
+    if not size_str:
+        return ""
+    clean = size_str.strip()
+    simplified = re.sub(r"[\s\-_.]+", "", clean).lower()
+    if simplified in ("freesize", "fs"):
+        return "Free Size"
+    if len(clean) <= 4:
+        return clean.upper()
+    return clean
 
 
 def validate_category_and_subcategory(

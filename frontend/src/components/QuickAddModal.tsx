@@ -7,6 +7,16 @@ import { ProductPlaceholder } from './ProductPlaceholder';
 import { formatPrice } from '../lib/api';
 import { ProductVariant } from '../types/product';
 
+const normalizeVariantSize = (raw?: string | null): string => {
+  if (!raw) return '';
+  const clean = raw.trim();
+  const simplified = clean.replace(/[\s\-_.]+/g, '').toLowerCase();
+  if (simplified === 'freesize' || simplified === 'fs') {
+    return 'Free Size';
+  }
+  return clean.length <= 4 ? clean.toUpperCase() : clean;
+};
+
 export const QuickAddModal: React.FC = () => {
   const { activeProduct, closeQuickAdd } = useQuickAdd();
   const { addToCart, openDrawer } = useCart();
@@ -44,11 +54,6 @@ export const QuickAddModal: React.FC = () => {
   const fallbackVariant = purchasable[0] || (activeProduct.variants || []).find((v) => v.is_active) || activeProduct.variants?.[0] || null;
   const currentVariant = selectedVariant || fallbackVariant;
   const displaySellingPrice = currentVariant ? currentVariant.selling_price : (activeProduct.min_price || 0);
-  const displayMrp = currentVariant ? currentVariant.mrp : null;
-  const discountPercent =
-    displayMrp && displayMrp > displaySellingPrice
-      ? Math.round(((displayMrp - displaySellingPrice) / displayMrp) * 100)
-      : null;
 
   const isSoldOut = activeProduct.total_stock === 0;
 
@@ -137,16 +142,6 @@ export const QuickAddModal: React.FC = () => {
               <span className="price-display text-base sm:text-lg font-bold text-[#5B111A]">
                 {formatPrice(displaySellingPrice)}
               </span>
-              {displayMrp && displayMrp > displaySellingPrice && (
-                <span className="price-display text-xs text-gray-400 line-through">
-                  {formatPrice(displayMrp)}
-                </span>
-              )}
-              {discountPercent && (
-                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
-                  {discountPercent}% OFF
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -155,19 +150,16 @@ export const QuickAddModal: React.FC = () => {
         <div className="space-y-2 py-3 border-t border-gray-100">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-900">
-              Select Size: {selectedVariant && <span className="text-[#5B111A] font-bold">({selectedVariant.size})</span>}
+              Select Size: {selectedVariant && <span className="text-[#5B111A] font-bold">({normalizeVariantSize(selectedVariant.size)})</span>}
             </span>
-            {selectedVariant && selectedVariant.stock > 0 && selectedVariant.stock <= 5 && (
-              <span className="text-[11px] font-bold text-amber-700 animate-pulse">
-                Only {selectedVariant.stock} left
-              </span>
-            )}
           </div>
 
-          <div className="grid grid-cols-5 gap-2">
+          <div className="flex flex-wrap gap-2">
             {activeProduct.variants?.map((v) => {
               const isUnavailable = !v.is_active || v.stock <= 0;
               const isSelected = selectedVariant?.id === v.id;
+              const displaySize = normalizeVariantSize(v.size);
+              const isFreeSize = displaySize.toLowerCase() === 'free size';
 
               return (
                 <button
@@ -176,7 +168,7 @@ export const QuickAddModal: React.FC = () => {
                   disabled={isUnavailable}
                   onClick={() => setSelectedVariant(v)}
                   title={!v.is_active ? 'Size currently unavailable' : v.stock <= 0 ? 'Sold out' : undefined}
-                  className={`h-10 rounded-lg border text-center transition-all ${
+                  className={`h-10 px-3 ${isFreeSize ? 'min-w-[84px]' : 'min-w-[40px]'} rounded-lg border text-center transition-all flex items-center justify-center ${
                     isUnavailable
                       ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50 line-through'
                       : isSelected
@@ -184,7 +176,7 @@ export const QuickAddModal: React.FC = () => {
                       : 'bg-white text-gray-800 border-[#E8DFD0] hover:border-gray-400 font-medium'
                   }`}
                 >
-                  <span className="text-xs sm:text-sm">{v.size}</span>
+                  <span className="text-xs sm:text-sm whitespace-nowrap">{displaySize}</span>
                 </button>
               );
             })}
