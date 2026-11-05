@@ -43,11 +43,15 @@ from app.models import (
     MediaAsset,
     MediaFolder,
     SizeChart,
+    Coupon,
 )
 from app.schemas import (
     AdminLogin,
     AdminResponse,
     TokenResponse,
+    CouponCreate,
+    CouponUpdate,
+    CouponAdminResponse,
     AdminDashboardResponse,
     AdminLowStockVariant,
     AdminCustomerResponse,
@@ -5175,6 +5179,236 @@ def admin_update_staff_role(
     db.refresh(target)
     log_activity(db, current_admin, "STAFF_UPDATED", "admin", target.id, f"Updated role/status for {target.email}")
     return target
+
+
+# ==========================================
+# Coupons & Offers Management Endpoints
+# ==========================================
+
+def _serialize_coupon_admin(c: Coupon, now: datetime) -> CouponAdminResponse:
+    is_expired = False
+    if c.valid_until:
+        vu = c.valid_until if c.valid_until.tzinfo else c.valid_until.replace(tzinfo=timezone.utc)
+        if vu < now:
+            is_expired = True
+    if c.usage_limit is not None and (c.used_count or 0) >= c.usage_limit:
+        is_expired = True
+
+    if is_expired:
+        status_label = "EXPIRED"
+    elif not c.is_active:
+        status_label = "INACTIVE"
+    else:
+        status_label = "ACTIVE"
+
+    norm_type = "PERCENT" if (c.type or "").strip().upper() in ("PERCENT", "PERCENTAGE", "%") else "FLAT"
+
+    return CouponAdminResponse(
+        id=c.id,
+        code=c.code,
+        type=norm_type,
+        value=c.value,
+        min_order_value=c.min_order_value or Decimal("0.00"),
+        usage_limit=c.usage_limit,
+        used_count=c.used_count or 0,
+        valid_from=c.valid_from,
+        valid_until=c.valid_until,
+        is_active=bool(c.is_active),
+        is_expired=is_expired,
+        status=status_label,
+        created_at=c.created_at,
+        updated_at=c.updated_at,
+    )
+
+
+@router.get("/coupons", response_model=List[CouponAdminResponse])
+def admin_list_coupons(
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve all promotional coupons with usage statistics and status filtering."""
+    now = datetime.now(timezone.utc)
+    query = db.query(Coupon)
+
+    if search:
+        term = f"%{search.strip().upper()}%"
+        query = query.filter(func.upper(Coupon.code).like(term))
+
+    coupons = query.order_by(Coupon.id.desc()).all()
+    results = [_serialize_coupon_admin(c, now) for c in coupons]
+
+    if status and status.upper() != "ALL":
+        target_status = status.upper()
+        results = [r for r in results if r.status == target_status]
+
+    return results
+
+
+@router.post("/coupons", response_model=CouponAdminResponse, status_code=status.HTTP_201_CREATED)
+def admin_create_coupon(
+    payload: CouponCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Create a new promotional discount coupon code."""
+    now = datetime.now(timezone.utc)
+    code = payload.code.strip().upper()
+
+    existing = db.query(Coupon).filter(func.upper(Coupon.code) == code).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A coupon with code '{code}' already exists.",
+        )
+
+    coupon = Coupon(
+        code=code,
+        type=payload.type,
+        value=payload.value,
+        min_order_value=payload.min_order_value,
+        usage_limit=payload.usage_limit,
+        used_count=0,
+        valid_from=payload.valid_from,
+        valid_until=payload.valid_until,
+        is_active=payload.is_active,
+    )
+    db.add(coupon)
+    db.commit()
+    db.refresh(coupon)
+
+    log_activity(
+        db,
+        current_admin,
+        "COUPON_CREATED",
+        "coupon",
+        coupon.id,
+        f"Created coupon {coupon.code} ({coupon.type} {coupon.value})",
+    )
+    return _serialize_coupon_admin(coupon, now)
+
+
+@router.get("/coupons/{id}", response_model=CouponAdminResponse)
+def admin_get_coupon(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin),
+):
+    """Retrieve single coupon details by ID."""
+    coupon = db.query(Coupon).filter(Coupon.id == id).first()
+    if not coupon:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Coupon #{id} not found.")
+    now = datetime.now(timezone.utc)
+    return _serialize_coupon_admin(coupon, now)
+
+
+@router.put("/coupons/{id}", response_model=CouponAdminResponse)
+def admin_update_coupon(
+    id: int,
+    payload: CouponUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Update an existing coupon's code, rules, validity, or limits."""
+    coupon = db.query(Coupon).filter(Coupon.id == id).first()
+    if not coupon:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Coupon #{id} not found.")
+
+    now = datetime.now(timezone.utc)
+
+    if payload.code is not None:
+        new_code = payload.code.strip().upper()
+        if new_code != coupon.code:
+            existing = db.query(Coupon).filter(func.upper(Coupon.code) == new_code, Coupon.id != id).first()
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Another coupon with code '{new_code}' already exists.",
+                )
+            coupon.code = new_code
+
+    if payload.type is not None:
+        coupon.type = payload.type
+    if payload.value is not None:
+        coupon.value = payload.value
+    if payload.min_order_value is not None:
+        coupon.min_order_value = payload.min_order_value
+    if "usage_limit" in payload.model_fields_set:
+        coupon.usage_limit = payload.usage_limit
+    if "valid_from" in payload.model_fields_set:
+        coupon.valid_from = payload.valid_from
+    if "valid_until" in payload.model_fields_set:
+        coupon.valid_until = payload.valid_until
+    if payload.is_active is not None:
+        coupon.is_active = payload.is_active
+
+    db.commit()
+    db.refresh(coupon)
+
+    log_activity(
+        db,
+        current_admin,
+        "COUPON_UPDATED",
+        "coupon",
+        coupon.id,
+        f"Updated coupon {coupon.code}",
+    )
+    return _serialize_coupon_admin(coupon, now)
+
+
+@router.patch("/coupons/{id}/toggle", response_model=CouponAdminResponse)
+def admin_toggle_coupon_active(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Toggle coupon active state between Active and Inactive."""
+    coupon = db.query(Coupon).filter(Coupon.id == id).first()
+    if not coupon:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Coupon #{id} not found.")
+
+    coupon.is_active = not bool(coupon.is_active)
+    db.commit()
+    db.refresh(coupon)
+
+    action_label = "ACTIVATED" if coupon.is_active else "DEACTIVATED"
+    log_activity(
+        db,
+        current_admin,
+        f"COUPON_{action_label}",
+        "coupon",
+        coupon.id,
+        f"{action_label.capitalize()} coupon {coupon.code}",
+    )
+    now = datetime.now(timezone.utc)
+    return _serialize_coupon_admin(coupon, now)
+
+
+@router.delete("/coupons/{id}")
+def admin_delete_coupon(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER")),
+):
+    """Permanently delete a coupon code (Owner only)."""
+    coupon = db.query(Coupon).filter(Coupon.id == id).first()
+    if not coupon:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Coupon #{id} not found.")
+
+    code_backup = coupon.code
+    db.delete(coupon)
+    db.commit()
+
+    log_activity(
+        db,
+        current_admin,
+        "COUPON_DELETED",
+        "coupon",
+        id,
+        f"Deleted coupon {code_backup}",
+    )
+    return {"status": "success", "message": f"Coupon {code_backup} deleted successfully."}
 
 
 # ==========================================

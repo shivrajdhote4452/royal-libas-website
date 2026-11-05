@@ -4,6 +4,7 @@ import string
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Optional, Tuple
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
@@ -57,10 +58,25 @@ def calculate_coupon_discount(coupon: Optional[Coupon], subtotal: Decimal) -> De
     if not coupon or not coupon.is_active:
         return Decimal("0.00")
 
+    now = datetime.now(timezone.utc)
+    if coupon.valid_from:
+        vf = coupon.valid_from if coupon.valid_from.tzinfo else coupon.valid_from.replace(tzinfo=timezone.utc)
+        if vf > now:
+            return Decimal("0.00")
+
+    if coupon.valid_until:
+        vu = coupon.valid_until if coupon.valid_until.tzinfo else coupon.valid_until.replace(tzinfo=timezone.utc)
+        if vu < now:
+            return Decimal("0.00")
+
+    if coupon.usage_limit is not None and (coupon.used_count or 0) >= coupon.usage_limit:
+        return Decimal("0.00")
+
     if subtotal < coupon.min_order_value:
         return Decimal("0.00")
 
-    if coupon.type == "PERCENT":
+    ctype = (coupon.type or "").strip().upper()
+    if ctype in ("PERCENT", "PERCENTAGE"):
         discount = (subtotal * coupon.value) / Decimal("100.00")
     else:  # FLAT
         discount = coupon.value
@@ -290,11 +306,13 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
             clean_code = payload.coupon_code.strip().upper()
             coupon = (
                 db.query(Coupon)
-                .filter(Coupon.code == clean_code, Coupon.is_active == True)
+                .filter(func.upper(Coupon.code) == clean_code, Coupon.is_active == True)
                 .first()
             )
             if coupon:
                 discount = calculate_coupon_discount(coupon, subtotal)
+                if discount > Decimal("0.00"):
+                    coupon.used_count = (coupon.used_count or 0) + 1
 
         # Authoritative total calculated by single function
         total = (subtotal - discount + shipping_charge).quantize(Decimal("0.01"))

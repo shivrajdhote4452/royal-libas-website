@@ -4,7 +4,7 @@ import urllib.parse
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -582,7 +582,7 @@ class CashfreeConfigResponse(BaseModel):
 
 
 # ==========================================
-# Phase 4: Coupon Validation Schemas
+# Phase 4: Coupon Validation & Admin Management Schemas
 # ==========================================
 
 class CouponValidateRequest(BaseModel):
@@ -597,12 +597,159 @@ class CouponValidateResponse(BaseModel):
     message: str
 
 
+class CouponCreate(BaseModel):
+    code: str
+    type: str  # PERCENT or FLAT
+    value: Decimal
+    min_order_value: Decimal = Decimal("0.00")
+    usage_limit: Optional[int] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    is_active: bool = True
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        clean = (v or "").strip().upper()
+        if not clean or len(clean) < 2:
+            raise ValueError("Coupon code must be at least 2 characters long")
+        if not re.match(r"^[A-Z0-9_\-]+$", clean):
+            raise ValueError("Coupon code can only contain letters, numbers, hyphens, and underscores")
+        return clean
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: str) -> str:
+        clean = (v or "").strip().upper()
+        if clean in ("PERCENTAGE", "PERCENT", "%"):
+            return "PERCENT"
+        if clean in ("FLAT", "FIXED", "AMOUNT", "CASH"):
+            return "FLAT"
+        raise ValueError("Discount type must be either 'PERCENT' or 'FLAT'")
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, v: Decimal) -> Decimal:
+        if v <= Decimal("0.00"):
+            raise ValueError("Discount value must be greater than 0")
+        return v
+
+    @field_validator("min_order_value")
+    @classmethod
+    def validate_min_order(cls, v: Decimal) -> Decimal:
+        if v < Decimal("0.00"):
+            raise ValueError("Minimum order value cannot be negative")
+        return v
+
+    @field_validator("usage_limit")
+    @classmethod
+    def validate_usage_limit(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 1:
+            raise ValueError("Usage limit must be at least 1")
+        return v
+
+    @model_validator(mode="after")
+    def validate_coupon_constraints(self):
+        if self.type == "PERCENT" and self.value > Decimal("100.00"):
+            raise ValueError("Percentage discount cannot exceed 100%")
+        if self.valid_from and self.valid_until and self.valid_until < self.valid_from:
+            raise ValueError("End date must be on or after start date")
+        return self
+
+
+class CouponUpdate(BaseModel):
+    code: Optional[str] = None
+    type: Optional[str] = None
+    value: Optional[Decimal] = None
+    min_order_value: Optional[Decimal] = None
+    usage_limit: Optional[int] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    is_active: Optional[bool] = None
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        clean = v.strip().upper()
+        if not clean or len(clean) < 2:
+            raise ValueError("Coupon code must be at least 2 characters long")
+        if not re.match(r"^[A-Z0-9_\-]+$", clean):
+            raise ValueError("Coupon code can only contain letters, numbers, hyphens, and underscores")
+        return clean
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        clean = v.strip().upper()
+        if clean in ("PERCENTAGE", "PERCENT", "%"):
+            return "PERCENT"
+        if clean in ("FLAT", "FIXED", "AMOUNT", "CASH"):
+            return "FLAT"
+        raise ValueError("Discount type must be either 'PERCENT' or 'FLAT'")
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v <= Decimal("0.00"):
+            raise ValueError("Discount value must be greater than 0")
+        return v
+
+    @field_validator("min_order_value")
+    @classmethod
+    def validate_min_order(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and v < Decimal("0.00"):
+            raise ValueError("Minimum order value cannot be negative")
+        return v
+
+    @field_validator("usage_limit")
+    @classmethod
+    def validate_usage_limit(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 1:
+            raise ValueError("Usage limit must be at least 1")
+        return v
+
+    @model_validator(mode="after")
+    def validate_update_constraints(self):
+        if self.type == "PERCENT" and self.value is not None and self.value > Decimal("100.00"):
+            raise ValueError("Percentage discount cannot exceed 100%")
+        if self.valid_from and self.valid_until and self.valid_until < self.valid_from:
+            raise ValueError("End date must be on or after start date")
+        return self
+
+
+class CouponAdminResponse(BaseModel):
+    id: int
+    code: str
+    type: str  # FLAT or PERCENT
+    value: Decimal
+    min_order_value: Decimal
+    usage_limit: Optional[int] = None
+    used_count: int = 0
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    is_active: bool
+    is_expired: bool = False
+    status: str = "ACTIVE"  # ACTIVE, INACTIVE, EXPIRED
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CouponPublicResponse(BaseModel):
     id: int
     code: str
     type: str  # FLAT or PERCENT
     value: Decimal
     min_order_value: Decimal
+    usage_limit: Optional[int] = None
+    used_count: int = 0
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
     is_active: bool
 
     model_config = ConfigDict(from_attributes=True)

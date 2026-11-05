@@ -1528,3 +1528,100 @@ export async function submitCustomerExchange(payload: CustomerExchangePayload): 
 
   return response.json();
 }
+
+// ==========================================
+// Admin Coupons & Offers Management
+// ==========================================
+
+import type { AdminCoupon, CouponCreatePayload, CouponUpdatePayload } from '../types/coupon';
+
+export async function adminFetchCoupons(
+  token: string,
+  search?: string,
+  status?: string
+): Promise<AdminCoupon[]> {
+  const params = new URLSearchParams();
+  if (search && search.trim()) params.append('search', search.trim());
+  if (status && status !== 'ALL') params.append('status', status);
+
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/admin/coupons${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to load coupons');
+  }
+  return response.json();
+}
+
+export async function adminCreateCoupon(
+  token: string,
+  payload: CouponCreatePayload
+): Promise<AdminCoupon> {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to create coupon');
+  }
+  return response.json();
+}
+
+export async function adminUpdateCoupon(
+  token: string,
+  id: number,
+  payload: CouponUpdatePayload
+): Promise<AdminCoupon> {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update coupon');
+  }
+  return response.json();
+}
+
+export async function adminToggleCouponActive(
+  token: string,
+  id: number
+): Promise<AdminCoupon> {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons/${id}/toggle`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to toggle coupon status');
+  }
+  return response.json();
+}
+
+export async function adminDeleteCoupon(
+  token: string,
+  id: number
+): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to delete coupon');
+  }
+  return response.json();
+}
