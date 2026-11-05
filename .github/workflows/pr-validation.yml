@@ -60,6 +60,8 @@ jobs:
           python -m unittest discover backend/tests -p "test_shiprocket_invoice.py"
           python -m unittest discover backend/tests -p "test_cashfree_sandbox_flow.py"
           python -m unittest discover backend/tests -p "test_seo_sitemap.py"
+          python -m unittest discover backend/tests -p "test_shiprocket.py"
+          python -m unittest discover backend/tests -p "test_runner_safety_harness.py"
           python backend/tests/test_bulk_inventory_adjustment.py
           python backend/tests/test_postgres_concurrency.py
           python backend/tests/test_postgres_variant_migration.py
@@ -69,6 +71,9 @@ jobs:
           python backend/tests/test_shiprocket_invoice.py
           python backend/tests/test_cashfree_sandbox_flow.py
           python backend/tests/test_seo_sitemap.py
+          python backend/tests/test_shiprocket.py
+          python backend/tests/test_runner_safety_harness.py
+          python backend/run_all_tests.py
 
   frontend-build:
     name: Frontend Build Check

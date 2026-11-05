@@ -7,14 +7,17 @@ Security & Execution Model:
    - Blocked or quarantined test invocations return a non-zero exit code.
 2. Complete Database Isolation:
    - Tests execute strictly against ephemeral, disposable temporary databases.
-   - The business database (backend/royal_libas.db), PostgreSQL databases, and remote environments are NEVER accessed, altered, or deleted.
+   - The business database, PostgreSQL databases, and remote environments are NEVER accessed, altered, or deleted.
    - Zero destructive SQL queries on existing databases.
 3. Outbound Network Guard:
-   - An active transport-level network interceptor is injected into test subprocesses via PYTHONPATH.
-   - Outbound socket connections and HTTP calls (including Cashfree and Shiprocket) are blocked, raising RuntimeError.
+   - An active transport-level network interceptor (network_guard.py) is injected into test subprocesses via sitecustomize.py.
+   - Outbound socket connections (connect, connect_ex) and HTTP calls (sync/async httpx) to external endpoints are blocked.
    - In-memory local TestClient functionality is fully preserved.
 4. Quarantined Suites:
-   - Legacy suites that have not been modernized are quarantined and fail closed if invoked directly.
+   - Legacy suites that have not been modernized are quarantined and fail closed if invoked directly, or skip cleanly during test discovery.
+5. Accurate Accounting:
+   - Reports executed, passed, failed, blocked, and quarantined suites accurately.
+   - An empty test run is never reported as a pass.
 """
 
 import atexit
@@ -32,46 +35,10 @@ tests_dir = backend_dir / "tests"
 temp_dir = tempfile.mkdtemp(prefix="rl_runner_isolated_")
 disposable_db_path = os.path.join(temp_dir, "runner_disposable.db").replace(os.sep, "/")
 
-# 2. Inject transport-level network guard via sitecustomize into subprocesses
+# 2. Inject canonical transport-level network guard via sitecustomize into subprocesses
 sitecustomize_path = os.path.join(temp_dir, "sitecustomize.py")
 with open(sitecustomize_path, "w", encoding="utf-8") as sc_file:
-    sc_file.write('''"""Process-level outbound network guard injected by Royal Libas test runner."""
-import socket
-
-# Allow only loopback and in-memory ASGI test transport addresses
-_ALLOWED_HOSTS = ("127.0.0.1", "localhost", "::1", "testserver")
-
-_orig_socket_connect = socket.socket.connect
-
-def guarded_socket_connect(self, address):
-    if isinstance(address, tuple) and len(address) > 0:
-        host = str(address[0]).lower()
-        if host in _ALLOWED_HOSTS:
-            return _orig_socket_connect(self, address)
-    raise RuntimeError(
-        f"CRITICAL NETWORK SAFETY VIOLATION: Outbound socket connection to '{address}' "
-        "was blocked by the test runner network guard!"
-    )
-
-socket.socket.connect = guarded_socket_connect
-
-try:
-    import httpx
-    _orig_httpx_send = httpx.Client.send
-
-    def guarded_httpx_send(self, request, *args, **kwargs):
-        host = (request.url.host or "").lower()
-        if host in _ALLOWED_HOSTS:
-            return _orig_httpx_send(self, request, *args, **kwargs)
-        raise RuntimeError(
-            f"CRITICAL NETWORK SAFETY VIOLATION: Outbound HTTP request to '{request.url}' "
-            "was blocked by the test runner network guard!"
-        )
-
-    httpx.Client.send = guarded_httpx_send
-except ImportError:
-    pass
-''')
+    sc_file.write("# Automatically injected by Royal Libas Test Runner\nimport network_guard\n")
 
 def _cleanup():
     if os.path.exists(temp_dir):
@@ -92,7 +59,7 @@ runner_env["CASHFREE_ENVIRONMENT"] = "sandbox"
 runner_env["SHIPROCKET_API_EMAIL"] = "test@royallibas.com"
 runner_env["SHIPROCKET_API_PASSWORD"] = "test_shiprocket_password"
 
-# Prepend temp_dir so sitecustomize.py loads automatically in child Python processes
+# Prepend temp_dir and backend_dir so sitecustomize.py and network_guard load automatically
 orig_pythonpath = runner_env.get("PYTHONPATH", "")
 runner_env["PYTHONPATH"] = f"{temp_dir}{os.pathsep}{backend_dir}" + (f"{os.pathsep}{orig_pythonpath}" if orig_pythonpath else "")
 
@@ -137,7 +104,7 @@ def run_tests():
     print("=" * 70)
     print(">>> ROYAL LIBAS ISOLATED TEST RUNNER <<<")
     print(f"Isolated Disposable DB: {disposable_db_path}")
-    print("Outbound Network Guard: ACTIVE (Remote sockets and HTTP calls blocked)")
+    print("Outbound Network Guard: ACTIVE (Remote sockets and HTTP calls blocked via network_guard)")
     print("Business Database:      PROTECTED (Untouched & Unaccessed)")
     print("=" * 70)
 
@@ -195,9 +162,12 @@ def run_tests():
             print(snippet)
             failed.append(tf)
 
+    total_executed = len(passed) + len(failed)
+
     print("\n" + "=" * 70)
     print(">>> TEST EXECUTION SUMMARY <<<")
     print("=" * 70)
+    print(f"Suites Executed:                 {total_executed}")
     print(f"Verified Safe Suites Passed:     {len(passed)}")
     print(f"Verified Safe Suites Failed:     {len(failed)}")
     print(f"Quarantined Suites Blocked:      {len(quarantined_blocked)}")
@@ -205,14 +175,19 @@ def run_tests():
 
     # When running default suite, display standing quarantined list separately
     if not is_explicit:
-        print("\n--- Standing Quarantined Suites (Modernization Required) ---")
+        print("\n--- Standing Quarantined Suites (Skipped from Execution) ---")
         for suite_name, reason in sorted(QUARANTINED_SUITES.items()):
             print(f"  - {suite_name:30} : {reason}")
 
     print("=" * 70)
 
+    # Empty test run check: never report an empty test run as a pass
+    if len(passed) == 0:
+        print("\n[ERROR] No test suites passed. An empty test run is never reported as a pass.")
+        sys.exit(1)
+
     # Return non-zero exit code if ANY test failed, or if any explicit target was blocked
-    if failed or (is_explicit and (quarantined_blocked or unverified_blocked)):
+    if failed or quarantined_blocked or unverified_blocked:
         sys.exit(1)
     else:
         sys.exit(0)
