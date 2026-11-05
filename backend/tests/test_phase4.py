@@ -1,3 +1,14 @@
+# ==============================================================================
+# FAIL-CLOSED SAFETY GUARD: QUARANTINED LEGACY TEST SUITE
+# ==============================================================================
+# Direct execution of this legacy suite is strictly blocked pending modernization
+# to support current product publication status schemas and isolation standards.
+# ==============================================================================
+raise RuntimeError(
+    "CRITICAL SAFETY GUARD: Direct execution of quarantined legacy test suite "
+    f"'{__file__}' is blocked pending modernization."
+)
+
 import os
 import sys
 import json

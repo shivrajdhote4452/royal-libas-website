@@ -1,3 +1,15 @@
+# ==============================================================================
+# FAIL-CLOSED SAFETY GUARD: QUARANTINED LEGACY TEST SUITE
+# ==============================================================================
+# Direct execution of this legacy suite is strictly blocked because it targets
+# or relies on the business database (royal_libas.db).
+# Modernize this suite to run against an isolated disposable database before use.
+# ==============================================================================
+raise RuntimeError(
+    "CRITICAL SAFETY GUARD: Direct execution of quarantined legacy test suite "
+    f"'{__file__}' is blocked to prevent accidental mutation of the business database."
+)
+
 """Phase 8 Automated Verification Suite - Soft Launch & Handover.
 
 Verifies the Launch Day Runbook (Page 18):
