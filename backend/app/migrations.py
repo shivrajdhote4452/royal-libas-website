@@ -277,5 +277,8 @@ def run_migrations(engine: Engine) -> None:
                     else:
                         conn.execute(text(f"ALTER TABLE coupons ADD COLUMN {col_name} {sqlite_type};"))
 
+            # Normalize pre-existing coupons with NULL used_count to 0
+            conn.execute(text("UPDATE coupons SET used_count = 0 WHERE used_count IS NULL;"))
+
     logger.info("Database schema migrations completed successfully.")
 

@@ -296,7 +296,13 @@ export const Checkout: React.FC = () => {
         setIsSubmitting(false);
       }
     } catch (err: any) {
-      setFormError(err.message || 'Failed to place order. Please try again.');
+      const errorMessage = err.message || 'Failed to place order. Please try again.';
+      if (errorMessage.toLowerCase().includes('coupon')) {
+        setAppliedCoupon(null);
+        setFormError(`${errorMessage} The coupon has been removed. Please review your revised order total below before placing your order.`);
+      } else {
+        setFormError(errorMessage);
+      }
       setIsSubmitting(false);
     }
   };

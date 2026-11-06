@@ -622,6 +622,224 @@ class TestPostgresConcurrency(unittest.TestCase):
         finally:
             db.close()
 
+    def test_postgres_concurrent_coupon_redemption_final_use(self):
+        """Verify two concurrent orders on PostgreSQL competing for the final coupon use:
+
+        At most ONE order receives the discount; the other is rejected with HTTP 400.
+        Ensure coupon row locking with with_for_update() prevents over-usage or race conditions.
+        """
+        from fastapi.testclient import TestClient
+        from app.models import Coupon, ProductVariant
+
+        db = self.SessionLocal()
+        try:
+            # Clean up / create test coupon with usage_limit = 1
+            db.query(Coupon).filter(Coupon.code == "PGCONCUR1").delete()
+            coupon = Coupon(
+                code="PGCONCUR1",
+                type="FLAT",
+                value=Decimal("200.00"),
+                min_order_value=Decimal("1000.00"),
+                usage_limit=1,
+                used_count=0,
+                is_active=True,
+            )
+            db.add(coupon)
+            # Ensure sufficient stock
+            v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
+            v.stock = 50
+            db.commit()
+        finally:
+            db.close()
+
+        barrier = threading.Barrier(2)
+        results = []
+
+        def place_order(client_num: int):
+            c = TestClient(self.app)
+            payload = {
+                "customer_name": f"Concurrent Shopper {client_num}",
+                "phone": f"987654321{client_num}",
+                "payment_method": "COD",
+                "shipping_method": "STANDARD",
+                "coupon_code": "PGCONCUR1",
+                "items": [{"variant_id": self.variant_id, "quantity": 1}],
+                "address": {
+                    "name": f"Concurrent Shopper {client_num}",
+                    "phone": f"987654321{client_num}",
+                    "pincode": "110001",
+                    "line1": "Barakhamba Road",
+                    "city": "New Delhi",
+                    "state": "Delhi",
+                },
+            }
+            barrier.wait()
+            res = c.post("/orders", json=payload)
+            results.append((client_num, res.status_code, res.json()))
+
+        t1 = threading.Thread(target=place_order, args=(1,))
+        t2 = threading.Thread(target=place_order, args=(2,))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        self.assertEqual(len(results), 2)
+        status_codes = [r[1] for r in results]
+
+        # Exactly one must succeed (201) and exactly one must fail (400)
+        self.assertIn(201, status_codes)
+        self.assertIn(400, status_codes)
+
+        # The failed response must explain the usage limit was reached
+        failed_res = next(r[2] for r in results if r[1] == 400)
+        self.assertIn("maximum usage limit", failed_res.get("detail", ""))
+
+        # Verify PostgreSQL database state: used_count is exactly 1, never exceeded
+        db = self.SessionLocal()
+        try:
+            c_db = db.query(Coupon).filter(Coupon.code == "PGCONCUR1").first()
+            self.assertEqual(c_db.used_count, 1)
+        finally:
+            db.close()
+
+    def test_postgres_concurrent_coupon_unlimited_no_lost_updates(self):
+        """Verify multiple concurrent orders using an unlimited coupon on PostgreSQL:
+
+        with_for_update() serializes updates and prevents lost updates, resulting in exact used_count matching order count.
+        """
+        from fastapi.testclient import TestClient
+        from app.models import Coupon, ProductVariant
+
+        num_threads = 4
+        db = self.SessionLocal()
+        try:
+            db.query(Coupon).filter(Coupon.code == "PGUNLIMITED").delete()
+            coupon = Coupon(
+                code="PGUNLIMITED",
+                type="PERCENT",
+                value=Decimal("10.00"),
+                min_order_value=Decimal("500.00"),
+                usage_limit=None,  # Unlimited
+                used_count=0,
+                is_active=True,
+            )
+            db.add(coupon)
+            v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
+            v.stock = 50
+            db.commit()
+        finally:
+            db.close()
+
+        barrier = threading.Barrier(num_threads)
+        results = []
+
+        def place_order(client_num: int):
+            c = TestClient(self.app)
+            payload = {
+                "customer_name": f"Shopper {client_num}",
+                "phone": f"987654320{client_num}",
+                "payment_method": "COD",
+                "shipping_method": "STANDARD",
+                "coupon_code": "PGUNLIMITED",
+                "items": [{"variant_id": self.variant_id, "quantity": 1}],
+                "address": {
+                    "name": f"Shopper {client_num}",
+                    "phone": f"987654320{client_num}",
+                    "pincode": "400001",
+                    "line1": "Nariman Point",
+                    "city": "Mumbai",
+                    "state": "Maharashtra",
+                },
+            }
+            barrier.wait()
+            res = c.post("/orders", json=payload)
+            results.append((client_num, res.status_code, res.json()))
+
+        threads = [threading.Thread(target=place_order, args=(i,)) for i in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(results), num_threads)
+        for r in results:
+            self.assertEqual(r[1], 201, f"Expected 201 Created but got {r[1]}: {r[2]}")
+
+        # Verify exact count on PostgreSQL with zero lost updates
+        db = self.SessionLocal()
+        try:
+            c_db = db.query(Coupon).filter(Coupon.code == "PGUNLIMITED").first()
+            self.assertEqual(c_db.used_count, num_threads)
+        finally:
+            db.close()
+
+    def test_postgres_coupon_order_rollback_no_leak(self):
+        """Verify transaction rollback on PostgreSQL: if order creation fails, coupon use is NOT consumed."""
+        from fastapi.testclient import TestClient
+        from app.models import Coupon, ProductVariant
+
+        c = TestClient(self.app)
+        db = self.SessionLocal()
+        try:
+            db.query(Coupon).filter(Coupon.code == "PGROLLBACK").delete()
+            coupon = Coupon(
+                code="PGROLLBACK",
+                type="FLAT",
+                value=Decimal("100.00"),
+                min_order_value=Decimal("1000.00"),
+                usage_limit=1,
+                used_count=0,
+                is_active=True,
+            )
+            db.add(coupon)
+            v = db.query(ProductVariant).filter(ProductVariant.id == self.variant_id).first()
+            v.stock = 5
+            db.commit()
+        finally:
+            db.close()
+
+        # Place order requesting 99 units (exceeding stock 5) -> must fail
+        failing_payload = {
+            "customer_name": "Rollback Test",
+            "phone": "9812345678",
+            "payment_method": "COD",
+            "shipping_method": "STANDARD",
+            "coupon_code": "PGROLLBACK",
+            "items": [{"variant_id": self.variant_id, "quantity": 99}],
+            "address": {
+                "name": "Rollback Test",
+                "phone": "9812345678",
+                "pincode": "110001",
+                "line1": "Janpath",
+                "city": "New Delhi",
+                "state": "Delhi",
+            },
+        }
+        res_fail = c.post("/orders", json=failing_payload)
+        self.assertEqual(res_fail.status_code, 400)
+
+        # Verify rollback on PostgreSQL: used_count is still 0
+        db = self.SessionLocal()
+        try:
+            c_db = db.query(Coupon).filter(Coupon.code == "PGROLLBACK").first()
+            self.assertEqual(c_db.used_count, 0)
+        finally:
+            db.close()
+
+        # Subsequent valid order should successfully consume the coupon
+        valid_payload = dict(failing_payload)
+        valid_payload["items"] = [{"variant_id": self.variant_id, "quantity": 1}]
+        res_ok = c.post("/orders", json=valid_payload)
+        self.assertEqual(res_ok.status_code, 201)
+
+        db = self.SessionLocal()
+        try:
+            c_db = db.query(Coupon).filter(Coupon.code == "PGROLLBACK").first()
+            self.assertEqual(c_db.used_count, 1)
+        finally:
+            db.close()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

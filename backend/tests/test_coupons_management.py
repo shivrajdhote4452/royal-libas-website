@@ -346,6 +346,283 @@ class TestCouponsManagement(unittest.TestCase):
         get_res = client.get(f"/admin/coupons/{cid}", headers=self.admin_headers)
         self.assertEqual(get_res.status_code, 404)
 
+    def test_08_checkout_rejects_ineligible_coupons_without_silent_full_price(self):
+        """Verify that checkout explicitly rejects ineligible/expired/exhausted coupons with HTTP 400,
+
+        never silently creating an order at full price.
+        """
+        # 1. Exhausted coupon: FLASH150 from test_06 reached its usage_limit of 1
+        payload_exhausted = {
+            "customer_name": "Test Shopper",
+            "phone": "9812345678",
+            "payment_method": "COD",
+            "shipping_method": "STANDARD",
+            "coupon_code": "FLASH150",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "address": {
+                "name": "Test Shopper",
+                "phone": "9812345678",
+                "pincode": "284001",
+                "line1": "Civil Lines",
+                "city": "Jhansi",
+                "state": "Uttar Pradesh",
+            },
+        }
+        res_exhausted = client.post("/orders", json=payload_exhausted)
+        self.assertEqual(res_exhausted.status_code, 400)
+        self.assertIn("maximum usage limit", res_exhausted.json()["detail"])
+
+        # 2. Expired coupon: PASTEXPIRED from test_01
+        payload_expired = dict(payload_exhausted)
+        payload_expired["coupon_code"] = "PASTEXPIRED"
+        res_expired = client.post("/orders", json=payload_expired)
+        self.assertEqual(res_expired.status_code, 400)
+        self.assertIn("expired", res_expired.json()["detail"].lower())
+
+        # 3. Inactive coupon: deactivating SUMMER15
+        db = SessionLocal()
+        try:
+            c = db.query(Coupon).filter(Coupon.code == "DIWALI20").first()
+            c.is_active = False
+            db.commit()
+        finally:
+            db.close()
+
+        payload_inactive = dict(payload_exhausted)
+        payload_inactive["coupon_code"] = "DIWALI20"
+        res_inactive = client.post("/orders", json=payload_inactive)
+        self.assertEqual(res_inactive.status_code, 400)
+        self.assertIn("no longer active", res_inactive.json()["detail"].lower())
+
+        # Reactivate DIWALI20
+        db = SessionLocal()
+        try:
+            c = db.query(Coupon).filter(Coupon.code == "DIWALI20").first()
+            c.is_active = True
+            db.commit()
+        finally:
+            db.close()
+
+        # 4. Ineligible minimum order amount
+        # Create coupon requiring min 5000
+        client.post(
+            "/admin/coupons",
+            json={
+                "code": "MIN5000",
+                "type": "FLAT",
+                "value": "500.00",
+                "min_order_value": "5000.00",
+            },
+            headers=self.admin_headers,
+        )
+        payload_min = dict(payload_exhausted)
+        payload_min["coupon_code"] = "MIN5000"  # subtotal is 2000 < 5000
+        res_min = client.post("/orders", json=payload_min)
+        self.assertEqual(res_min.status_code, 400)
+        self.assertIn("minimum order value", res_min.json()["detail"].lower())
+
+    def test_09_prepaid_flow_with_coupon_and_reservation(self):
+        """Verify PREPAID order creation applies coupon discount, sets reservation window,
+
+        and free shipping without calling live Cashfree endpoints.
+        """
+        # Create promo coupon
+        client.post(
+            "/admin/coupons",
+            json={
+                "code": "PREPAID100",
+                "type": "FLAT",
+                "value": "100.00",
+                "min_order_value": "1000.00",
+            },
+            headers=self.admin_headers,
+        )
+
+        prepaid_payload = {
+            "customer_name": "Meera Sen",
+            "phone": "9876543210",
+            "payment_method": "PREPAID",
+            "shipping_method": "STANDARD",
+            "coupon_code": "PREPAID100",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "address": {
+                "name": "Meera Sen",
+                "phone": "9876543210",
+                "pincode": "560001",
+                "line1": "MG Road",
+                "city": "Bengaluru",
+                "state": "Karnataka",
+            },
+        }
+
+        res = client.post("/orders", json=prepaid_payload)
+        self.assertEqual(res.status_code, 201)
+        data = res.json()
+        self.assertEqual(data["payment_method"], "PREPAID")
+        self.assertEqual(data["status"], "PENDING")
+        self.assertEqual(data["payment_status"], "PENDING")
+        self.assertEqual(Decimal(str(data["discount"])), Decimal("100.00"))
+        self.assertEqual(Decimal(str(data["shipping_charge"])), Decimal("0.00"))  # Free on prepaid
+        self.assertEqual(Decimal(str(data["total"])), Decimal("1900.00"))
+        self.assertIsNotNone(data["reservation_expires_at"])
+
+    def test_10_order_creation_rollback_preserves_coupon_count(self):
+        """Verify transaction rollback does NOT consume a coupon use if order creation fails."""
+        # Create a single-use coupon
+        res = client.post(
+            "/admin/coupons",
+            json={
+                "code": "ROLLBACK1",
+                "type": "FLAT",
+                "value": "200.00",
+                "min_order_value": "1000.00",
+                "usage_limit": 1,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(res.status_code, 201)
+        cid = res.json()["id"]
+
+        # Attempt to order with an invalid variant quantity exceeding available stock (e.g. 9999)
+        failing_payload = {
+            "customer_name": "Failing Shopper",
+            "phone": "9811122233",
+            "payment_method": "COD",
+            "shipping_method": "STANDARD",
+            "coupon_code": "ROLLBACK1",
+            "items": [{"variant_id": self.variant.id, "quantity": 9999}],  # Far exceeds stock
+            "address": {
+                "name": "Failing Shopper",
+                "phone": "9811122233",
+                "pincode": "110001",
+                "line1": "Connaught Place",
+                "city": "New Delhi",
+                "state": "Delhi",
+            },
+        }
+        fail_res = client.post("/orders", json=failing_payload)
+        self.assertEqual(fail_res.status_code, 400)
+
+        # Verify used_count was NOT incremented due to rollback
+        chk = client.get(f"/admin/coupons/{cid}", headers=self.admin_headers)
+        self.assertEqual(chk.status_code, 200)
+        self.assertEqual(chk.json()["used_count"], 0)
+        self.assertEqual(chk.json()["status"], "ACTIVE")
+
+        # Now place a valid order with the same coupon -> should succeed
+        valid_payload = dict(failing_payload)
+        valid_payload["items"] = [{"variant_id": self.variant.id, "quantity": 1}]
+        succ_res = client.post("/orders", json=valid_payload)
+        self.assertEqual(succ_res.status_code, 201)
+
+        # Verify used_count is now 1
+        chk2 = client.get(f"/admin/coupons/{cid}", headers=self.admin_headers)
+        self.assertEqual(chk2.status_code, 200)
+        self.assertEqual(chk2.json()["used_count"], 1)
+
+    def test_11_usage_lifecycle_cancellation_and_reservation_expiration(self):
+        """Document and test coupon usage lifecycle during cancellation and reservation expiry:
+
+        - Coupon usage is consumed at order placement.
+        - Cancellation restocks variant inventory and updates status to CANCELLED.
+        - Historical coupon usage counts are preserved and historical order records are not mutated.
+        """
+        from app.services.order_service import cancel_order_atomic, expire_unpaid_prepaid_reservations
+
+        # Create coupon
+        client.post(
+            "/admin/coupons",
+            json={
+                "code": "LIFECYCLE50",
+                "type": "FLAT",
+                "value": "50.00",
+                "min_order_value": "1000.00",
+                "usage_limit": 5,
+            },
+            headers=self.admin_headers,
+        )
+
+        # Record starting variant stock
+        db = SessionLocal()
+        try:
+            v_init = db.query(ProductVariant).filter(ProductVariant.id == self.variant.id).first()
+            initial_stock = v_init.stock
+        finally:
+            db.close()
+
+        # Place COD order
+        cod_payload = {
+            "customer_name": "Lifecycle Customer",
+            "phone": "9998887776",
+            "payment_method": "COD",
+            "shipping_method": "STANDARD",
+            "coupon_code": "LIFECYCLE50",
+            "items": [{"variant_id": self.variant.id, "quantity": 2}],
+            "address": {
+                "name": "Lifecycle Customer",
+                "phone": "9998887776",
+                "pincode": "400001",
+                "line1": "Colaba Causeway",
+                "city": "Mumbai",
+                "state": "Maharashtra",
+            },
+        }
+        res = client.post("/orders", json=cod_payload)
+        self.assertEqual(res.status_code, 201)
+        order_code = res.json()["order_code"]
+
+        # Stock should be decremented by 2
+        db = SessionLocal()
+        try:
+            v_after = db.query(ProductVariant).filter(ProductVariant.id == self.variant.id).first()
+            self.assertEqual(v_after.stock, initial_stock - 2)
+
+            ord_obj = db.query(Order).filter(Order.order_code == order_code).first()
+            self.assertEqual(ord_obj.status, "PLACED")
+            self.assertEqual(Decimal(str(ord_obj.discount)), Decimal("50.00"))
+
+            # Cancel order atomically
+            cancel_order_atomic(db, ord_obj, reason="Customer cancelled before dispatch", restock=True)
+
+            # Check stock is restored
+            db.refresh(v_after)
+            self.assertEqual(v_after.stock, initial_stock)
+
+            # Check order status is CANCELLED and discount snapshot remains intact
+            db.refresh(ord_obj)
+            self.assertEqual(ord_obj.status, "CANCELLED")
+            self.assertEqual(Decimal(str(ord_obj.discount)), Decimal("50.00"))
+
+            # Check coupon used_count remains 1 (consumption at order placement, historical record intact)
+            c = db.query(Coupon).filter(Coupon.code == "LIFECYCLE50").first()
+            self.assertEqual(c.used_count, 1)
+        finally:
+            db.close()
+
+        # Test prepaid reservation expiry
+        prepaid_payload = dict(cod_payload)
+        prepaid_payload["payment_method"] = "PREPAID"
+        prepaid_res = client.post("/orders", json=prepaid_payload)
+        self.assertEqual(prepaid_res.status_code, 201)
+        prepaid_code = prepaid_res.json()["order_code"]
+
+        db = SessionLocal()
+        try:
+            prep_ord = db.query(Order).filter(Order.order_code == prepaid_code).first()
+            # Artificially set reservation_expires_at to the past
+            prep_ord.reservation_expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+            db.commit()
+
+            # Run expire_unpaid_prepaid_reservations
+            expired_count = expire_unpaid_prepaid_reservations(db)
+            self.assertGreaterEqual(expired_count, 1)
+
+            db.refresh(prep_ord)
+            self.assertEqual(prep_ord.status, "CANCELLED")
+            self.assertIn("expired automatically", prep_ord.admin_notes.lower())
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
