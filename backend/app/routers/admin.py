@@ -5363,10 +5363,30 @@ def admin_toggle_coupon_active(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
-    """Toggle coupon active state between Active and Inactive."""
+    """Toggle coupon active state between Active and Inactive.
+
+    Prevents activating coupons that have expired or reached their usage limit.
+    """
     coupon = db.query(Coupon).filter(Coupon.id == id).first()
     if not coupon:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Coupon #{id} not found.")
+
+    now = datetime.now(timezone.utc)
+
+    # If attempting to activate an inactive coupon, verify eligibility
+    if not coupon.is_active:
+        if coupon.valid_until:
+            vu = coupon.valid_until if coupon.valid_until.tzinfo else coupon.valid_until.replace(tzinfo=timezone.utc)
+            if vu < now:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot activate expired coupon '{coupon.code}'. Please extend its validity end date first.",
+                )
+        if coupon.usage_limit is not None and (coupon.used_count or 0) >= coupon.usage_limit:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot activate coupon '{coupon.code}' because its usage limit ({coupon.usage_limit}) has been reached. Please increase the usage limit first.",
+            )
 
     coupon.is_active = not bool(coupon.is_active)
     db.commit()
@@ -5381,7 +5401,6 @@ def admin_toggle_coupon_active(
         coupon.id,
         f"{action_label.capitalize()} coupon {coupon.code}",
     )
-    now = datetime.now(timezone.utc)
     return _serialize_coupon_admin(coupon, now)
 
 

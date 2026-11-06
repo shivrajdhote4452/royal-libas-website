@@ -422,30 +422,30 @@ export const AdminCoupons: React.FC = () => {
 
       {/* Main Content: Coupon Cards Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-          {[1, 2, 3, 4].map((n) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+          {[1, 2, 3, 4, 5, 6].map((n) => (
             <div
               key={n}
-              className="bg-white rounded-2xl border border-[#E8DFD0] p-5 shadow-xs animate-pulse space-y-4"
+              className="bg-white rounded-xl border border-[#E8DFD0] p-4 shadow-xs animate-pulse space-y-3"
             >
               <div className="flex justify-between items-center">
-                <div className="h-5 w-20 bg-gray-200 rounded-full"></div>
-                <div className="h-4 w-32 bg-gray-100 rounded"></div>
+                <div className="h-4 w-16 bg-gray-200 rounded-full"></div>
+                <div className="h-3 w-24 bg-gray-100 rounded"></div>
               </div>
-              <div className="h-20 bg-[#FAF6F0] rounded-xl border border-dashed border-[#E8DFD0]"></div>
-              <div className="flex gap-4">
-                <div className="h-3 w-28 bg-gray-200 rounded"></div>
-                <div className="h-3 w-28 bg-gray-200 rounded"></div>
+              <div className="h-16 bg-[#FAF6F0] rounded-lg border border-dashed border-[#E8DFD0]"></div>
+              <div className="flex gap-3">
+                <div className="h-3 w-20 bg-gray-200 rounded"></div>
+                <div className="h-3 w-24 bg-gray-200 rounded"></div>
               </div>
-              <div className="flex gap-3 pt-2">
-                <div className="h-8 flex-1 bg-gray-200 rounded-lg"></div>
-                <div className="h-8 flex-1 bg-gray-200 rounded-lg"></div>
+              <div className="flex gap-2 pt-1">
+                <div className="h-7 flex-1 bg-gray-200 rounded-lg"></div>
+                <div className="h-7 flex-1 bg-gray-200 rounded-lg"></div>
               </div>
             </div>
           ))}
         </div>
       ) : error ? (
-        <div className="p-8 text-center bg-white rounded-2xl border border-rose-200 shadow-xs space-y-3">
+        <div className="p-8 text-center bg-white rounded-xl border border-rose-200 shadow-xs space-y-3">
           <AlertCircle className="w-8 h-8 text-rose-600 mx-auto" />
           <p className="text-sm font-semibold text-gray-900">{error}</p>
           <button
@@ -456,7 +456,7 @@ export const AdminCoupons: React.FC = () => {
           </button>
         </div>
       ) : filteredCoupons.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-2xl border border-[#E8DFD0] shadow-xs space-y-4">
+        <div className="p-12 text-center bg-white rounded-xl border border-[#E8DFD0] shadow-xs space-y-4">
           <div className="w-12 h-12 rounded-full bg-[#FAF6F0] border border-[#E8DFD0] flex items-center justify-center mx-auto text-[#5E1224]">
             <Tag className="w-6 h-6" />
           </div>
@@ -479,15 +479,19 @@ export const AdminCoupons: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
           {filteredCoupons.map((coupon) => {
             const isPercent = coupon.type === 'PERCENT';
             const isActionLoading = actionLoadingId === coupon.id;
+            const isLimitReached =
+              coupon.status === 'EXPIRED' &&
+              coupon.usage_limit !== null &&
+              (coupon.used_count || 0) >= coupon.usage_limit;
 
             return (
               <div
                 key={coupon.id}
-                className="bg-white rounded-2xl border border-[#E8DFD0] p-4 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between relative group"
+                className="bg-white rounded-xl border border-[#E8DFD0] p-3.5 sm:p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between relative group"
               >
                 <div>
                   {/* Card Header: Status Badge + Context Label */}
@@ -517,27 +521,27 @@ export const AdminCoupons: React.FC = () => {
                   </div>
 
                   {/* Ticket Cutout Box matching Option 2 design */}
-                  <div className="my-3.5 rounded-xl border border-dashed border-[#DFC4A0] bg-[#FCF9F5] p-3.5 sm:p-4 relative overflow-hidden flex items-center justify-between shadow-xs">
+                  <div className="my-2.5 rounded-lg border border-dashed border-[#DFC4A0] bg-[#FCF9F5] px-3.5 py-2.5 sm:py-3 relative overflow-hidden flex items-center justify-between shadow-xs">
                     {/* Subtle boutique floral watermark decoration in background */}
                     <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none text-[#5E1224] transform translate-x-2 translate-y-2">
-                      <svg className="w-20 h-20" viewBox="0 0 24 24" fill="currentColor">
+                      <svg className="w-16 h-16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 2C12 2 13.5 6.5 16 8C18.5 9.5 22 10 22 10C22 10 18.5 12 17 14.5C15.5 17 15 20.5 15 20.5C15 20.5 13.5 17 12 16C10.5 17 9 20.5 9 20.5C9 20.5 8.5 17 7 14.5C5.5 12 2 10 2 10C2 10 5.5 9.5 8 8C10.5 6.5 12 2 12 2Z" />
                       </svg>
                     </div>
 
                     {/* Left: Coupon Code */}
-                    <div className="relative z-10 pr-3">
-                      <span className="font-serif text-lg sm:text-xl font-bold text-gray-900 tracking-wider">
+                    <div className="relative z-10 pr-2">
+                      <span className="font-serif text-base sm:text-lg font-bold text-gray-900 tracking-wider">
                         {coupon.code}
                       </span>
                     </div>
 
                     {/* Center separator line */}
-                    <div className="h-9 w-px border-r border-dashed border-[#DFC4A0] hidden sm:block"></div>
+                    <div className="h-8 w-px border-r border-dashed border-[#DFC4A0] hidden sm:block"></div>
 
                     {/* Right: Discount display */}
-                    <div className="relative z-10 text-right pl-3">
-                      <div className="font-serif text-base sm:text-lg font-bold text-[#5E1224]">
+                    <div className="relative z-10 text-right pl-2">
+                      <div className="font-serif text-sm sm:text-base font-bold text-[#5E1224]">
                         {isPercent
                           ? `${Number(coupon.value)}% OFF`
                           : `Rs ${Math.round(coupon.value).toLocaleString('en-IN')} OFF`}
@@ -547,7 +551,7 @@ export const AdminCoupons: React.FC = () => {
                   </div>
 
                   {/* Metadata Row: Minimum Order, Validity Dates, Usage redemptions */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 pb-3 text-[11px] text-gray-600 font-medium">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-0.5 pb-2 text-[11px] text-gray-600 font-medium">
                     {/* Minimum Order */}
                     <div className="flex items-center gap-1.5" title="Minimum cart order value required">
                       <ShoppingBag className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -578,41 +582,83 @@ export const AdminCoupons: React.FC = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* Expired Reason Banner to guide the admin */}
+                  {coupon.status === 'EXPIRED' && (
+                    <div className="mb-2 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-md text-[10px] text-amber-900 font-medium flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                      <span className="truncate">
+                        {isLimitReached
+                          ? `Limit of ${coupon.usage_limit} reached. Increase limit to reactivate.`
+                          : 'Validity ended. Extend end date to reactivate.'}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Card Actions Footer: Edit, Activate/Deactivate, Delete */}
-                <div className="pt-3 border-t border-gray-100 flex items-center gap-2">
+                {/* Card Actions Footer: Edit, Activate/Deactivate/Extend, Delete */}
+                <div className="pt-2.5 border-t border-gray-100 flex items-center gap-2">
                   {/* Edit Button */}
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(coupon)}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg transition-colors"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg transition-colors"
                   >
                     <Pencil className="w-3.5 h-3.5" />
                     <span>Edit</span>
                   </button>
 
-                  {/* Activate / Deactivate Toggle Button */}
-                  <button
-                    type="button"
-                    disabled={isActionLoading}
-                    onClick={() => handleToggleActive(coupon)}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-[#5E1224] hover:bg-[#4A0E1C] active:bg-[#3D0B17] text-white text-xs font-semibold rounded-lg transition-colors shadow-xs disabled:opacity-50"
-                  >
-                    {isActionLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Power className="w-3.5 h-3.5" />
-                    )}
-                    <span>{coupon.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
-                  </button>
+                  {/* Contextual Action Button based on status */}
+                  {coupon.status === 'EXPIRED' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleOpenEdit(coupon);
+                        showToast(
+                          isLimitReached
+                            ? `Increase usage limit to reactivate ${coupon.code}.`
+                            : `Extend validity end date to reactivate ${coupon.code}.`,
+                          'error'
+                        );
+                      }}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-semibold rounded-lg transition-colors"
+                      title="Edit dates or limit to reactivate"
+                    >
+                      {isLimitReached ? (
+                        <>
+                          <BarChart3 className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Increase Limit</span>
+                        </>
+                      ) : (
+                        <>
+                          <Calendar className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Extend Dates</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isActionLoading}
+                      onClick={() => handleToggleActive(coupon)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 bg-[#5E1224] hover:bg-[#4A0E1C] active:bg-[#3D0B17] text-white text-xs font-semibold rounded-lg transition-colors shadow-xs disabled:opacity-50"
+                    >
+                      {isActionLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Power className="w-3.5 h-3.5" />
+                      )}
+                      <span>{coupon.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
+                    </button>
+                  )}
 
-                  {/* Delete Button */}
+                  {/* Delete Button with clear accessible label and title */}
                   <button
                     type="button"
-                    title="Delete coupon"
+                    aria-label={`Delete coupon ${coupon.code}`}
+                    title={`Delete coupon ${coupon.code}`}
                     onClick={() => setCouponToDelete(coupon)}
-                    className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -675,6 +721,22 @@ export const AdminCoupons: React.FC = () => {
                   <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-800">
                     <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
                     <div>{formError}</div>
+                  </div>
+                )}
+
+                {/* Expired Coupon Renewal Guidance Banner */}
+                {editingCoupon?.status === 'EXPIRED' && !formError && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
+                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold">This coupon is currently expired.</p>
+                      <p className="text-[11px] text-amber-800 leading-normal">
+                        To make it usable at checkout, update the <strong>Validity End Date</strong> to a future date
+                        {editingCoupon.usage_limit && (editingCoupon.used_count || 0) >= editingCoupon.usage_limit
+                          ? ' and increase or clear the Usage Limit'
+                          : ''}.
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -871,8 +933,12 @@ export const AdminCoupons: React.FC = () => {
               <h3 className="font-serif font-bold text-base text-gray-900">
                 Delete Coupon {couponToDelete.code}?
               </h3>
-              <p className="text-xs text-gray-500 mt-1">
-                Are you sure you want to permanently delete this coupon? This action cannot be undone.
+              <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                Are you sure you want to permanently delete coupon <strong className="text-gray-900 font-semibold">{couponToDelete.code}</strong>?
+                {couponToDelete.used_count && couponToDelete.used_count > 0 ? (
+                  <span className="block mt-1 text-gray-700">This coupon has been redeemed <strong>{couponToDelete.used_count} time(s)</strong> by shoppers.</span>
+                ) : null}
+                <span className="block mt-1.5 text-rose-600 font-medium">This action cannot be undone.</span>
               </p>
             </div>
 

@@ -218,6 +218,53 @@ class TestCouponsManagement(unittest.TestCase):
         self.assertTrue(tog2_res.json()["is_active"])
         self.assertEqual(tog2_res.json()["status"], "ACTIVE")
 
+        # Create an expired coupon and verify activating it via toggle is blocked with HTTP 400
+        now = datetime.now(timezone.utc)
+        exp_res = client.post(
+            "/admin/coupons",
+            json={
+                "code": "EXPTOGGLE",
+                "type": "FLAT",
+                "value": "50.00",
+                "valid_until": (now - timedelta(days=2)).isoformat(),
+                "is_active": False,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(exp_res.status_code, 201)
+        exp_id = exp_res.json()["id"]
+
+        exp_tog = client.patch(f"/admin/coupons/{exp_id}/toggle", headers=self.admin_headers)
+        self.assertEqual(exp_tog.status_code, 400)
+        self.assertIn("cannot activate expired coupon", exp_tog.json()["detail"].lower())
+
+        # Create an exhausted coupon (used_count >= usage_limit) and verify toggle activation is blocked
+        exh_res = client.post(
+            "/admin/coupons",
+            json={
+                "code": "EXHTOGGLE",
+                "type": "FLAT",
+                "value": "50.00",
+                "usage_limit": 1,
+                "is_active": False,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(exh_res.status_code, 201)
+        exh_id = exh_res.json()["id"]
+
+        db = SessionLocal()
+        try:
+            exh_c = db.query(Coupon).filter(Coupon.id == exh_id).first()
+            exh_c.used_count = 1
+            db.commit()
+        finally:
+            db.close()
+
+        exh_tog = client.patch(f"/admin/coupons/{exh_id}/toggle", headers=self.admin_headers)
+        self.assertEqual(exh_tog.status_code, 400)
+        self.assertIn("usage limit", exh_tog.json()["detail"].lower())
+
     def test_04_status_filtering_and_search(self):
         """Verify admin coupon list with search and status tabs (ACTIVE, INACTIVE, EXPIRED)."""
         now = datetime.now(timezone.utc)
