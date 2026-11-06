@@ -126,7 +126,7 @@ def validate_cart_lines(db: Session, items: List[CartItemValidateRequest]) -> Ca
             unavailable_lines.append(line_error)
             is_valid = False
         elif available_stock < requested_qty:
-            line_error = f"Only {available_stock} in stock for {product.name} (Size {variant.size})."
+            line_error = f"The requested quantity for {product.name} (Size {variant.size}) is no longer available. Please update your cart."
             unavailable_lines.append(line_error)
             is_valid = False
 
@@ -215,7 +215,7 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
             if variant.stock < req_item.quantity:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"That size just sold out! Only {variant.stock} left in stock for '{product.name}' ({variant.size}).",
+                    detail=f"The requested quantity for '{product.name}' ({variant.size}) is no longer available in stock or that size has sold out. Please update your cart.",
                 )
 
             # Atomic stock decrement

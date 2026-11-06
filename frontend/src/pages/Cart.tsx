@@ -179,7 +179,7 @@ export const Cart: React.FC = () => {
                     {isLineError && (
                       <div className="text-xs text-red-600 font-semibold flex items-center gap-1 pt-1">
                         <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>{itemValidation.error || 'Insufficient stock'}</span>
+                        <span>{itemValidation.error || 'The requested quantity is no longer available. Please update your cart.'}</span>
                       </div>
                     )}
 
