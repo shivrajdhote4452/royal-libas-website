@@ -381,7 +381,7 @@ export const FeaturedSlider: React.FC<FeaturedSliderProps> = ({
                   {/* Badge: Category / Collection */}
                   <div className="absolute top-4 left-4 z-20">
                     <span className="px-2.5 py-1 text-[10px] sm:text-[11px] uppercase tracking-widest font-semibold bg-[#5E1224] text-[#FCF8F0] shadow-md">
-                      {product.badges?.[0] || 'New'}
+                      {product.badges?.filter((b) => b.trim().toLowerCase() !== 'low stock')[0] || 'New'}
                     </span>
                   </div>
 

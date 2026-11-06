@@ -102,7 +102,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   }
 
   const inWishlist = isInWishlist(product.id);
-  const primaryBadge = product.badges && product.badges.length > 0 ? product.badges[0] : null;
+  const eligibleBadges = (product.badges || []).filter(
+    (b) => b.trim().toLowerCase() !== 'low stock'
+  );
+  const primaryBadge = eligibleBadges.length > 0 ? eligibleBadges[0] : null;
 
   // Concise fabric description avoiding tiny text & excessive truncation on narrow cards
   const conciseFabric = product.fabric
@@ -195,8 +198,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               className={`inline-flex items-center px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-none text-[9.5px] font-semibold tracking-[0.16em] uppercase shadow-sm ${
                 primaryBadge === 'Sold Out'
                   ? 'bg-[#2B1B1E] text-white'
-                  : primaryBadge === 'Low Stock'
-                  ? 'bg-[#8C6F5B] text-white'
                   : primaryBadge === 'Bestseller'
                   ? 'bg-[#B58A3C] text-white'
                   : 'bg-[#5E1224] text-[#FCF8F0]'
@@ -376,7 +377,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                         ? 'bg-[#FCF8F0] text-gray-700 border-[#E8DFD0]'
                         : 'bg-gray-100 text-gray-400 line-through border-gray-200'
                     }`}
-                    title={`${displaySize}: ${v.stock > 0 ? `${v.stock} in stock` : 'Sold out'}`}
+                    title={`${displaySize}: ${v.stock > 0 ? 'In stock' : 'Sold out'}`}
                   >
                     {displaySize}
                   </span>

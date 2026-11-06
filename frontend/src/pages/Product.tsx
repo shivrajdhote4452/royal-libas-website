@@ -463,20 +463,20 @@ export const ProductPage: React.FC = () => {
                     {/* Badges on first photo */}
                     {idx === 0 && (
                       <div className="absolute top-3.5 left-3.5 z-10 flex flex-col gap-1.5">
-                        {product.badges?.map((badge) => (
-                          <span
-                            key={badge}
-                            className={`px-3 py-1 rounded-none text-[10px] font-bold uppercase tracking-[0.2em] shadow-sm ${
-                              badge === 'Bestseller'
-                                ? 'bg-[#B58A3C] text-[#2B1B1E]'
-                                : badge === 'Low Stock'
-                                ? 'bg-[#5E1224] text-[#FCF8F0]'
-                                : 'bg-[#2B1B1E] text-[#FCF8F0]'
-                            }`}
-                          >
-                            {badge}
-                          </span>
-                        ))}
+                        {product.badges
+                          ?.filter((badge) => badge.trim().toLowerCase() !== 'low stock')
+                          .map((badge) => (
+                            <span
+                              key={badge}
+                              className={`px-3 py-1 rounded-none text-[10px] font-bold uppercase tracking-[0.2em] shadow-sm ${
+                                badge === 'Bestseller'
+                                  ? 'bg-[#B58A3C] text-[#2B1B1E]'
+                                  : 'bg-[#2B1B1E] text-[#FCF8F0]'
+                              }`}
+                            >
+                              {badge}
+                            </span>
+                          ))}
                       </div>
                     )}
 
@@ -549,20 +549,20 @@ export const ProductPage: React.FC = () => {
 
                 {/* Badges */}
                 <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5">
-                  {product.badges?.map((badge) => (
-                    <span
-                      key={badge}
-                      className={`px-3 py-1 rounded-none text-[10px] font-bold uppercase tracking-[0.2em] shadow-sm ${
-                        badge === 'Bestseller'
-                          ? 'bg-[#B58A3C] text-[#2B1B1E]'
-                          : badge === 'Low Stock'
-                          ? 'bg-[#5E1224] text-[#FCF8F0]'
-                          : 'bg-[#2B1B1E] text-[#FCF8F0]'
-                      }`}
-                    >
-                      {badge}
-                    </span>
-                  ))}
+                  {product.badges
+                    ?.filter((badge) => badge.trim().toLowerCase() !== 'low stock')
+                    .map((badge) => (
+                      <span
+                        key={badge}
+                        className={`px-3 py-1 rounded-none text-[10px] font-bold uppercase tracking-[0.2em] shadow-sm ${
+                          badge === 'Bestseller'
+                            ? 'bg-[#B58A3C] text-[#2B1B1E]'
+                            : 'bg-[#2B1B1E] text-[#FCF8F0]'
+                        }`}
+                      >
+                        {badge}
+                      </span>
+                    ))}
                 </div>
 
                 {/* Wishlist Button */}
