@@ -342,7 +342,17 @@ class Coupon(Base):
     value = Column(Numeric(10, 2), nullable=False)
     min_order_value = Column(Numeric(10, 2), default=0.00, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    usage_limit = Column(Integer, nullable=True)
+    used_count = Column(Integer, default=0, nullable=False)
+    valid_from = Column(DateTime(timezone=True), nullable=True)
+    valid_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=True,
+    )
 
 
 class ReturnRequest(Base):

@@ -259,5 +259,26 @@ def run_migrations(engine: Engine) -> None:
                 else:
                     conn.execute(text("ALTER TABLE orders ADD COLUMN invoice_url VARCHAR(500);"))
 
+        # 8. Coupons table migrations for usage_limit, used_count, valid_from, valid_until, updated_at
+        if "coupons" in existing_tables:
+            existing_coupon_cols = {col["name"] for col in inspector.get_columns("coupons")}
+            coupon_cols = [
+                ("usage_limit", "INTEGER", "INTEGER"),
+                ("used_count", "INTEGER DEFAULT 0", "INTEGER DEFAULT 0"),
+                ("valid_from", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
+                ("valid_until", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
+                ("updated_at", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
+            ]
+            for col_name, sqlite_type, pg_type in coupon_cols:
+                if col_name not in existing_coupon_cols:
+                    logger.info(f"Adding column '{col_name}' to coupons table...")
+                    if dialect_name == "postgresql":
+                        conn.execute(text(f"ALTER TABLE coupons ADD COLUMN IF NOT EXISTS {col_name} {pg_type};"))
+                    else:
+                        conn.execute(text(f"ALTER TABLE coupons ADD COLUMN {col_name} {sqlite_type};"))
+
+            # Normalize pre-existing coupons with NULL used_count to 0
+            conn.execute(text("UPDATE coupons SET used_count = 0 WHERE used_count IS NULL;"))
+
     logger.info("Database schema migrations completed successfully.")
 

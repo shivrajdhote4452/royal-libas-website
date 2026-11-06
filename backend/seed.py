@@ -45,10 +45,48 @@ COLLECTIONS_DATA = [
 
 COUPONS_DATA = [
     {
+        "code": "WELCOME10",
+        "type": "PERCENT",
+        "value": Decimal("10.00"),
+        "min_order_value": Decimal("1000.00"),
+        "usage_limit": 500,
+        "used_count": 24,
+        "is_active": True,
+    },
+    {
+        "code": "FESTIVE100",
+        "type": "FLAT",
+        "value": Decimal("100.00"),
+        "min_order_value": Decimal("2000.00"),
+        "usage_limit": 1000,
+        "used_count": 68,
+        "is_active": True,
+    },
+    {
+        "code": "SUMMER15",
+        "type": "PERCENT",
+        "value": Decimal("15.00"),
+        "min_order_value": Decimal("1500.00"),
+        "usage_limit": 300,
+        "used_count": 0,
+        "is_active": False,
+    },
+    {
+        "code": "LIBAS200",
+        "type": "FLAT",
+        "value": Decimal("200.00"),
+        "min_order_value": Decimal("3000.00"),
+        "usage_limit": 1000,
+        "used_count": 120,
+        "is_active": True,
+    },
+    {
         "code": "ROYAL10",
         "type": "PERCENT",
         "value": Decimal("10.00"),
         "min_order_value": Decimal("1999.00"),
+        "usage_limit": None,
+        "used_count": 0,
         "is_active": True,
     },
     {
@@ -56,20 +94,8 @@ COUPONS_DATA = [
         "type": "FLAT",
         "value": Decimal("200.00"),
         "min_order_value": Decimal("2999.00"),
-        "is_active": True,
-    },
-    {
-        "code": "WELCOME10",
-        "type": "PERCENT",
-        "value": Decimal("10.00"),
-        "min_order_value": Decimal("1500.00"),
-        "is_active": True,
-    },
-    {
-        "code": "FESTIVE100",
-        "type": "FLAT",
-        "value": Decimal("100.00"),
-        "min_order_value": Decimal("1000.00"),
+        "usage_limit": None,
+        "used_count": 0,
         "is_active": True,
     },
 ]
@@ -593,6 +619,8 @@ def seed_database(session_factory=None, allow_production_sample_seed: bool = Fal
                     type=cpdata["type"],
                     value=cpdata["value"],
                     min_order_value=cpdata["min_order_value"],
+                    usage_limit=cpdata.get("usage_limit"),
+                    used_count=cpdata.get("used_count", 0),
                     is_active=cpdata["is_active"],
                 )
                 db.add(coupon)

@@ -65,6 +65,8 @@ jobs:
           python backend/tests/test_bulk_inventory_adjustment.py
           python backend/tests/test_postgres_concurrency.py
           python backend/tests/test_postgres_variant_migration.py
+          python backend/tests/test_postgres_coupon_migration.py
+          python backend/tests/test_coupons_management.py
           python backend/tests/test_admin_upgrade.py
           python backend/tests/test_size_chart_cleanup_script.py
           python backend/tests/test_variant_availability.py
