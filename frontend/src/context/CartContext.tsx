@@ -125,6 +125,46 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Sync state on cross-tab storage changes or external custom events
   useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === COUPON_STORAGE_KEY) {
+        // Abort in-flight requests and invalidate sequence in this tab so pending responses cannot restore old state
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+        validationSeqRef.current += 1;
+
+        const newCode = e.newValue ? e.newValue.trim().toUpperCase() : null;
+        if (!newCode) {
+          setAppliedCouponCode(null);
+          setAppliedCoupon(null);
+          setCouponStatus('IDLE');
+          setCouponError(null);
+          setIsValidatingCoupon(false);
+        } else {
+          setAppliedCouponCode(newCode);
+          setAppliedCoupon(null);
+          setCouponStatus('VALIDATING');
+          setCouponError(null);
+          setIsValidatingCoupon(true);
+        }
+      } else if (e.key === CART_STORAGE_KEY) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+        validationSeqRef.current += 1;
+
+        try {
+          if (e.newValue) {
+            setItems(JSON.parse(e.newValue));
+          } else {
+            setItems([]);
+          }
+        } catch {}
+      }
+    };
+
     const syncFromStorage = () => {
       try {
         const savedCart = localStorage.getItem(CART_STORAGE_KEY);
@@ -134,26 +174,31 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         const savedCoupon = localStorage.getItem(COUPON_STORAGE_KEY);
         const cleanCoupon = savedCoupon ? savedCoupon.trim().toUpperCase() : null;
+
         setAppliedCouponCode((prev) => {
           if (prev !== cleanCoupon) {
+            if (abortControllerRef.current) {
+              abortControllerRef.current.abort();
+              abortControllerRef.current = null;
+            }
+            validationSeqRef.current += 1;
+
             if (!cleanCoupon) {
               setAppliedCoupon(null);
               setCouponStatus('IDLE');
               setCouponError(null);
+              setIsValidatingCoupon(false);
             } else {
+              setAppliedCoupon(null);
               setCouponStatus('VALIDATING');
+              setCouponError(null);
+              setIsValidatingCoupon(true);
             }
             return cleanCoupon;
           }
           return prev;
         });
       } catch {}
-    };
-
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === CART_STORAGE_KEY || e.key === COUPON_STORAGE_KEY) {
-        syncFromStorage();
-      }
     };
 
     window.addEventListener('storage', handleStorage);

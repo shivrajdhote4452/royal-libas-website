@@ -398,6 +398,8 @@ class OrderCreateRequest(BaseModel):
     address: AddressCreate
     items: List[OrderItemRequest]
     coupon_code: Optional[str] = None
+    expected_discount: Optional[Decimal] = None
+    expected_total: Optional[Decimal] = None
 
     @field_validator("customer_name")
     @classmethod

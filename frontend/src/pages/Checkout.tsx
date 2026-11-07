@@ -203,6 +203,9 @@ export const Checkout: React.FC = () => {
 
       // Revalidate coupon authoritatively against live server before placement
       let authoritativeCouponCode: string | undefined = undefined;
+      let authoritativeDiscount = discountAmount;
+      let authoritativeTotal = estimatedTotal;
+
       if (appliedCouponCode) {
         try {
           const valRes = await validateCoupon(appliedCouponCode, subtotal);
@@ -215,7 +218,26 @@ export const Checkout: React.FC = () => {
             setIsSubmitting(false);
             return;
           }
+
+          const freshDiscount = roundCurrency(Number(valRes.discount));
+          const freshTotal = roundCurrency(Math.max(0, subtotal - freshDiscount + shippingCharge));
+
+          // Guard against admin changing coupon rules/value while checkout was open
+          if (
+            Math.abs(freshDiscount - discountAmount) > 0.005 ||
+            Math.abs(freshTotal - estimatedTotal) > 0.005
+          ) {
+            await revalidateCoupon(subtotal);
+            setFormError(
+              `The coupon discount or order total has changed (discount was ${formatPrice(discountAmount)}, now ${formatPrice(freshDiscount)}; total is ${formatPrice(freshTotal)}). Please review your revised quote and click submit again.`
+            );
+            setIsSubmitting(false);
+            return;
+          }
+
           authoritativeCouponCode = valRes.code;
+          authoritativeDiscount = freshDiscount;
+          authoritativeTotal = freshTotal;
         } catch {
           setFormError(
             'Unable to verify your coupon with the server right now. Please check your connection and retry, or remove the coupon to proceed.'
@@ -237,13 +259,15 @@ export const Checkout: React.FC = () => {
         return;
       }
 
-      // 2. Submit authoritative order payload
+      // 2. Submit authoritative order payload with expected quote verification
       const orderPayload: OrderCreatePayload = {
         customer_name: customerName.trim(),
         phone: cleanPhone,
         payment_method: paymentMethod,
         shipping_method: shippingMethod,
         coupon_code: authoritativeCouponCode,
+        expected_discount: authoritativeDiscount,
+        expected_total: authoritativeTotal,
         items: cartItemsPayload,
         address: {
           name: customerName.trim(),
@@ -344,9 +368,20 @@ export const Checkout: React.FC = () => {
       }
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to place order. Please try again.';
-      if (errorMessage.toLowerCase().includes('coupon')) {
+      if (
+        errorMessage.toLowerCase().includes('order total') ||
+        errorMessage.toLowerCase().includes('changed') ||
+        errorMessage.toLowerCase().includes('discount')
+      ) {
+        await revalidateCoupon(subtotal);
+        setFormError(
+          `${errorMessage} Your total has been updated. Please review your quote and click submit again.`
+        );
+      } else if (errorMessage.toLowerCase().includes('coupon')) {
         removeCoupon();
-        setFormError(`${errorMessage} The coupon has been removed. Please review your revised order total below before placing your order.`);
+        setFormError(
+          `${errorMessage} The coupon has been removed. Please review your revised order total below before placing your order.`
+        );
       } else {
         setFormError(errorMessage);
       }

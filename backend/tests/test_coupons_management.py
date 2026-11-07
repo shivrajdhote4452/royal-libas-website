@@ -793,6 +793,115 @@ class TestCouponsManagement(unittest.TestCase):
         self.assertEqual(fail_res.status_code, 400)
         self.assertIn("no longer active", fail_res.json()["detail"].lower())
 
+    def test_13_coupon_rules_changed_before_order_placement_rejected_and_rolled_back(self):
+        """Verify that if coupon value or rules change between quote display and order placement:
+        1. An order submitted with an outdated expected total/discount is rejected with HTTP 409 Conflict.
+        2. Transaction rollback preserves stock and does NOT consume coupon usage count.
+        3. Once the customer reviews and submits with the refreshed quote, the order succeeds.
+        """
+        # Create coupon RULECHG10: 10% off
+        c_res = client.post(
+            "/admin/coupons",
+            json={
+                "code": "RULECHG10",
+                "type": "PERCENT",
+                "value": "10.00",
+                "min_order_value": "1000.00",
+                "usage_limit": 5,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(c_res.status_code, 201)
+        cid = c_res.json()["id"]
+
+        # Initial subtotal: self.variant.selling_price * 1 (e.g. 2000.00)
+        unit_price = Decimal(str(self.variant.selling_price))
+        initial_subtotal = unit_price
+        initial_discount = (initial_subtotal * Decimal("10") / Decimal("100")).quantize(Decimal("0.01"))
+        initial_total = (initial_subtotal - initial_discount).quantize(Decimal("0.01"))
+
+        # Snapshot starting stock
+        db = SessionLocal()
+        try:
+            v_start = db.query(ProductVariant).filter(ProductVariant.id == self.variant.id).first()
+            start_stock = v_start.stock
+        finally:
+            db.close()
+
+        # Admin updates coupon value to 5% while customer is on checkout page
+        upd_res = client.put(
+            f"/admin/coupons/{cid}",
+            json={
+                "code": "RULECHG10",
+                "type": "PERCENT",
+                "value": "5.00",
+                "min_order_value": "1000.00",
+                "usage_limit": 5,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(upd_res.status_code, 200)
+
+        # Customer attempts to submit order with outdated expected quote (reviewed before admin changed value)
+        stale_order_payload = {
+            "customer_name": "Review Customer",
+            "phone": "9876543210",
+            "payment_method": "COD",
+            "shipping_method": "STANDARD",
+            "coupon_code": "RULECHG10",
+            "expected_discount": float(initial_discount),
+            "expected_total": float(initial_total),
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "address": {
+                "name": "Review Customer",
+                "phone": "9876543210",
+                "pincode": "400050",
+                "line1": "Bandra West",
+                "city": "Mumbai",
+                "state": "Maharashtra",
+            },
+        }
+
+        # Submission MUST be rejected with HTTP 409 Conflict
+        conflict_res = client.post("/orders", json=stale_order_payload)
+        self.assertEqual(conflict_res.status_code, 409)
+        self.assertIn("has changed", conflict_res.json()["detail"].lower())
+
+        # Verify rollback: stock not decremented, coupon used_count remains 0
+        db = SessionLocal()
+        try:
+            v_chk = db.query(ProductVariant).filter(ProductVariant.id == self.variant.id).first()
+            self.assertEqual(v_chk.stock, start_stock)
+            c_chk = db.query(Coupon).filter(Coupon.id == cid).first()
+            self.assertEqual(c_chk.used_count, 0)
+        finally:
+            db.close()
+
+        # Customer reviews updated quote: 5% discount = initial_subtotal * 0.05
+        revised_discount = (initial_subtotal * Decimal("5") / Decimal("100")).quantize(Decimal("0.01"))
+        revised_total = (initial_subtotal - revised_discount).quantize(Decimal("0.01"))
+
+        revised_order_payload = dict(stale_order_payload)
+        revised_order_payload["expected_discount"] = float(revised_discount)
+        revised_order_payload["expected_total"] = float(revised_total)
+
+        # Re-submitting with reviewed quote succeeds
+        ok_res = client.post("/orders", json=revised_order_payload)
+        self.assertEqual(ok_res.status_code, 201)
+        ok_data = ok_res.json()
+        self.assertEqual(Decimal(str(ok_data["discount"])), revised_discount)
+        self.assertEqual(Decimal(str(ok_data["total"])), revised_total)
+
+        # Verify stock decremented and coupon count consumed
+        db = SessionLocal()
+        try:
+            v_after = db.query(ProductVariant).filter(ProductVariant.id == self.variant.id).first()
+            self.assertEqual(v_after.stock, start_stock - 1)
+            c_after = db.query(Coupon).filter(Coupon.id == cid).first()
+            self.assertEqual(c_after.used_count, 1)
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
