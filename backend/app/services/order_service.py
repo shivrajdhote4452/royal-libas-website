@@ -364,6 +364,23 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
 
         # Authoritative total calculated by single function
         total = (subtotal - discount + shipping_charge).quantize(Decimal("0.01"))
+
+        # Verify quote consistency: ensure customer is never charged an amount different from what they reviewed
+        if payload.expected_total is not None:
+            expected_tot = Decimal(str(payload.expected_total)).quantize(Decimal("0.01"))
+            if total != expected_tot:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"The order total has changed from Rs. {expected_tot:.2f} to Rs. {total:.2f}. Please review the updated total and submit again.",
+                )
+
+        if payload.expected_discount is not None:
+            expected_disc = Decimal(str(payload.expected_discount)).quantize(Decimal("0.01"))
+            if discount != expected_disc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"The coupon discount has changed from Rs. {expected_disc:.2f} to Rs. {discount:.2f}. Please review the updated total and submit again.",
+                )
         order_code = generate_order_code(db)
         order_token = generate_order_token()
 
