@@ -76,9 +76,20 @@ export async function fetchCollections(includeArchived = false): Promise<Collect
   return response.json();
 }
 
-export function formatPrice(amount: number | null | undefined): string {
-  if (amount === null || amount === undefined) return '';
-  return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
+export function roundCurrency(amount: number): number {
+  return Math.round((Number(amount) + Number.EPSILON) * 100) / 100;
+}
+
+export function formatPrice(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '') return '';
+  const parsed = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(parsed)) return '';
+  const num = roundCurrency(parsed);
+  const hasPaise = Math.abs(num - Math.trunc(num)) >= 0.005;
+  return `₹ ${num.toLocaleString('en-IN', {
+    minimumFractionDigits: hasPaise ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 import {
@@ -117,11 +128,16 @@ export async function fetchActiveCoupons(): Promise<CouponPublic[]> {
   return response.json();
 }
 
-export async function validateCoupon(code: string, subtotal: number): Promise<CouponValidateResponse> {
+export async function validateCoupon(
+  code: string,
+  subtotal: number,
+  signal?: AbortSignal
+): Promise<CouponValidateResponse> {
   const response = await fetch(`${API_BASE_URL}/coupons/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, subtotal }),
+    signal,
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

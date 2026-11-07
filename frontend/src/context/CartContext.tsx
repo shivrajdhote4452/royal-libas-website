@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { validateCoupon } from '../lib/api';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
+import { validateCoupon, roundCurrency } from '../lib/api';
 import { CouponValidateResponse } from '../types/order';
 
 export interface CartItem {
@@ -13,6 +13,8 @@ export interface CartItem {
   image: string | null;
   quantity: number;
 }
+
+export type CouponStatus = 'IDLE' | 'VALIDATING' | 'RESOLVED' | 'ERROR' | 'REJECTED';
 
 interface CartContextType {
   items: CartItem[];
@@ -31,10 +33,11 @@ interface CartContextType {
   appliedCoupon: CouponValidateResponse | null;
   couponDiscount: number;
   couponError: string | null;
+  couponStatus: CouponStatus;
   isValidatingCoupon: boolean;
   applyCoupon: (code: string) => Promise<{ success: boolean; message?: string }>;
   removeCoupon: () => void;
-  revalidateCoupon: (customSubtotal?: number) => Promise<void>;
+  revalidateCoupon: (customSubtotal?: number) => Promise<CouponValidateResponse | null>;
 }
 
 const CartContext = createContext<CartContextType>({
@@ -54,10 +57,11 @@ const CartContext = createContext<CartContextType>({
   appliedCoupon: null,
   couponDiscount: 0,
   couponError: null,
+  couponStatus: 'IDLE',
   isValidatingCoupon: false,
   applyCoupon: async () => ({ success: false }),
   removeCoupon: () => {},
-  revalidateCoupon: async () => {},
+  revalidateCoupon: async () => null,
 });
 
 const CART_STORAGE_KEY = 'royal_libas_cart_v1';
@@ -82,10 +86,31 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   });
 
+  // Track validation status explicitly to block premature order submission and reflect pending/error states
+  const [couponStatus, setCouponStatus] = useState<CouponStatus>(() => {
+    try {
+      const saved = localStorage.getItem(COUPON_STORAGE_KEY);
+      return saved && saved.trim() ? 'VALIDATING' : 'IDLE';
+    } catch {
+      return 'IDLE';
+    }
+  });
+
   const [appliedCoupon, setAppliedCoupon] = useState<CouponValidateResponse | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
-  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(COUPON_STORAGE_KEY);
+      return Boolean(saved && saved.trim());
+    } catch {
+      return false;
+    }
+  });
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Request sequencing and AbortController to discard stale asynchronous responses
+  const validationSeqRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const openDrawer = () => setIsDrawerOpen(true);
   const closeDrawer = () => setIsDrawerOpen(false);
@@ -108,7 +133,20 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setItems(parsed);
         }
         const savedCoupon = localStorage.getItem(COUPON_STORAGE_KEY);
-        setAppliedCouponCode(savedCoupon ? savedCoupon.trim().toUpperCase() : null);
+        const cleanCoupon = savedCoupon ? savedCoupon.trim().toUpperCase() : null;
+        setAppliedCouponCode((prev) => {
+          if (prev !== cleanCoupon) {
+            if (!cleanCoupon) {
+              setAppliedCoupon(null);
+              setCouponStatus('IDLE');
+              setCouponError(null);
+            } else {
+              setCouponStatus('VALIDATING');
+            }
+            return cleanCoupon;
+          }
+          return prev;
+        });
       } catch {}
     };
 
@@ -127,50 +165,101 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = items.reduce((sum, item) => sum + item.sellingPrice * item.quantity, 0);
+  const subtotal = roundCurrency(items.reduce((sum, item) => sum + item.sellingPrice * item.quantity, 0));
 
-  const couponDiscount = appliedCoupon?.valid ? Number(appliedCoupon.discount) : 0;
+  const couponDiscount = appliedCoupon?.valid ? roundCurrency(Number(appliedCoupon.discount)) : 0;
 
   const removeCoupon = useCallback(() => {
+    // Abort in-flight requests and invalidate any pending sequence
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    validationSeqRef.current += 1;
+
     setAppliedCouponCode(null);
     setAppliedCoupon(null);
     setCouponError(null);
+    setCouponStatus('IDLE');
+    setIsValidatingCoupon(false);
     try {
       localStorage.removeItem(COUPON_STORAGE_KEY);
     } catch {}
   }, []);
 
-  const revalidateCoupon = useCallback(async (currentSubtotal?: number) => {
+  const revalidateCoupon = useCallback(async (currentSubtotal?: number): Promise<CouponValidateResponse | null> => {
     const subtotalToUse = currentSubtotal !== undefined ? currentSubtotal : subtotal;
-    if (!appliedCouponCode) {
+    const codeToValidate = appliedCouponCode;
+
+    if (!codeToValidate) {
       setAppliedCoupon(null);
-      return;
+      setCouponStatus('IDLE');
+      setIsValidatingCoupon(false);
+      return null;
     }
 
     if (items.length === 0 || subtotalToUse <= 0) {
       setAppliedCoupon(null);
-      return;
+      setCouponStatus('IDLE');
+      setIsValidatingCoupon(false);
+      return null;
     }
 
+    // Abort previous in-flight request and increment request sequence ID
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const currentSeq = ++validationSeqRef.current;
+
     setIsValidatingCoupon(true);
+    setCouponStatus('VALIDATING');
+    setCouponError(null);
+
     try {
-      const res = await validateCoupon(appliedCouponCode, subtotalToUse);
+      const res = await validateCoupon(codeToValidate, subtotalToUse, abortController.signal);
+      
+      // If a newer request was dispatched or coupon was removed, drop this stale response!
+      if (currentSeq !== validationSeqRef.current) {
+        return null;
+      }
+
       if (res.valid) {
-        setAppliedCoupon({ ...res, discount: Number(res.discount) });
+        const disc = roundCurrency(Number(res.discount));
+        const updated = { ...res, discount: disc };
+        setAppliedCoupon(updated);
+        setCouponStatus('RESOLVED');
         setCouponError(null);
+        return updated;
       } else {
-        // Coupon became ineligible, expired, or deactivated
+        // Coupon became ineligible, expired, deactivated, or min order no longer met
         setAppliedCoupon(null);
         setAppliedCouponCode(null);
+        setCouponStatus('REJECTED');
         setCouponError(res.message || 'Coupon is no longer eligible for this cart.');
         try {
           localStorage.removeItem(COUPON_STORAGE_KEY);
         } catch {}
+        return null;
       }
-    } catch {
-      // In case of transient validation error, keep previous validation state
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        // Deliberately superseded
+        return null;
+      }
+      if (currentSeq !== validationSeqRef.current) {
+        return null;
+      }
+
+      // Network or server error: do not silently retain a misleading discount
+      setAppliedCoupon(null);
+      setCouponStatus('ERROR');
+      setCouponError('Unable to verify coupon right now. Please check your connection and retry, or remove the coupon to proceed.');
+      return null;
     } finally {
-      setIsValidatingCoupon(false);
+      if (currentSeq === validationSeqRef.current) {
+        setIsValidatingCoupon(false);
+      }
     }
   }, [appliedCouponCode, subtotal, items.length]);
 
@@ -181,13 +270,38 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { success: false, message: 'Please enter a coupon code.' };
     }
 
+    if (subtotal <= 0 || items.length === 0) {
+      setCouponError('Your cart is empty. Add items before applying a coupon.');
+      return { success: false, message: 'Your cart is empty.' };
+    }
+
+    // Abort previous in-flight request and increment sequence ID
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const currentSeq = ++validationSeqRef.current;
+
+    setAppliedCouponCode(cleanCode);
+    setAppliedCoupon(null); // Clear previous coupon while validating new one
     setIsValidatingCoupon(true);
+    setCouponStatus('VALIDATING');
     setCouponError(null);
+
     try {
-      const res = await validateCoupon(cleanCode, subtotal);
+      const res = await validateCoupon(cleanCode, subtotal, abortController.signal);
+      
+      if (currentSeq !== validationSeqRef.current) {
+        return { success: false, message: 'Superseded.' };
+      }
+
       if (res.valid) {
+        const disc = roundCurrency(Number(res.discount));
+        const updated = { ...res, discount: disc };
         setAppliedCouponCode(cleanCode);
-        setAppliedCoupon({ ...res, discount: Number(res.discount) });
+        setAppliedCoupon(updated);
+        setCouponStatus('RESOLVED');
         setCouponError(null);
         try {
           localStorage.setItem(COUPON_STORAGE_KEY, cleanCode);
@@ -198,22 +312,29 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCouponError(errMsg);
         setAppliedCouponCode(null);
         setAppliedCoupon(null);
+        setCouponStatus('REJECTED');
         try {
           localStorage.removeItem(COUPON_STORAGE_KEY);
         } catch {}
         return { success: false, message: errMsg };
       }
     } catch (err: any) {
-      const errMsg = err.message || 'Failed to validate coupon.';
+      if (err.name === 'AbortError') {
+        return { success: false, message: 'Cancelled.' };
+      }
+      if (currentSeq !== validationSeqRef.current) {
+        return { success: false, message: 'Superseded.' };
+      }
+
+      const errMsg = 'Unable to verify coupon right now. Please check your connection and retry, or remove the coupon to proceed.';
       setCouponError(errMsg);
-      setAppliedCouponCode(null);
       setAppliedCoupon(null);
-      try {
-        localStorage.removeItem(COUPON_STORAGE_KEY);
-      } catch {}
+      setCouponStatus('ERROR');
       return { success: false, message: errMsg };
     } finally {
-      setIsValidatingCoupon(false);
+      if (currentSeq === validationSeqRef.current) {
+        setIsValidatingCoupon(false);
+      }
     }
   };
 
@@ -223,6 +344,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       revalidateCoupon(subtotal);
     } else if (items.length === 0 || subtotal <= 0) {
       if (appliedCoupon) setAppliedCoupon(null);
+      setCouponStatus('IDLE');
     }
   }, [subtotal, items.length, appliedCouponCode, revalidateCoupon]);
 
@@ -303,6 +425,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         appliedCoupon,
         couponDiscount,
         couponError,
+        couponStatus,
         isValidatingCoupon,
         applyCoupon,
         removeCoupon,

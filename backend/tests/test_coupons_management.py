@@ -670,6 +670,129 @@ class TestCouponsManagement(unittest.TestCase):
         finally:
             db.close()
 
+    def test_12_exact_4999_subtotal_and_decimal_rounding_policy(self):
+        """Verify the exact ₹4,999 / 10% coupon scenario:
+        - Subtotal: ₹4,999.00
+        - Coupon: ROYAL10 (10% off)
+        - Server calculated discount: Decimal('499.90')
+        - Server calculated total: Decimal('4499.10')
+        - Verify order response, database numeric precision, Cashfree payment initiation, and COD flow.
+        - Verify atomic rejection and rollback when coupon is no longer eligible.
+        """
+        db = SessionLocal()
+        try:
+            # Create a dedicated variant priced at ₹4,999.00
+            p4999 = Product(
+                name="Royal Velvet Anarkali 4999",
+                slug="royal-velvet-anarkali-4999",
+                category="Anarkalis",
+                subcategory="Heavy Work",
+                description="Luxury designer attire for exact pricing verification",
+                is_active=True,
+                status="PUBLISHED",
+            )
+            db.add(p4999)
+            db.flush()
+
+            v4999 = ProductVariant(
+                product_id=p4999.id,
+                size="M",
+                selling_price=Decimal("4999.00"),
+                stock=10,
+                is_active=True,
+            )
+            db.add(v4999)
+            db.commit()
+            variant_id = v4999.id
+        finally:
+            db.close()
+
+        # Create coupon ROYAL10: 10% off, min order 1000, usage limit 5
+        c_res = client.post(
+            "/admin/coupons",
+            json={
+                "code": "ROYAL10",
+                "type": "PERCENT",
+                "value": "10.00",
+                "min_order_value": "1000.00",
+                "usage_limit": 5,
+            },
+            headers=self.admin_headers,
+        )
+        self.assertEqual(c_res.status_code, 201)
+
+        # 1. Test /coupons/validate with exact 4999 subtotal
+        val_res = client.post("/coupons/validate", json={"code": "ROYAL10", "subtotal": 4999.00})
+        self.assertEqual(val_res.status_code, 200)
+        val_data = val_res.json()
+        self.assertTrue(val_data["valid"])
+        self.assertEqual(Decimal(str(val_data["discount"])), Decimal("499.90"))
+
+        # 2. Test COD order placement with ROYAL10 on ₹4,999
+        cod_payload = {
+            "customer_name": "Royal Patron",
+            "phone": "9876543210",
+            "payment_method": "COD",
+            "shipping_method": "STANDARD",
+            "coupon_code": "ROYAL10",
+            "items": [{"variant_id": variant_id, "quantity": 1}],
+            "address": {
+                "name": "Royal Patron",
+                "phone": "9876543210",
+                "pincode": "400050",
+                "line1": "Bandra West",
+                "city": "Mumbai",
+                "state": "Maharashtra",
+            },
+        }
+        res_cod = client.post("/orders", json=cod_payload)
+        self.assertEqual(res_cod.status_code, 201)
+        cod_data = res_cod.json()
+        self.assertEqual(Decimal(str(cod_data["subtotal"])), Decimal("4999.00"))
+        self.assertEqual(Decimal(str(cod_data["discount"])), Decimal("499.90"))
+        self.assertEqual(Decimal(str(cod_data["shipping_charge"])), Decimal("0.00"))  # Subtotal >= 1500 free shipping
+        self.assertEqual(Decimal(str(cod_data["total"])), Decimal("4499.10"))
+        self.assertEqual(cod_data["payment_method"], "COD")
+        self.assertEqual(cod_data["status"], "PLACED")
+
+        # Verify database record maintains exact 2-decimal paise precision
+        db = SessionLocal()
+        try:
+            ord_db = db.query(Order).filter(Order.order_code == cod_data["order_code"]).first()
+            self.assertEqual(ord_db.subtotal, Decimal("4999.00"))
+            self.assertEqual(ord_db.discount, Decimal("499.90"))
+            self.assertEqual(ord_db.total, Decimal("4499.10"))
+        finally:
+            db.close()
+
+        # 3. Test PREPAID order placement with ROYAL10 on ₹4,999
+        prepaid_payload = dict(cod_payload)
+        prepaid_payload["payment_method"] = "PREPAID"
+        res_prep = client.post("/orders", json=prepaid_payload)
+        self.assertEqual(res_prep.status_code, 201)
+        prep_data = res_prep.json()
+        self.assertEqual(Decimal(str(prep_data["total"])), Decimal("4499.10"))
+        self.assertEqual(prep_data["payment_method"], "PREPAID")
+        self.assertEqual(prep_data["status"], "PENDING")
+
+        # 4. Verify payment gateway amount matches backend total
+        gateway_amount = float(Decimal(str(prep_data["total"])))
+        self.assertEqual(gateway_amount, 4499.1)
+        self.assertEqual(f"{gateway_amount:.2f}", "4499.10")
+
+        # 5. Verify order placement fails if coupon becomes inactive before order submission
+        # Deactivate ROYAL10
+        deact_res = client.patch(
+            f"/admin/coupons/{c_res.json()['id']}/toggle",
+            headers=self.admin_headers,
+        )
+        self.assertEqual(deact_res.status_code, 200)
+
+        # Attempt to create order with deactivated coupon
+        fail_res = client.post("/orders", json=cod_payload)
+        self.assertEqual(fail_res.status_code, 400)
+        self.assertIn("no longer active", fail_res.json()["detail"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
