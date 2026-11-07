@@ -85,12 +85,13 @@ class TestPostgresCouponMigration(unittest.TestCase):
             conn.execute(text("DELETE FROM orders;"))
             conn.execute(text("DELETE FROM coupons;"))
 
-            # Strip the 5 columns from coupons to simulate pre-migration state
+            # Strip the columns from coupons to simulate pre-migration state
             conn.execute(text("ALTER TABLE coupons DROP COLUMN IF EXISTS usage_limit;"))
             conn.execute(text("ALTER TABLE coupons DROP COLUMN IF EXISTS used_count;"))
             conn.execute(text("ALTER TABLE coupons DROP COLUMN IF EXISTS valid_from;"))
             conn.execute(text("ALTER TABLE coupons DROP COLUMN IF EXISTS valid_until;"))
             conn.execute(text("ALTER TABLE coupons DROP COLUMN IF EXISTS updated_at;"))
+            conn.execute(text("ALTER TABLE coupons DROP COLUMN IF EXISTS is_public;"))
 
             # Seed representative pre-migration coupons (legacy schema)
             conn.execute(text("""
@@ -115,10 +116,10 @@ class TestPostgresCouponMigration(unittest.TestCase):
             conn.execute(text("DELETE FROM coupons;"))
 
     def test_01_migration_adds_coupon_columns_with_correct_types(self):
-        """Verify run_migrations adds usage_limit, used_count, valid_from, valid_until, updated_at to coupons table."""
+        """Verify run_migrations adds usage_limit, used_count, valid_from, valid_until, updated_at, is_public to coupons table."""
         inspector = inspect(self.engine)
         cols_before = {c["name"] for c in inspector.get_columns("coupons")}
-        for col in ["usage_limit", "used_count", "valid_from", "valid_until", "updated_at"]:
+        for col in ["usage_limit", "used_count", "valid_from", "valid_until", "updated_at", "is_public"]:
             self.assertNotIn(col, cols_before)
 
         # Run migration
@@ -127,7 +128,7 @@ class TestPostgresCouponMigration(unittest.TestCase):
         # Inspect after migration
         inspector_after = inspect(self.engine)
         cols_after = {c["name"]: c for c in inspector_after.get_columns("coupons")}
-        for col in ["usage_limit", "used_count", "valid_from", "valid_until", "updated_at"]:
+        for col in ["usage_limit", "used_count", "valid_from", "valid_until", "updated_at", "is_public"]:
             self.assertIn(col, cols_after)
 
         # Check types
@@ -136,6 +137,7 @@ class TestPostgresCouponMigration(unittest.TestCase):
         self.assertIn("TIMESTAMP", str(cols_after["valid_from"]["type"]).upper())
         self.assertIn("TIMESTAMP", str(cols_after["valid_until"]["type"]).upper())
         self.assertIn("TIMESTAMP", str(cols_after["updated_at"]["type"]).upper())
+        self.assertIn("BOOLEAN", str(cols_after["is_public"]["type"]).upper())
 
     def test_02_pre_existing_coupons_default_handling_and_validity(self):
         """Verify pre-existing legacy coupons have used_count=0, usage_limit=NULL (unlimited),

@@ -14,10 +14,18 @@ router = APIRouter(prefix="/coupons", tags=["coupons"])
 
 
 @router.get("", response_model=List[CouponPublicResponse])
-def list_active_coupons(db: Session = Depends(get_db)):
-    """List currently active promotional coupons for Available Offers."""
+def list_active_coupons(
+    public_only: bool = False,
+    db: Session = Depends(get_db),
+):
+    """List currently active promotional coupons.
+    If public_only is True, filters strictly to coupons designated for public storefront promotion (is_public=True).
+    """
     now = datetime.now(timezone.utc)
-    all_coupons = db.query(Coupon).filter(Coupon.is_active == True).order_by(Coupon.id.asc()).all()
+    query = db.query(Coupon).filter(Coupon.is_active == True)
+    if public_only:
+        query = query.filter(Coupon.is_public == True)
+    all_coupons = query.order_by(Coupon.id.asc()).all()
     active_coupons = []
     for c in all_coupons:
         if c.valid_from:

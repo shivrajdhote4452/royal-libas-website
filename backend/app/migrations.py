@@ -259,7 +259,7 @@ def run_migrations(engine: Engine) -> None:
                 else:
                     conn.execute(text("ALTER TABLE orders ADD COLUMN invoice_url VARCHAR(500);"))
 
-        # 8. Coupons table migrations for usage_limit, used_count, valid_from, valid_until, updated_at
+        # 8. Coupons table migrations for usage_limit, used_count, valid_from, valid_until, updated_at, is_public
         if "coupons" in existing_tables:
             existing_coupon_cols = {col["name"] for col in inspector.get_columns("coupons")}
             coupon_cols = [
@@ -268,6 +268,7 @@ def run_migrations(engine: Engine) -> None:
                 ("valid_from", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
                 ("valid_until", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
                 ("updated_at", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
+                ("is_public", "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE"),
             ]
             for col_name, sqlite_type, pg_type in coupon_cols:
                 if col_name not in existing_coupon_cols:
@@ -277,8 +278,12 @@ def run_migrations(engine: Engine) -> None:
                     else:
                         conn.execute(text(f"ALTER TABLE coupons ADD COLUMN {col_name} {sqlite_type};"))
 
-            # Normalize pre-existing coupons with NULL used_count to 0
+            # Normalize pre-existing coupons with NULL used_count to 0 and is_public to 0/False
             conn.execute(text("UPDATE coupons SET used_count = 0 WHERE used_count IS NULL;"))
+            if dialect_name == "postgresql":
+                conn.execute(text("UPDATE coupons SET is_public = FALSE WHERE is_public IS NULL;"))
+            else:
+                conn.execute(text("UPDATE coupons SET is_public = 0 WHERE is_public IS NULL;"))
 
     logger.info("Database schema migrations completed successfully.")
 

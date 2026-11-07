@@ -120,8 +120,9 @@ export async function validateCart(items: CartItemValidate[]): Promise<CartValid
   return response.json();
 }
 
-export async function fetchActiveCoupons(): Promise<CouponPublic[]> {
-  const response = await fetch(`${API_BASE_URL}/coupons`);
+export async function fetchActiveCoupons(publicOnly = false): Promise<CouponPublic[]> {
+  const url = publicOnly ? `${API_BASE_URL}/coupons?public_only=true` : `${API_BASE_URL}/coupons`;
+  const response = await fetch(url);
   if (!response.ok) {
     return [];
   }
@@ -1623,6 +1624,23 @@ export async function adminToggleCouponActive(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || 'Failed to toggle coupon status');
+  }
+  return response.json();
+}
+
+export async function adminToggleCouponPublic(
+  token: string,
+  id: number
+): Promise<AdminCoupon> {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons/${id}/toggle-public`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to toggle public promotion status');
   }
   return response.json();
 }

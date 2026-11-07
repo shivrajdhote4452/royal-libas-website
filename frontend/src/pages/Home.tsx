@@ -16,6 +16,7 @@ import { EditorialPoster } from '../components/EditorialPoster';
 import { BoutiqueHomepageSection } from '../components/BoutiqueHomepageSection';
 import { BoutiqueReviewsSection } from '../components/BoutiqueReviewsSection';
 import { CuratedMomentsSection } from '../components/CuratedMomentsSection';
+import { HomepageCouponTicket } from '../components/HomepageCouponTicket';
 import { useStoreSettings } from '../lib/settings';
 import { setMetaDescription, DEFAULT_HOMEPAGE_TITLE, DEFAULT_HOMEPAGE_DESCRIPTION } from '../lib/seo';
 
@@ -224,6 +225,9 @@ export const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Option 2: Approved Promotional Coupon Ticket Banner */}
+      <HomepageCouponTicket />
 
       {/* Connection Notification if API is offline */}
       {error && (

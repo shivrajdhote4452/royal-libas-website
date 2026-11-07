@@ -608,6 +608,7 @@ class CouponCreate(BaseModel):
     valid_from: Optional[datetime] = None
     valid_until: Optional[datetime] = None
     is_active: bool = True
+    is_public: bool = False
 
     @field_validator("code")
     @classmethod
@@ -668,6 +669,7 @@ class CouponUpdate(BaseModel):
     valid_from: Optional[datetime] = None
     valid_until: Optional[datetime] = None
     is_active: Optional[bool] = None
+    is_public: Optional[bool] = None
 
     @field_validator("code")
     @classmethod
@@ -734,6 +736,7 @@ class CouponAdminResponse(BaseModel):
     valid_from: Optional[datetime] = None
     valid_until: Optional[datetime] = None
     is_active: bool
+    is_public: bool = False
     is_expired: bool = False
     status: str = "ACTIVE"  # ACTIVE, INACTIVE, EXPIRED
     created_at: datetime
@@ -753,6 +756,7 @@ class CouponPublicResponse(BaseModel):
     valid_from: Optional[datetime] = None
     valid_until: Optional[datetime] = None
     is_active: bool
+    is_public: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
