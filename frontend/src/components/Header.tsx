@@ -362,19 +362,19 @@ export const Header: React.FC = () => {
 
             {/* ========================================================
                 RIGHT ZONE:
-                - Desktop (1024px+): Action Icons (Wishlist & Cart) between Logo and "OUR STORY",
-                  followed by Nav Links ("OUR STORY", "CONTACT US")
+                - Desktop (1024px+): Cart Action Icon between Logo and "OUR STORY",
+                  followed by Nav Links ("OUR STORY", "CONTACT US", "WISHLIST")
                 - Mobile & Tablet (< 1024px): Action Icons (Wishlist & Cart)
                 ======================================================== */}
             <div className="flex items-center flex-1 justify-end min-w-0">
-              {/* Action Icons: Wishlist & Cart (Between Logo & Our Story on desktop) */}
+              {/* Action Icons: Wishlist (mobile/tablet only) & Cart (Between Logo & Our Story on desktop) */}
               <div className="flex items-center space-x-1 sm:space-x-1.5 lg:mr-3 xl:mr-5 lg:pr-3 border-[#E8DFD0] lg:border-r">
-                {/* Wishlist */}
+                {/* Wishlist (Mobile & Tablet: <1024px) */}
                 <Link
                   to="/shop?wishlist=true"
-                  className="relative p-1.5 sm:p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
+                  className="lg:hidden relative p-1.5 sm:p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
                   title="Wishlist"
-                  aria-label="View Wishlist"
+                  aria-label={wishlistCount > 0 ? `View Wishlist (${wishlistCount} items)` : 'View Wishlist'}
                 >
                   <Heart className={`w-4.5 h-4.5 sm:w-5 sm:h-5 ${wishlistCount > 0 ? 'fill-[#5E1224] text-[#5E1224]' : ''}`} />
                   {wishlistCount > 0 && (
@@ -403,11 +403,11 @@ export const Header: React.FC = () => {
                 </button>
               </div>
 
-              {/* Desktop Right Nav (1024px+): OUR STORY & CONTACT US */}
-              <nav className="hidden lg:flex items-center space-x-5 xl:space-x-7 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui">
+              {/* Desktop Right Nav (1024px+): OUR STORY, CONTACT US & WISHLIST */}
+              <nav className="hidden lg:flex items-center space-x-4 xl:space-x-6 2xl:space-x-7 text-[11px] xl:text-xs font-semibold uppercase tracking-[0.14em] xl:tracking-[0.18em] font-ui">
                 <Link
                   to="/about"
-                  className={`transition-colors py-1 hover:text-[#5E1224] ${
+                  className={`transition-colors py-1 hover:text-[#5E1224] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#B58A3C] ${
                     location.pathname === '/about' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
                 >
@@ -415,11 +415,29 @@ export const Header: React.FC = () => {
                 </Link>
                 <Link
                   to="/contact"
-                  className={`transition-colors py-1 hover:text-[#5E1224] ${
+                  className={`transition-colors py-1 hover:text-[#5E1224] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#B58A3C] ${
                     location.pathname === '/contact' ? 'text-[#5E1224] border-b-2 border-[#B58A3C]' : 'text-gray-700'
                   }`}
                 >
                   CONTACT US
+                </Link>
+                <Link
+                  to="/shop?wishlist=true"
+                  id="desktop-wishlist-nav-link"
+                  className={`transition-colors py-1 flex items-center gap-1.5 hover:text-[#5E1224] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#B58A3C] ${
+                    location.search.includes('wishlist=true')
+                      ? 'text-[#5E1224] border-b-2 border-[#B58A3C]'
+                      : 'text-gray-700'
+                  }`}
+                  title="Wishlist"
+                  aria-label={wishlistCount > 0 ? `Wishlist (${wishlistCount} items)` : 'Wishlist'}
+                >
+                  <span>WISHLIST</span>
+                  {wishlistCount > 0 && (
+                    <span className="bg-[#B58A3C] text-white text-[9px] font-bold rounded-full h-3.5 min-w-3.5 px-1 flex items-center justify-center leading-none shadow-sm font-ui">
+                      {wishlistCount}
+                    </span>
+                  )}
                 </Link>
               </nav>
             </div>
