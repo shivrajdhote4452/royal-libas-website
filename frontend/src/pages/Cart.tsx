@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Trash2, ShoppingBag, Plus, Minus, ArrowRight, AlertTriangle, ShieldCheck, Truck } from 'lucide-react';
+import { Trash2, ShoppingBag, Plus, Minus, ArrowRight, AlertTriangle, ShieldCheck, Truck, Tag, Check, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { formatPrice, validateCart } from '../lib/api';
 import { CartValidateResponse } from '../types/order';
@@ -9,11 +9,44 @@ import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const Cart: React.FC = () => {
   const navigate = useNavigate();
-  const { items, totalItems, subtotal, updateQuantity, removeFromCart } = useCart();
+  const {
+    items,
+    totalItems,
+    subtotal,
+    updateQuantity,
+    removeFromCart,
+    appliedCouponCode,
+    appliedCoupon,
+    couponDiscount,
+    couponError,
+    isValidatingCoupon,
+    applyCoupon,
+    removeCoupon,
+  } = useCart();
   const { settings } = useStoreSettings();
   const [validationResult, setValidationResult] = useState<CartValidateResponse | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [couponInput, setCouponInput] = useState(appliedCouponCode || '');
+
+  useEffect(() => {
+    if (appliedCouponCode) {
+      setCouponInput(appliedCouponCode);
+    } else {
+      setCouponInput('');
+    }
+  }, [appliedCouponCode]);
+
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponInput.trim()) return;
+    await applyCoupon(couponInput.trim());
+  };
+
+  const handleRemoveCoupon = () => {
+    removeCoupon();
+    setCouponInput('');
+  };
 
   const handleRemove = (variantId: number) => {
     setRemovingId(variantId);
@@ -240,6 +273,12 @@ export const Cart: React.FC = () => {
                 <span>Items ({totalItems})</span>
                 <span className="font-semibold text-gray-900 price-display">{formatPrice(subtotal)}</span>
               </div>
+              {couponDiscount > 0 && (
+                <div className="flex justify-between text-emerald-700 font-medium">
+                  <span>Coupon Discount ({appliedCoupon?.code})</span>
+                  <span className="price-display">-{formatPrice(couponDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Shipping</span>
                 <span className="text-[#5E1224] font-semibold">
@@ -250,13 +289,61 @@ export const Cart: React.FC = () => {
               </div>
             </div>
 
+            {/* Promo / Coupon Box */}
+            <div className="pt-3 border-t border-gray-100 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
+                <Tag className="w-3.5 h-3.5 text-[#B58A3C]" />
+                <span>Have a Promo Coupon?</span>
+              </div>
+              {appliedCoupon?.valid ? (
+                <div data-testid="applied-coupon-card" className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200">
+                  <div className="flex items-center gap-1 text-xs text-emerald-800">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span><strong className="font-bold">{appliedCoupon.code}</strong> applied!</span>
+                    <span className="text-emerald-700 font-semibold">(-{formatPrice(couponDiscount)})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="text-xs text-gray-500 hover:text-red-600 underline font-medium ml-2"
+                    title="Remove coupon"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. ROYAL10"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    className="flex-1 px-3 py-2 text-xs border border-gray-300 focus:outline-none focus:border-[#5E1224] bg-[#FAF7F2] uppercase font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isValidatingCoupon || !couponInput.trim()}
+                    className="px-4 py-2 bg-[#5E1224] text-[#FCF8F0] text-xs font-semibold uppercase tracking-wider hover:bg-[#3A080F] transition-colors disabled:opacity-50"
+                  >
+                    {isValidatingCoupon ? 'Checking...' : 'Apply'}
+                  </button>
+                </form>
+              )}
+              {couponError && (
+                <div className="flex items-center gap-1 text-[11px] text-red-600 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{couponError}</span>
+                </div>
+              )}
+            </div>
+
             <div className="border-t border-gray-100 pt-4 flex justify-between items-baseline">
               <div>
                 <span className="font-bold text-gray-900 text-sm">Estimated Total</span>
                 <p className="text-[10.5px] text-gray-400">Inclusive of all taxes</p>
               </div>
               <span className="font-serif text-2xl font-bold text-[#5E1224]">
-                {formatPrice(subtotal)}
+                {formatPrice(Math.max(0, subtotal - couponDiscount + (subtotal >= settings.freeShippingThreshold || subtotal === 0 ? 0 : settings.standardShippingFee)))}
               </span>
             </div>
 

@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { validateCoupon } from '../lib/api';
+import { CouponValidateResponse } from '../types/order';
 
 export interface CartItem {
   productId: number;
@@ -25,6 +27,14 @@ interface CartContextType {
   removeFromCart: (variantId: number) => void;
   removePurchasedItems: (purchased: { variantId: number; quantity: number }[]) => void;
   clearCart: () => void;
+  appliedCouponCode: string | null;
+  appliedCoupon: CouponValidateResponse | null;
+  couponDiscount: number;
+  couponError: string | null;
+  isValidatingCoupon: boolean;
+  applyCoupon: (code: string) => Promise<{ success: boolean; message?: string }>;
+  removeCoupon: () => void;
+  revalidateCoupon: (customSubtotal?: number) => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType>({
@@ -40,9 +50,18 @@ const CartContext = createContext<CartContextType>({
   removeFromCart: () => {},
   removePurchasedItems: () => {},
   clearCart: () => {},
+  appliedCouponCode: null,
+  appliedCoupon: null,
+  couponDiscount: 0,
+  couponError: null,
+  isValidatingCoupon: false,
+  applyCoupon: async () => ({ success: false }),
+  removeCoupon: () => {},
+  revalidateCoupon: async () => {},
 });
 
 const CART_STORAGE_KEY = 'royal_libas_cart_v1';
+const COUPON_STORAGE_KEY = 'royal_libas_applied_coupon_v1';
 
 export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(() => {
@@ -53,6 +72,19 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return [];
     }
   });
+
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem(COUPON_STORAGE_KEY);
+      return saved ? saved.trim().toUpperCase() : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidateResponse | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const openDrawer = () => setIsDrawerOpen(true);
@@ -66,8 +98,133 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [items]);
 
+  // Sync state on cross-tab storage changes or external custom events
+  useEffect(() => {
+    const syncFromStorage = () => {
+      try {
+        const savedCart = localStorage.getItem(CART_STORAGE_KEY);
+        if (savedCart) {
+          const parsed = JSON.parse(savedCart);
+          setItems(parsed);
+        }
+        const savedCoupon = localStorage.getItem(COUPON_STORAGE_KEY);
+        setAppliedCouponCode(savedCoupon ? savedCoupon.trim().toUpperCase() : null);
+      } catch {}
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === CART_STORAGE_KEY || e.key === COUPON_STORAGE_KEY) {
+        syncFromStorage();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('royal_libas_cart_update', syncFromStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('royal_libas_cart_update', syncFromStorage);
+    };
+  }, []);
+
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + item.sellingPrice * item.quantity, 0);
+
+  const couponDiscount = appliedCoupon?.valid ? Number(appliedCoupon.discount) : 0;
+
+  const removeCoupon = useCallback(() => {
+    setAppliedCouponCode(null);
+    setAppliedCoupon(null);
+    setCouponError(null);
+    try {
+      localStorage.removeItem(COUPON_STORAGE_KEY);
+    } catch {}
+  }, []);
+
+  const revalidateCoupon = useCallback(async (currentSubtotal?: number) => {
+    const subtotalToUse = currentSubtotal !== undefined ? currentSubtotal : subtotal;
+    if (!appliedCouponCode) {
+      setAppliedCoupon(null);
+      return;
+    }
+
+    if (items.length === 0 || subtotalToUse <= 0) {
+      setAppliedCoupon(null);
+      return;
+    }
+
+    setIsValidatingCoupon(true);
+    try {
+      const res = await validateCoupon(appliedCouponCode, subtotalToUse);
+      if (res.valid) {
+        setAppliedCoupon({ ...res, discount: Number(res.discount) });
+        setCouponError(null);
+      } else {
+        // Coupon became ineligible, expired, or deactivated
+        setAppliedCoupon(null);
+        setAppliedCouponCode(null);
+        setCouponError(res.message || 'Coupon is no longer eligible for this cart.');
+        try {
+          localStorage.removeItem(COUPON_STORAGE_KEY);
+        } catch {}
+      }
+    } catch {
+      // In case of transient validation error, keep previous validation state
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  }, [appliedCouponCode, subtotal, items.length]);
+
+  const applyCoupon = async (rawCode: string): Promise<{ success: boolean; message?: string }> => {
+    const cleanCode = rawCode.trim().toUpperCase();
+    if (!cleanCode) {
+      setCouponError('Please enter a coupon code.');
+      return { success: false, message: 'Please enter a coupon code.' };
+    }
+
+    setIsValidatingCoupon(true);
+    setCouponError(null);
+    try {
+      const res = await validateCoupon(cleanCode, subtotal);
+      if (res.valid) {
+        setAppliedCouponCode(cleanCode);
+        setAppliedCoupon({ ...res, discount: Number(res.discount) });
+        setCouponError(null);
+        try {
+          localStorage.setItem(COUPON_STORAGE_KEY, cleanCode);
+        } catch {}
+        return { success: true };
+      } else {
+        const errMsg = res.message || 'Invalid or ineligible coupon code.';
+        setCouponError(errMsg);
+        setAppliedCouponCode(null);
+        setAppliedCoupon(null);
+        try {
+          localStorage.removeItem(COUPON_STORAGE_KEY);
+        } catch {}
+        return { success: false, message: errMsg };
+      }
+    } catch (err: any) {
+      const errMsg = err.message || 'Failed to validate coupon.';
+      setCouponError(errMsg);
+      setAppliedCouponCode(null);
+      setAppliedCoupon(null);
+      try {
+        localStorage.removeItem(COUPON_STORAGE_KEY);
+      } catch {}
+      return { success: false, message: errMsg };
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  // Automatically revalidate coupon when cart subtotal or item count changes
+  useEffect(() => {
+    if (appliedCouponCode && subtotal > 0 && items.length > 0) {
+      revalidateCoupon(subtotal);
+    } else if (items.length === 0 || subtotal <= 0) {
+      if (appliedCoupon) setAppliedCoupon(null);
+    }
+  }, [subtotal, items.length, appliedCouponCode, revalidateCoupon]);
 
   const addToCart = (newItem: Omit<CartItem, 'quantity'>, quantity: number = 1) => {
     setItems((prevItems) => {
@@ -124,6 +281,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const clearCart = () => {
     setItems([]);
+    removeCoupon();
   };
 
   return (
@@ -141,6 +299,14 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         removeFromCart,
         removePurchasedItems,
         clearCart,
+        appliedCouponCode,
+        appliedCoupon,
+        couponDiscount,
+        couponError,
+        isValidatingCoupon,
+        applyCoupon,
+        removeCoupon,
+        revalidateCoupon,
       }}
     >
       {children}
@@ -149,4 +315,3 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export const useCart = () => useContext(CartContext);
-

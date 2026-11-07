@@ -15,19 +15,30 @@ import { useCart } from '../context/CartContext';
 import {
   formatPrice,
   validateCart,
-  validateCoupon,
   createOrder,
   cancelOrder,
   createCashfreeOrder,
   fetchPaymentGatewayConfig,
 } from '../lib/api';
-import { CouponValidateResponse, OrderCreatePayload, PaymentGatewayConfigResponse } from '../types/order';
+import { OrderCreatePayload, PaymentGatewayConfigResponse } from '../types/order';
 import { useStoreSettings } from '../lib/settings';
 import { setMetaDescription, ROUTE_METADATA } from '../lib/seo';
 
 export const Checkout: React.FC = () => {
   const navigate = useNavigate();
-  const { items, subtotal, removePurchasedItems } = useCart();
+  const {
+    items,
+    subtotal,
+    removePurchasedItems,
+    appliedCouponCode,
+    appliedCoupon,
+    couponDiscount,
+    couponError,
+    isValidatingCoupon,
+    applyCoupon,
+    removeCoupon,
+    revalidateCoupon,
+  } = useCart();
   const { settings } = useStoreSettings();
 
   // Form state
@@ -42,16 +53,29 @@ export const Checkout: React.FC = () => {
   const [shippingMethod, setShippingMethod] = useState<'STANDARD' | 'EXPRESS'>('STANDARD');
   const [gatewayConfig, setGatewayConfig] = useState<PaymentGatewayConfigResponse | null>(null);
 
-  // Coupon state
-  const [couponInput, setCouponInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidateResponse | null>(null);
-  const [couponError, setCouponError] = useState<string | null>(null);
-  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  // Local coupon input for editing / replacing
+  const [couponInput, setCouponInput] = useState(appliedCouponCode || '');
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [stockError, setStockError] = useState<string | null>(null);
+
+  // Keep input in sync with shared coupon state
+  useEffect(() => {
+    if (appliedCouponCode) {
+      setCouponInput(appliedCouponCode);
+    } else {
+      setCouponInput('');
+    }
+  }, [appliedCouponCode]);
+
+  // Revalidate coupon on entering checkout to ensure freshness against live server rules
+  useEffect(() => {
+    if (appliedCouponCode) {
+      revalidateCoupon(subtotal);
+    }
+  }, []);
 
   // Redirect if cart is empty & check gateway status
   useEffect(() => {
@@ -88,7 +112,7 @@ export const Checkout: React.FC = () => {
   }, [isOnlinePaymentAvailable, isCodAvailable]);
 
   // Dynamic server-aligned fee calculations
-  const discountAmount = appliedCoupon?.valid ? appliedCoupon.discount : 0;
+  const discountAmount = couponDiscount;
   const shippingCharge =
     shippingMethod === 'EXPRESS'
       ? settings.standardShippingFee
@@ -103,31 +127,12 @@ export const Checkout: React.FC = () => {
   const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!couponInput.trim()) return;
-
-    setIsApplyingCoupon(true);
-    setCouponError(null);
-
-    try {
-      const res = await validateCoupon(couponInput.trim(), subtotal);
-      if (res.valid) {
-        setAppliedCoupon(res);
-        setCouponError(null);
-      } else {
-        setAppliedCoupon(null);
-        setCouponError(res.message || 'Invalid coupon code');
-      }
-    } catch (err: any) {
-      setAppliedCoupon(null);
-      setCouponError(err.message || 'Failed to apply coupon');
-    } finally {
-      setIsApplyingCoupon(false);
-    }
+    await applyCoupon(couponInput.trim());
   };
 
   const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
+    removeCoupon();
     setCouponInput('');
-    setCouponError(null);
   };
 
   // Main Submit: Authoritative Order Placement
@@ -298,7 +303,7 @@ export const Checkout: React.FC = () => {
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to place order. Please try again.';
       if (errorMessage.toLowerCase().includes('coupon')) {
-        setAppliedCoupon(null);
+        removeCoupon();
         setFormError(`${errorMessage} The coupon has been removed. Please review your revised order total below before placing your order.`);
       } else {
         setFormError(errorMessage);
@@ -740,7 +745,7 @@ export const Checkout: React.FC = () => {
             </div>
 
             {appliedCoupon?.valid ? (
-              <div className="p-3 bg-emerald-50 rounded-none border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
+              <div data-testid="applied-coupon-card" className="p-3 bg-emerald-50 rounded-none border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <div>
@@ -768,10 +773,10 @@ export const Checkout: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleApplyCoupon}
-                  disabled={isApplyingCoupon || !couponInput.trim()}
+                  disabled={isValidatingCoupon || !couponInput.trim()}
                   className="px-4 py-2 bg-[#5E1224] hover:bg-[#3A080F] disabled:bg-gray-300 text-[#FCF8F0] text-xs font-semibold rounded-none transition-colors tracking-wider"
                 >
-                  {isApplyingCoupon ? 'Checking...' : 'Apply'}
+                  {isValidatingCoupon ? 'Checking...' : 'Apply'}
                 </button>
               </div>
             )}
