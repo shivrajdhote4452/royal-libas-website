@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingBag, Menu, X, Search, Heart, ChevronDown, User } from 'lucide-react';
+import { ShoppingBag, Menu, X, Search, Heart, ChevronDown } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { BrandLogo } from './BrandLogo';
@@ -325,8 +325,8 @@ export const Header: React.FC = () => {
                 </div>
               </nav>
 
-              {/* Desktop Left Action Buttons: Search & Admin (Between Categories & Logo) */}
-              <div className="hidden lg:flex items-center ml-3 xl:ml-5 space-x-0.5 sm:space-x-1 pl-3 border-l border-[#E8DFD0]">
+              {/* Desktop Left Action Button: Search (Between Categories & Logo) */}
+              <div className="hidden lg:flex items-center ml-3 xl:ml-5 pl-3 border-l border-[#E8DFD0]">
                 <button
                   id="desktop-search-button"
                   type="button"
@@ -337,15 +337,6 @@ export const Header: React.FC = () => {
                 >
                   <Search className="w-4.5 h-4.5 xl:w-5 xl:h-5" />
                 </button>
-                <Link
-                  id="desktop-admin-link"
-                  to="/admin/login"
-                  className="p-1.5 xl:p-2 text-gray-700 hover:text-[#5E1224] transition-colors focus:outline-none rounded-full hover:bg-black/5"
-                  title="Account / Boutique Admin"
-                  aria-label="Account Login"
-                >
-                  <User className="w-4.5 h-4.5 xl:w-5 xl:h-5" />
-                </Link>
               </div>
             </div>
 
@@ -564,13 +555,6 @@ export const Header: React.FC = () => {
                 className="block px-3 py-2.5 rounded-lg text-sm font-semibold text-gray-800 hover:bg-[#E8DFD0]/40 transition-colors"
               >
                 Contact &amp; Concierge
-              </Link>
-              <Link
-                to="/admin/login"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2.5 rounded-lg text-sm font-semibold text-[#5E1224] hover:bg-[#E8DFD0]/40 transition-colors"
-              >
-                Admin / Staff Portal
               </Link>
             </div>
           </div>
