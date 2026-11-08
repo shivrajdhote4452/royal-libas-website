@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   Boxes,
   Search,
@@ -14,6 +14,15 @@ import {
   RotateCcw,
   Check,
   Filter,
+  Plus,
+  LayoutGrid,
+  List,
+  Package,
+  PenTool,
+  Layers,
+  ShoppingBag,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   adminListInventory,
@@ -102,11 +111,16 @@ export const AdminInventory: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>(initialSearch);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('ALL');
+  const [selectedSize, setSelectedSize] = useState<string>('ALL');
+  const [sortOption, setSortOption] = useState<string>('recently_updated');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 12;
 
   // Stable overall boutique statistics from backend summary endpoint
   const [overallSummary, setOverallSummary] = useState<InventorySummaryData | null>(null);
 
-  // Multi-Variant Edit Stock Modal State
+  // Multi-Variant Edit Stock Drawer / Modal State
   const [editingProduct, setEditingProduct] = useState<ProductInventoryGroup | null>(null);
   // User's exact raw input strings while editing (prevents premature coercion to 0)
   const [stockInputStrings, setStockInputStrings] = useState<Record<number, string>>({});
@@ -161,16 +175,19 @@ export const AdminInventory: React.FC = () => {
 
   useEffect(() => {
     loadInventory();
+    setCurrentPage(1);
   }, [token, filterState, selectedCategory, selectedSubcategory]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     loadInventory();
+    setCurrentPage(1);
   };
 
   const handleFilterChange = (newFilter: string) => {
     setFilterState(newFilter);
     setSearchParams(newFilter === 'working' ? {} : { filter: newFilter });
+    setCurrentPage(1);
   };
 
   // Group raw items into product-wise cards/rows
@@ -233,22 +250,63 @@ export const AdminInventory: React.FC = () => {
     return Array.from(map.values());
   }, [rawItems]);
 
+  // Client-side filtering by size and sorting
+  const filteredAndSortedProducts = useMemo(() => {
+    let list = [...productGroups];
+
+    if (selectedSize !== 'ALL') {
+      const targetSize = selectedSize.toUpperCase().trim();
+      list = list.filter((g) =>
+        g.variants.some((v) => {
+          const vSize = v.size.toUpperCase().trim();
+          if (targetSize === 'FREE SIZE') {
+            return /free|one/i.test(vSize);
+          }
+          return vSize === targetSize;
+        })
+      );
+    }
+
+    if (sortOption === 'stock_asc') {
+      list.sort((a, b) => a.total_stock - b.total_stock);
+    } else if (sortOption === 'stock_desc') {
+      list.sort((a, b) => b.total_stock - a.total_stock);
+    } else if (sortOption === 'name_asc') {
+      list.sort((a, b) => a.product_name.localeCompare(b.product_name));
+    } else if (sortOption === 'name_desc') {
+      list.sort((a, b) => b.product_name.localeCompare(a.product_name));
+    } else {
+      // default: recently updated or id descending
+      list.sort((a, b) => b.product_id - a.product_id);
+    }
+
+    return list;
+  }, [productGroups, selectedSize, sortOption]);
+
+  // Pagination calculations
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedProducts.length / pageSize));
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedProducts.slice(start, start + pageSize);
+  }, [filteredAndSortedProducts, currentPage, pageSize]);
+
   // Filtered match stats (clearly distinct from overall boutique totals)
   const isFilterActive =
     filterState !== 'working' ||
     searchQuery.trim() !== '' ||
     selectedCategory !== 'ALL' ||
-    selectedSubcategory !== 'ALL';
+    selectedSubcategory !== 'ALL' ||
+    selectedSize !== 'ALL';
 
   const filteredStats = useMemo(() => {
-    const totalUnits = productGroups.reduce((sum, g) => sum + g.total_stock, 0);
-    const totalVariants = productGroups.reduce((sum, g) => sum + g.variants.length, 0);
+    const totalUnits = filteredAndSortedProducts.reduce((sum, g) => sum + g.total_stock, 0);
+    const totalVariants = filteredAndSortedProducts.reduce((sum, g) => sum + g.variants.length, 0);
     return {
-      productCount: productGroups.length,
+      productCount: filteredAndSortedProducts.length,
       totalUnits,
       totalVariants,
     };
-  }, [productGroups]);
+  }, [filteredAndSortedProducts]);
 
   // Validation function for individual stock input
   const getVariantValidationError = (rawVal: string | undefined): string | null => {
@@ -268,7 +326,7 @@ export const AdminInventory: React.FC = () => {
     return null;
   };
 
-  // Open multi-variant Edit Stock modal for a product
+  // Open multi-variant Edit Stock drawer for a product
   const openEditModal = (group: ProductInventoryGroup) => {
     setEditingProduct(group);
     const initialMap: Record<number, number> = {};
@@ -386,8 +444,8 @@ export const AdminInventory: React.FC = () => {
   }, [editingProduct, stockInputStrings, initialStockMap]);
 
   // Save bulk stock changes
-  const handleSaveBulkStock = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveBulkStock = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!editingProduct) return;
 
     // Strict validation: reject any blank, negative, decimal, or invalid input
@@ -475,14 +533,23 @@ export const AdminInventory: React.FC = () => {
     }
   };
 
-  // Helper to render size matrix for a group of variants
+  // Helper to extract base SKU without variant size suffix (e.g. "RL-TP-KP-01")
+  const getBaseSku = (variant?: InventoryItem, productId?: number): string => {
+    if (!variant?.sku) return `RL-${productId || '0'}`;
+    const lastDash = variant.sku.lastIndexOf('-');
+    if (lastDash > 0) {
+      return variant.sku.substring(0, lastDash);
+    }
+    return variant.sku;
+  };
+
+  // Helper to render size matrix for table view
   const renderSizeMatrix = (variants: InventoryItem[]) => {
     const variantBySize = new Map<string, InventoryItem>();
     for (const v of variants) {
       variantBySize.set(v.size.toUpperCase().trim(), v);
     }
 
-    // Determine sizes to display: standard S-XXL, plus any custom boutique sizes present
     const customSizes = variants
       .map((v) => v.size.toUpperCase().trim())
       .filter((s) => !STANDARD_SIZES.includes(s));
@@ -532,6 +599,80 @@ export const AdminInventory: React.FC = () => {
     );
   };
 
+  // Helper to render size-wise stock matrix in Product Stock Card
+  const renderCardSizeStock = (group: ProductInventoryGroup) => {
+    // Check if it's Free Size only
+    const isFreeSizeOnly =
+      group.variants.length === 1 &&
+      (/free/i.test(group.variants[0].size) || /one/i.test(group.variants[0].size));
+
+    if (isFreeSizeOnly) {
+      const v = group.variants[0];
+      return (
+        <div className="flex items-center justify-between text-xs py-1">
+          <span className="font-sans text-gray-700 font-medium">Free Size:</span>
+          <span
+            className={`font-mono font-bold px-2 py-0.5 rounded ${
+              v.stock === 0
+                ? 'bg-red-50 text-red-600'
+                : v.stock <= 5
+                ? 'bg-amber-50 text-amber-800'
+                : 'bg-emerald-50 text-emerald-800'
+            }`}
+          >
+            {v.stock}
+          </span>
+        </div>
+      );
+    }
+
+    const variantMap = new Map<string, InventoryItem>();
+    for (const v of group.variants) {
+      variantMap.set(v.size.toUpperCase().trim(), v);
+    }
+
+    const standardSizes = ['S', 'M', 'L', 'XL', 'XXL'];
+    const customSizes = group.variants
+      .map((v) => v.size.toUpperCase().trim())
+      .filter((s) => !standardSizes.includes(s));
+    const allSizes = [...standardSizes, ...Array.from(new Set(customSizes))];
+
+    return (
+      <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-xs font-mono">
+        {allSizes.map((sizeKey) => {
+          const v = variantMap.get(sizeKey);
+          const hasVariant = !!v;
+          const stock = v?.stock ?? 0;
+
+          return (
+            <div key={sizeKey} className="flex items-center gap-1">
+              <span className="font-sans text-[11px] font-medium text-gray-600">
+                {sizeKey}:
+              </span>
+              {!hasVariant ? (
+                <span className="text-gray-400 font-sans text-xs select-none" title={`Size ${sizeKey} does not exist`}>
+                  —
+                </span>
+              ) : stock === 0 ? (
+                <span className="text-red-600 font-bold" title="Out of stock (0 units)">
+                  0
+                </span>
+              ) : stock <= 5 ? (
+                <span className="text-amber-700 font-bold" title="Low stock alert">
+                  {stock}
+                </span>
+              ) : (
+                <span className="text-gray-900 font-semibold" title="In stock">
+                  {stock}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 font-sans">
       {/* Toast Notification */}
@@ -543,24 +684,28 @@ export const AdminInventory: React.FC = () => {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#B58A3C]/20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#B58A3C]/20">
         <div>
-          <div className="flex items-center gap-2">
-            <Boxes className="w-6 h-6 text-[#5E1224]" />
-            <h1 className="font-serif text-2xl font-bold text-[#5E1224]">
-              Inventory Management
-            </h1>
-          </div>
+          <h1 className="font-serif text-2xl font-bold text-[#5E1224] tracking-tight">
+            Inventory
+          </h1>
           <p className="text-xs text-gray-600 mt-1">
-            Product-wise catalogue stock matrix, multi-size bulk adjustments, and verified audit trail.
+            Manage product stock, sizes and availability across your store.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Link
+            to="/admin/products/new"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] active:bg-[#3D0B17] text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Product</span>
+          </Link>
           <button
             type="button"
             onClick={() => openHistory()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded text-xs font-semibold shadow-sm transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold shadow-xs transition-colors"
           >
             <History className="w-3.5 h-3.5 text-[#B58A3C]" />
             <span>Audit History</span>
@@ -570,91 +715,105 @@ export const AdminInventory: React.FC = () => {
               loadInventory();
               loadSummary();
             }}
-            className="p-2 rounded border border-[#B58A3C]/30 bg-white hover:bg-[#FCF8F0] text-[#5E1224] shadow-sm transition-colors"
+            className="p-2 rounded-lg border border-[#B58A3C]/30 bg-white hover:bg-[#FCF8F0] text-[#5E1224] shadow-xs transition-colors"
             title="Refresh inventory and statistics"
+            aria-label="Refresh inventory"
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {/* Stable Overall Boutique KPI Cards */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-            Overall Boutique Capacity (Stable Totals)
-          </span>
-          <span className="text-[10px] text-gray-400">
-            Active Store Inventory
-          </span>
+      {/* KPI Summary Cards (Option 2 Warm Cream Styling) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Products */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#EFE5D8] shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#FAF5EC] border border-amber-200/60 flex items-center justify-center text-[#5E1224] shrink-0">
+            <Package className="w-5 h-5 text-[#B58A3C]" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="font-sans font-bold text-2xl text-gray-900 tracking-tight">
+                {overallSummary ? overallSummary.published_products : '—'}
+              </span>
+              <span className="text-xs font-bold text-gray-900">Products</span>
+            </div>
+            <span className="text-[11px] font-mono text-emerald-700 block truncate">
+              {overallSummary
+                ? `(${overallSummary.published_units.toLocaleString('en-IN')} units)`
+                : 'Loading units...'}
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">
-              Published Live Catalogue
-            </span>
-            <span className="text-xl font-serif font-bold text-gray-900 mt-1 block">
-              {overallSummary ? `${overallSummary.published_products} Products` : '—'}
-            </span>
-            <span className="text-[11px] font-mono text-emerald-700 mt-0.5 block">
+        {/* Card 2: Draft Setup */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#EFE5D8] shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#FAF5EC] border border-amber-200/60 flex items-center justify-center text-amber-700 shrink-0">
+            <PenTool className="w-5 h-5 text-amber-600" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="font-sans font-bold text-2xl text-gray-900 tracking-tight">
+                {overallSummary ? overallSummary.draft_products : '—'}
+              </span>
+              <span className="text-xs font-bold text-gray-900">Draft Setup</span>
+            </div>
+            <span className="text-[11px] font-mono text-amber-700 block truncate">
               {overallSummary
-                ? `${overallSummary.published_units.toLocaleString('en-IN')} units live (${overallSummary.published_variants} sizes)`
-                : 'Loading units...'}
+                ? `(${overallSummary.draft_units.toLocaleString('en-IN')} units)`
+                : '—'}
             </span>
           </div>
+        </div>
 
-          <div className="bg-amber-50/50 p-3.5 rounded-lg border border-amber-200 shadow-sm">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-              Draft Setup Catalogue
-            </span>
-            <span className="text-xl font-serif font-bold text-amber-900 mt-1 block">
-              {overallSummary ? `${overallSummary.draft_products} Products` : '—'}
-            </span>
-            <span className="text-[11px] font-mono text-amber-700 mt-0.5 block">
-              {overallSummary
-                ? `${overallSummary.draft_units.toLocaleString('en-IN')} units setup (${overallSummary.draft_variants} sizes)`
-                : 'Loading units...'}
+        {/* Card 3: Low Stock */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#EFE5D8] shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#FAF5EC] border border-amber-200/60 flex items-center justify-center text-amber-700 shrink-0">
+            <Layers className="w-5 h-5 text-amber-600" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="font-sans font-bold text-2xl text-amber-700 tracking-tight">
+                {overallSummary ? overallSummary.low_stock_products : '—'}
+              </span>
+              <span className="text-xs font-bold text-gray-900">Low Stock</span>
+            </div>
+            <span className="text-[11px] text-amber-800/80 block">
+              (&le; 5 units)
             </span>
           </div>
+        </div>
 
-          <div className="bg-amber-50/70 p-3.5 rounded-lg border border-amber-200 shadow-sm">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-              Low Stock Alerts (&le; 5 units)
-            </span>
-            <span className="text-xl font-serif font-bold text-amber-700 mt-1 block">
-              {overallSummary ? `${overallSummary.low_stock_products} Products` : '—'}
-            </span>
-            <span className="text-[11px] text-amber-800/80 mt-0.5 block">
-              {overallSummary ? `Across ${overallSummary.low_stock_variants} size variants` : '—'}
-            </span>
+        {/* Card 4: Sold Out */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#EFE5D8] shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#FAF5EC] border border-amber-200/60 flex items-center justify-center text-red-600 shrink-0">
+            <ShoppingBag className="w-5 h-5 text-red-600" />
           </div>
-
-          <div className="bg-red-50/70 p-3.5 rounded-lg border border-red-200 shadow-sm">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-red-800 block">
-              Sold Out (0 units)
-            </span>
-            <span className="text-xl font-serif font-bold text-red-700 mt-1 block">
-              {overallSummary ? `${overallSummary.out_of_stock_products} Products` : '—'}
-            </span>
-            <span className="text-[11px] text-red-800/80 mt-0.5 block">
-              {overallSummary ? `Across ${overallSummary.out_of_stock_variants} size variants` : '—'}
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="font-sans font-bold text-2xl text-red-600 tracking-tight">
+                {overallSummary ? overallSummary.out_of_stock_products : '—'}
+              </span>
+              <span className="text-xs font-bold text-gray-900">Sold Out</span>
+            </div>
+            <span className="text-[11px] text-red-800/80 block">
+              (0 units)
             </span>
           </div>
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
+      {/* Filter Tabs & Toolbar */}
       <div className="space-y-3">
         {/* Filter Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
           <button
             type="button"
             onClick={() => handleFilterChange('working')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'working'
-                ? 'bg-[#5E1224] text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-[#5E1224] text-white shadow-xs'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
             Working Inventory
@@ -662,10 +821,10 @@ export const AdminInventory: React.FC = () => {
           <button
             type="button"
             onClick={() => handleFilterChange('published')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'published'
-                ? 'bg-emerald-700 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
             Published
@@ -673,10 +832,10 @@ export const AdminInventory: React.FC = () => {
           <button
             type="button"
             onClick={() => handleFilterChange('draft')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'draft'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
             Draft Setup
@@ -684,32 +843,32 @@ export const AdminInventory: React.FC = () => {
           <button
             type="button"
             onClick={() => handleFilterChange('low_stock')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'low_stock'
-                ? 'bg-amber-700 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-amber-700 text-white shadow-xs'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
-            Low Stock (&le; 5)
+            Low Stock
           </button>
           <button
             type="button"
             onClick={() => handleFilterChange('out_of_stock')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'out_of_stock'
-                ? 'bg-red-600 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-red-600 text-white shadow-xs'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
-            Sold Out (0)
+            Sold Out
           </button>
           <button
             type="button"
             onClick={() => handleFilterChange('archived')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'archived'
-                ? 'bg-gray-700 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-gray-700 text-white shadow-xs'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
             Archived
@@ -717,116 +876,169 @@ export const AdminInventory: React.FC = () => {
           <button
             type="button"
             onClick={() => handleFilterChange('all')}
-            className={`px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-full font-semibold transition-colors shrink-0 ${
               filterState === 'all'
-                ? 'bg-[#5E1224] text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-[#5E1224] text-white shadow-xs'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
             All Catalogue
           </button>
         </div>
 
-        {/* Search, Category, Subcategory Row */}
-        <div className="bg-white p-3.5 rounded-lg border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
-          <form onSubmit={handleSearchSubmit} className="flex-1 w-full md:w-auto flex gap-2">
+        {/* Search, Categories, Sizes, Sort & View Mode Toolbar */}
+        <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-[#EFE5D8] shadow-xs flex flex-col lg:flex-row items-center justify-between gap-3 text-xs">
+          {/* Search Box */}
+          <form onSubmit={handleSearchSubmit} className="flex-1 w-full lg:w-auto flex gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search by garment name, SKU, or shade..."
+                placeholder="Search by product name, SKU or designer..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:border-[#5E1224]"
               />
             </div>
             <button
               type="submit"
-              className="px-3.5 py-1.5 bg-[#5E1224] text-white hover:bg-[#4A0E1C] rounded text-xs font-semibold shrink-0"
+              className="px-4 py-2 bg-[#5E1224] text-white hover:bg-[#4A0E1C] active:bg-[#3D0B17] rounded-lg text-xs font-semibold shrink-0 transition-colors shadow-xs"
             >
               Search
             </button>
           </form>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap">
+          {/* Filters & View Toggle */}
+          <div className="flex items-center gap-2 w-full lg:w-auto shrink-0 flex-wrap justify-between lg:justify-end">
+            {/* Categories */}
             <select
               value={selectedCategory}
               onChange={(e) => {
                 setSelectedCategory(e.target.value);
                 setSelectedSubcategory('ALL');
+                setCurrentPage(1);
               }}
-              className="px-2.5 py-1.5 border border-gray-300 rounded text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
             >
               <option value="ALL">All Categories</option>
               <option value="TWO PIECES">TWO PIECES</option>
               <option value="SUIT SET">SUIT SET</option>
               <option value="HEAVY DRESS">HEAVY DRESS</option>
+              <option value="UNSTITCHED MATERIAL">UNSTITCHED MATERIAL</option>
             </select>
 
-            <select
-              value={selectedSubcategory}
-              onChange={(e) => setSelectedSubcategory(e.target.value)}
-              className="px-2.5 py-1.5 border border-gray-300 rounded text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
-            >
-              <option value="ALL">All Subcategories</option>
-              {selectedCategory !== 'ALL' &&
-                CATEGORY_TAXONOMY[selectedCategory]?.map((sub) => (
+            {/* Subcategories (if category selected) */}
+            {selectedCategory !== 'ALL' && (
+              <select
+                value={selectedSubcategory}
+                onChange={(e) => {
+                  setSelectedSubcategory(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
+              >
+                <option value="ALL">All Subcategories</option>
+                {CATEGORY_TAXONOMY[selectedCategory]?.map((sub) => (
                   <option key={sub} value={sub}>
                     {sub}
                   </option>
                 ))}
-              {selectedCategory === 'ALL' &&
-                Object.values(CATEGORY_TAXONOMY)
-                  .flat()
-                  .map((sub) => (
-                    <option key={sub} value={sub}>
-                      {sub}
-                    </option>
-                  ))}
+              </select>
+            )}
+
+            {/* Sizes */}
+            <select
+              value={selectedSize}
+              onChange={(e) => {
+                setSelectedSize(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
+            >
+              <option value="ALL">All Sizes</option>
+              <option value="S">Size S</option>
+              <option value="M">Size M</option>
+              <option value="L">Size L</option>
+              <option value="XL">Size XL</option>
+              <option value="XXL">Size XXL</option>
+              <option value="FREE SIZE">Free Size</option>
             </select>
 
-            {isFilterActive && (
+            {/* Sort */}
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white font-medium focus:outline-none focus:border-[#5E1224]"
+            >
+              <option value="recently_updated">Sort: Recently Updated</option>
+              <option value="stock_asc">Sort: Stock (Low to High)</option>
+              <option value="stock_desc">Sort: Stock (High to Low)</option>
+              <option value="name_asc">Sort: Product Name (A to Z)</option>
+              <option value="name_desc">Sort: Product Name (Z to A)</option>
+            </select>
+
+            {/* View Mode Toggle (Grid vs Table) */}
+            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden bg-gray-50">
               <button
                 type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('ALL');
-                  setSelectedSubcategory('ALL');
-                  handleFilterChange('working');
-                }}
-                className="text-gray-500 hover:text-gray-800 text-xs underline whitespace-nowrap pl-1"
+                onClick={() => setViewMode('grid')}
+                className={`p-2 transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-[#5E1224] text-white'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+                title="Product Stock Cards Grid View"
+                aria-label="Grid view"
               >
-                Reset Filters
+                <LayoutGrid className="w-4 h-4" />
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`p-2 transition-colors ${
+                  viewMode === 'table'
+                    ? 'bg-[#5E1224] text-white'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+                title="Table View"
+                aria-label="Table view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Separately Labelled Filtered Results Indicator Bar */}
+        {/* Active Filters Summary Bar */}
         {isFilterActive && (
-          <div className="bg-[#FCF8F0] border border-[#B58A3C]/30 px-3.5 py-2.5 rounded-lg flex items-center justify-between text-xs flex-wrap gap-2 animate-fade-in">
+          <div className="bg-[#FAF5EC] border border-[#B58A3C]/30 px-3.5 py-2.5 rounded-xl flex items-center justify-between text-xs flex-wrap gap-2 animate-fade-in">
             <div className="flex items-center gap-2 flex-wrap">
               <Filter className="w-4 h-4 text-[#B58A3C] shrink-0" />
               <span className="font-semibold text-gray-900">
                 Filtered Match:
               </span>
               <span className="text-gray-700">
-                Showing <strong>{filteredStats.productCount}</strong> matching garment{filteredStats.productCount === 1 ? '' : 's'} &bull;{' '}
+                Showing <strong>{filteredStats.productCount}</strong> garment{filteredStats.productCount === 1 ? '' : 's'} &bull;{' '}
                 <strong>{filteredStats.totalUnits}</strong> total units across {filteredStats.totalVariants} sizes
               </span>
               {filterState !== 'working' && (
-                <span className="px-2 py-0.5 rounded bg-white border border-[#B58A3C]/30 text-[#5E1224] text-[10px] font-bold uppercase">
+                <span className="px-2 py-0.5 rounded-full bg-white border border-[#B58A3C]/30 text-[#5E1224] text-[10px] font-bold uppercase">
                   Tab: {filterState.replace('_', ' ')}
                 </span>
               )}
               {searchQuery.trim() && (
-                <span className="px-2 py-0.5 rounded bg-white border border-[#B58A3C]/30 text-gray-700 text-[10px]">
+                <span className="px-2 py-0.5 rounded-full bg-white border border-[#B58A3C]/30 text-gray-700 text-[10px]">
                   Search: "{searchQuery.trim()}"
                 </span>
               )}
               {selectedCategory !== 'ALL' && (
-                <span className="px-2 py-0.5 rounded bg-white border border-[#B58A3C]/30 text-gray-700 text-[10px]">
+                <span className="px-2 py-0.5 rounded-full bg-white border border-[#B58A3C]/30 text-gray-700 text-[10px]">
                   Category: {selectedCategory}
+                </span>
+              )}
+              {selectedSize !== 'ALL' && (
+                <span className="px-2 py-0.5 rounded-full bg-white border border-[#B58A3C]/30 text-gray-700 text-[10px]">
+                  Size: {selectedSize}
                 </span>
               )}
             </div>
@@ -837,31 +1049,207 @@ export const AdminInventory: React.FC = () => {
                 setSearchQuery('');
                 setSelectedCategory('ALL');
                 setSelectedSubcategory('ALL');
+                setSelectedSize('ALL');
+                setSortOption('recently_updated');
                 handleFilterChange('working');
               }}
               className="text-[#5E1224] font-semibold hover:underline text-[11px]"
             >
-              Clear filters
+              Reset all filters
             </button>
           </div>
         )}
       </div>
 
-      {/* Product-Wise Inventory Table */}
+      {/* Main Content Area: Cards Grid or Table */}
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center space-y-2">
           <Loader2 className="w-8 h-8 text-[#5E1224] animate-spin" />
           <p className="text-xs text-gray-500">Loading boutique product inventory...</p>
         </div>
-      ) : productGroups.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center text-gray-400 text-xs">
-          No boutique garments match your current search or filter.
+      ) : filteredAndSortedProducts.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400 text-xs">
+          No boutique garments match your current search or filter criteria.
+        </div>
+      ) : viewMode === 'grid' ? (
+        /* ========================================================
+           OPTION 2: PRODUCT STOCK CARDS GRID
+           ======================================================== */
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+            {paginatedProducts.map((group) => {
+              const skuDisplay = getBaseSku(group.variants[0], group.product_id);
+
+              return (
+                <div
+                  key={group.product_id}
+                  className="bg-white rounded-xl border border-[#EFE5D8] shadow-xs hover:shadow-md transition-all p-3.5 flex flex-col justify-between gap-3"
+                >
+                  {/* Card Top: Thumbnail + Details */}
+                  <div className="flex gap-3">
+                    {/* Left: Product Image Thumbnail */}
+                    <div className="w-24 sm:w-28 shrink-0 relative bg-[#FAF5EC] rounded-lg overflow-hidden border border-amber-200/40 aspect-[3/4]">
+                      {group.primary_image ? (
+                        <img
+                          src={group.primary_image}
+                          alt={group.product_name}
+                          className="w-full h-full object-cover object-top"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-[#5E1224] font-serif font-bold text-xs bg-[#FAF5EC]">
+                          <span>RL</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Garment info + Size stock matrix */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      {/* Title & Status */}
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3
+                            className="font-serif font-bold text-gray-900 text-sm leading-snug line-clamp-2"
+                            title={group.product_name}
+                          >
+                            {group.product_name}
+                          </h3>
+                          <span
+                            className={`text-[9px] font-semibold px-2 py-0.5 rounded-full shrink-0 uppercase tracking-wider ${
+                              group.status === 'ARCHIVED'
+                                ? 'bg-gray-100 text-gray-600 border border-gray-200'
+                                : group.status === 'DRAFT'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}
+                          >
+                            {group.status}
+                          </span>
+                        </div>
+
+                        {/* Category & SKU */}
+                        <p className="text-[11px] text-gray-500 font-medium truncate mt-0.5">
+                          {group.category || 'Garment'} {group.subcategory ? `› ${group.subcategory}` : ''}
+                          <span className="text-gray-300 mx-1">|</span>
+                          <span className="font-mono text-gray-600">
+                            SKU: {skuDisplay}
+                          </span>
+                        </p>
+                      </div>
+
+                      {/* Multi-shade indicator if present */}
+                      {group.colourGroups.length > 1 && (
+                        <div className="text-[10px] text-gray-500 font-medium mt-1 truncate">
+                          <span className="font-semibold text-gray-700">Shades:</span>{' '}
+                          {group.colourGroups.map((cg) => cg.colour).join(', ')}
+                        </div>
+                      )}
+
+                      {/* Size-wise stock counts */}
+                      <div className="mt-2 py-1.5 px-2 bg-[#FAF5EC]/70 rounded-lg border border-amber-100/80">
+                        {renderCardSizeStock(group)}
+                      </div>
+
+                      {/* Total Stock + Health Badge */}
+                      <div className="flex items-center justify-between gap-2 mt-2 pt-1.5 border-t border-gray-100">
+                        <span className="text-xs font-bold text-gray-900 font-mono">
+                          Total: <span className={group.total_stock === 0 ? 'text-red-600 font-bold' : 'text-gray-900'}>{group.total_stock}</span> units
+                        </span>
+
+                        {/* Health Tag */}
+                        {group.is_all_sold_out ? (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                            SOLD OUT
+                          </span>
+                        ) : group.low_stock_variants_count > 0 || group.total_stock <= 5 ? (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
+                            <span className="text-[9px]">▲</span> LOW STOCK
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            IN STOCK
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Bottom: Manage Stock Button */}
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(group)}
+                    className="w-full py-2 px-3 bg-[#5E1224] hover:bg-[#4A0E1C] active:bg-[#3D0B17] text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Boxes className="w-3.5 h-3.5 text-[#B58A3C]" />
+                    <span>Manage Stock</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="bg-white p-3.5 rounded-xl border border-[#EFE5D8] shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <span className="text-gray-500">
+                Showing{' '}
+                <strong className="text-gray-900">
+                  {(currentPage - 1) * pageSize + 1}
+                </strong>{' '}
+                to{' '}
+                <strong className="text-gray-900">
+                  {Math.min(currentPage * pageSize, filteredAndSortedProducts.length)}
+                </strong>{' '}
+                of <strong className="text-gray-900">{filteredAndSortedProducts.length}</strong> garments
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 transition-colors"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`min-w-[32px] h-8 rounded-lg font-semibold transition-colors ${
+                      currentPage === page
+                        ? 'bg-[#5E1224] text-white shadow-xs'
+                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 transition-colors"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        /* ========================================================
+           TABLE VIEW (Preserved for Admin Flexibility)
+           ======================================================== */
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-xs">
-              <thead className="bg-[#FCF8F0] border-b border-gray-200 text-gray-600 uppercase font-semibold text-[10px] tracking-wider">
+              <thead className="bg-[#FAF5EC] border-b border-gray-200 text-gray-600 uppercase font-semibold text-[10px] tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Garment & Category</th>
                   <th className="py-3 px-4">Size-Wise Stock Matrix</th>
@@ -871,7 +1259,7 @@ export const AdminInventory: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {productGroups.map((group) => {
+                {paginatedProducts.map((group) => {
                   const hasMultipleColours = group.colourGroups.length > 1;
 
                   return (
@@ -883,10 +1271,10 @@ export const AdminInventory: React.FC = () => {
                             <img
                               src={group.primary_image}
                               alt={group.product_name}
-                              className="w-12 h-14 object-cover rounded bg-gray-100 border border-gray-200 shrink-0 shadow-xs"
+                              className="w-12 h-14 object-cover rounded-lg bg-gray-100 border border-gray-200 shrink-0 shadow-xs"
                             />
                           ) : (
-                            <div className="w-12 h-14 rounded bg-[#FCF8F0] border border-gray-200 flex items-center justify-center text-[10px] font-serif text-[#5E1224] shrink-0 font-bold">
+                            <div className="w-12 h-14 rounded-lg bg-[#FAF5EC] border border-gray-200 flex items-center justify-center text-[10px] font-serif text-[#5E1224] shrink-0 font-bold">
                               RL
                             </div>
                           )}
@@ -1001,7 +1389,7 @@ export const AdminInventory: React.FC = () => {
                             </span>
                           )}
                           <span className="text-[10px] text-gray-400 block font-mono">
-                            SKU: {group.variants[0]?.sku ? group.variants[0].sku.split('-')[0] : `RL-P${group.product_id}`}
+                            SKU: {getBaseSku(group.variants[0], group.product_id)}
                           </span>
                         </div>
                       </td>
@@ -1012,7 +1400,7 @@ export const AdminInventory: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openEditModal(group)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded text-xs font-semibold shadow-xs transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5E1224] hover:bg-[#4A0E1C] text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                             <span>Edit Stock</span>
@@ -1020,7 +1408,7 @@ export const AdminInventory: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openHistory(group.product_id, group.product_name)}
-                            className="p-1.5 border border-gray-200 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                            className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
                             title="View stock history for this garment"
                           >
                             <History className="w-4 h-4 text-[#B58A3C]" />
@@ -1037,142 +1425,163 @@ export const AdminInventory: React.FC = () => {
       )}
 
       {/* ========================================================
-          MULTI-VARIANT "EDIT STOCK" MODAL
+          OPTION 2: MANAGE STOCK SLIDE-OVER DRAWER (DESKTOP)
+          & FULL-SCREEN MODAL (MOBILE)
           ======================================================== */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <form
-            onSubmit={handleSaveBulkStock}
-            className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-5 shadow-2xl border border-gray-200 my-8"
-          >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-gray-100 pb-4">
-              <div className="flex items-start gap-3">
-                {editingProduct.primary_image ? (
-                  <img
-                    src={editingProduct.primary_image}
-                    alt={editingProduct.product_name}
-                    className="w-12 h-14 object-cover rounded bg-gray-100 border border-gray-200 shrink-0"
-                  />
-                ) : (
-                  <div className="w-12 h-14 rounded bg-[#FCF8F0] border border-gray-200 flex items-center justify-center text-xs font-serif text-[#5E1224] shrink-0 font-bold">
-                    RL
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Darkened Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300"
+            onClick={() => setEditingProduct(null)}
+          />
+
+          {/* Drawer Wrapper */}
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
+            <div className="w-screen max-w-md md:max-w-lg bg-white shadow-2xl flex flex-col h-full overflow-hidden animate-slide-left">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white shrink-0">
+                <h2 className="font-serif text-lg font-bold text-gray-900">
+                  Manage Stock
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                  aria-label="Close drawer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Drawer Content */}
+              <form onSubmit={handleSaveBulkStock} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {/* Product Preview Card (Matching Image 2 Reference) */}
+                <div className="bg-[#FAF5EC] border border-[#EFE5D8] rounded-xl p-3.5 flex items-center gap-3.5 shadow-xs">
+                  {editingProduct.primary_image ? (
+                    <img
+                      src={editingProduct.primary_image}
+                      alt={editingProduct.product_name}
+                      className="w-14 h-16 object-cover rounded-lg bg-white border border-amber-200/50 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-14 h-16 rounded-lg bg-white border border-amber-200/50 flex items-center justify-center font-serif font-bold text-sm text-[#5E1224] shrink-0">
+                      RL
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-serif font-bold text-sm text-gray-900 truncate">
+                      {editingProduct.product_name}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                      {editingProduct.category || 'Garment'} {editingProduct.subcategory ? `› ${editingProduct.subcategory}` : ''}
+                      <span className="text-gray-300 mx-1">|</span>
+                      <span className="font-mono">
+                        SKU: {getBaseSku(editingProduct.variants[0], editingProduct.product_id)}
+                      </span>
+                    </p>
+                    <div className="mt-1">
+                      {editingProduct.is_all_sold_out ? (
+                        <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                          SOLD OUT
+                        </span>
+                      ) : editingProduct.low_stock_variants_count > 0 || editingProduct.total_stock <= 5 ? (
+                        <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300">
+                          ▲ Low Stock
+                        </span>
+                      ) : (
+                        <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          In Stock
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Concurrency Conflict Alert */}
+                {conflictDetected && (
+                  <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-800">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span>Concurrency Conflict Detected</span>
+                    </div>
+                    <p>
+                      The stock for this garment was updated by another administrator or an online order while your form was open.
+                      Please reload the live stock levels before making changes to prevent overwriting recent activity.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleReloadLiveStock}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Reload Live Stock</span>
+                    </button>
                   </div>
                 )}
-                <div>
-                  <h3 className="text-base font-serif font-bold text-gray-900">
-                    Edit Stock: {editingProduct.product_name}
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {editingProduct.category} {editingProduct.subcategory ? `› ${editingProduct.subcategory}` : ''} &bull;{' '}
-                    <span className="font-semibold text-gray-700">{editingProduct.status}</span>
-                  </p>
+
+                {editError && !conflictDetected && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>{editError}</span>
+                  </div>
+                )}
+
+                {/* Live Stock Totals Preview */}
+                <div className="grid grid-cols-3 gap-2 bg-[#FAF5EC] p-3 rounded-xl border border-[#EFE5D8] text-xs">
+                  <div>
+                    <span className="text-gray-500 block text-[10px] uppercase font-bold">Current Total</span>
+                    <span className="font-mono font-bold text-sm text-gray-900">{modalTotals.originalTotal} units</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[10px] uppercase font-bold">New Proposed</span>
+                    <span className="font-mono font-bold text-sm text-gray-900">
+                      {modalTotals.hasErrors ? (
+                        <span className="text-amber-700 text-xs font-sans font-medium">Fix invalid</span>
+                      ) : (
+                        `${modalTotals.newTotal} units`
+                      )}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[10px] uppercase font-bold">Net Change</span>
+                    <span
+                      className={`font-mono font-bold text-sm ${
+                        modalTotals.hasErrors
+                          ? 'text-gray-400 font-normal text-xs'
+                          : modalTotals.delta > 0
+                          ? 'text-emerald-700'
+                          : modalTotals.delta < 0
+                          ? 'text-red-700'
+                          : 'text-gray-600'
+                      }`}
+                    >
+                      {modalTotals.hasErrors
+                        ? '—'
+                        : modalTotals.delta > 0
+                        ? `+${modalTotals.delta}`
+                        : modalTotals.delta} units
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingProduct(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            {/* Error or Concurrency Conflict Banner */}
-            {conflictDetected && (
-              <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs space-y-2">
-                <div className="flex items-center gap-2 font-bold text-amber-800">
-                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
-                  <span>Concurrency Conflict Detected</span>
-                </div>
-                <p>
-                  The stock for this garment was updated by another administrator or a customer order while your form was open.
-                  To protect inventory integrity, please reload the latest stock levels before making changes.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleReloadLiveStock}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded text-xs font-semibold shadow-xs"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Reload Live Stock</span>
-                </button>
-              </div>
-            )}
+                {/* Section: Size-wise Stock (Units) */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      Size-wise Stock (Units)
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={handleResetAllVariants}
+                      className="text-[11px] text-gray-500 hover:text-gray-800 underline inline-flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset all</span>
+                    </button>
+                  </div>
 
-            {editError && !conflictDetected && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                <span>{editError}</span>
-              </div>
-            )}
-
-            {/* Total Stock Live Indicator */}
-            <div className="grid grid-cols-3 gap-3 bg-[#FCF8F0] p-3 rounded-lg border border-[#B58A3C]/30 text-xs">
-              <div>
-                <span className="text-gray-500 block text-[10px] uppercase font-bold">Original Total</span>
-                <span className="font-mono font-bold text-base text-gray-900">{modalTotals.originalTotal} units</span>
-              </div>
-              <div>
-                <span className="text-gray-500 block text-[10px] uppercase font-bold">New Proposed Total</span>
-                <span className="font-mono font-bold text-base text-gray-900">
-                  {modalTotals.hasErrors ? (
-                    <span className="text-amber-700 text-xs font-sans font-medium">Fix invalid inputs</span>
-                  ) : (
-                    `${modalTotals.newTotal} units`
-                  )}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 block text-[10px] uppercase font-bold">Net Change</span>
-                <span
-                  className={`font-mono font-bold text-base ${
-                    modalTotals.hasErrors
-                      ? 'text-gray-400 font-normal text-xs'
-                      : modalTotals.delta > 0
-                      ? 'text-emerald-700'
-                      : modalTotals.delta < 0
-                      ? 'text-red-700'
-                      : 'text-gray-600'
-                  }`}
-                >
-                  {modalTotals.hasErrors
-                    ? '—'
-                    : modalTotals.delta > 0
-                    ? `+${modalTotals.delta}`
-                    : modalTotals.delta} units
-                </span>
-              </div>
-            </div>
-
-            {/* Existing Size Variants Grid with Explicit Per-Field Validation */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-                  Existing Size Variants ({editingProduct.variants.length})
-                </span>
-                <button
-                  type="button"
-                  onClick={handleResetAllVariants}
-                  className="text-[11px] text-gray-500 hover:text-gray-800 underline inline-flex items-center gap-1"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset all counts</span>
-                </button>
-              </div>
-
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 text-gray-600 uppercase text-[10px] font-semibold border-b border-gray-200">
-                    <tr>
-                      <th className="py-2.5 px-3">Size & Shade</th>
-                      <th className="py-2.5 px-3">SKU</th>
-                      <th className="py-2.5 px-3">Current</th>
-                      <th className="py-2.5 px-3">New Stock Count</th>
-                      <th className="py-2.5 px-3 text-right">Net Change</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
                     {editingProduct.variants.map((v) => {
                       const orig = initialStockMap[v.variant_id] ?? 0;
                       const rawVal = stockInputStrings[v.variant_id] ?? '';
@@ -1182,152 +1591,144 @@ export const AdminInventory: React.FC = () => {
                       const diff = isValidNumber ? parsed - orig : null;
 
                       return (
-                        <tr key={v.variant_id} className="hover:bg-gray-50/60">
-                          <td className="py-2.5 px-3 font-semibold text-gray-900 align-top">
-                            <span className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs mr-2 font-mono font-bold">
+                        <div
+                          key={v.variant_id}
+                          className="p-3 flex items-center justify-between hover:bg-gray-50/70 transition-colors"
+                        >
+                          {/* Left: Size, Colour & Current */}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-12 text-center py-1 bg-gray-100 rounded-md font-mono font-bold text-xs text-gray-900 shrink-0">
                               {v.size}
                             </span>
-                            {v.colour && <span className="text-gray-600 text-xs font-normal">{v.colour}</span>}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-gray-500 align-top">
-                            {v.sku || `RL-V${v.variant_id}`}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-gray-700 align-top">
-                            {orig} units
-                          </td>
-                          <td className="py-2.5 px-3 align-top">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickDelta(v.variant_id, -1)}
-                                  className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100 text-gray-600 shrink-0 font-bold"
-                                  title="Subtract 1"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={rawVal}
-                                  onChange={(e) => handleStockInputChange(v.variant_id, e.target.value)}
-                                  className={`w-20 px-2 py-1 border rounded font-mono text-xs text-center font-bold focus:outline-none transition-colors ${
-                                    fieldError
-                                      ? 'border-red-500 bg-red-50/40 text-red-900 focus:border-red-600'
-                                      : 'border-gray-300 focus:border-[#5E1224]'
-                                  }`}
-                                  placeholder="0"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickDelta(v.variant_id, 1)}
-                                  className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100 text-gray-600 shrink-0 font-bold"
-                                  title="Add 1"
-                                >
-                                  +
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickDelta(v.variant_id, 5)}
-                                  className="px-1.5 py-1 text-[10px] border border-gray-300 rounded hover:bg-gray-100 text-gray-600 shrink-0 font-mono"
-                                  title="Add 5"
-                                >
-                                  +5
-                                </button>
-                                {rawVal !== String(orig) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleResetVariantStock(v.variant_id)}
-                                    className="p-1 text-gray-400 hover:text-gray-700"
-                                    title="Reset to original"
-                                  >
-                                    <RotateCcw className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                              {fieldError && (
-                                <p className="text-[10px] text-red-600 font-medium">
-                                  {fieldError}
+                            <div className="min-w-0">
+                              {v.colour && (
+                                <p className="text-[11px] text-gray-500 truncate">
+                                  {v.colour}
                                 </p>
                               )}
+                              <p className="text-xs text-gray-600 font-mono">
+                                Current: <span className="font-semibold">{orig}</span>
+                              </p>
                             </div>
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold align-top">
-                            {diff === null ? (
-                              <span className="text-red-500 text-[10px] font-sans">Invalid</span>
-                            ) : diff === 0 ? (
-                              <span className="text-gray-400 font-normal">&mdash;</span>
-                            ) : diff > 0 ? (
-                              <span className="text-emerald-700">+{diff}</span>
-                            ) : (
-                              <span className="text-red-700">{diff}</span>
-                            )}
-                          </td>
-                        </tr>
+                          </div>
+
+                          {/* Right: Stepper Control [-] [ count ] [+] */}
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleQuickDelta(v.variant_id, -1)}
+                                className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
+                                title="Decrease 1"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={rawVal}
+                                onChange={(e) => handleStockInputChange(v.variant_id, e.target.value)}
+                                className={`w-14 h-8 text-center font-mono font-bold text-sm border rounded-lg focus:outline-none transition-colors ${
+                                  fieldError
+                                    ? 'border-red-500 bg-red-50/40 text-red-900 focus:border-red-600'
+                                    : 'border-gray-300 focus:border-[#5E1224]'
+                                }`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleQuickDelta(v.variant_id, 1)}
+                                className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
+                                title="Increase 1"
+                              >
+                                +
+                              </button>
+                              {diff !== null && diff !== 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleResetVariantStock(v.variant_id)}
+                                  className="p-1 text-gray-400 hover:text-gray-700 ml-0.5"
+                                  title="Reset to current"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {fieldError ? (
+                              <span className="text-[10px] text-red-600 font-medium">
+                                {fieldError}
+                              </span>
+                            ) : diff !== null && diff !== 0 ? (
+                              <span
+                                className={`text-[11px] font-mono font-semibold ${
+                                  diff > 0 ? 'text-emerald-700' : 'text-red-600'
+                                }`}
+                              >
+                                {diff > 0 ? `+${diff}` : diff} units
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  </div>
+                </div>
 
-            {/* Audit Reason & Note */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-              <div>
-                <label className="block text-gray-700 font-semibold mb-1">
-                  Adjustment Reason <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={adjustmentReason}
-                  onChange={(e) => setAdjustmentReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-xs focus:outline-none focus:border-[#5E1224]"
-                >
-                  <option value="RESTOCK">Restock / New Artisan Batch Arrival</option>
-                  <option value="CORRECTION">Physical Inventory Audit / Count Correction</option>
-                  <option value="DAMAGED">Damaged / Defective Garment Removal</option>
-                  <option value="RETURN">Customer Return Restock</option>
-                  <option value="OTHER">Other Operational Reason</option>
-                </select>
-              </div>
+                {/* Section: Adjustment Reason */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1.5">
+                    Adjustment Reason <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={adjustmentReason}
+                    onChange={(e) => setAdjustmentReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-xs text-gray-800 focus:outline-none focus:border-[#5E1224]"
+                  >
+                    <option value="RESTOCK">Restock / New Artisan Batch Arrival</option>
+                    <option value="CORRECTION">Physical Inventory Audit / Count Correction</option>
+                    <option value="DAMAGED">Damaged / Defective Garment Removal</option>
+                    <option value="RETURN">Customer Return Restock</option>
+                    <option value="OTHER">Other Operational Reason</option>
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-gray-700 font-semibold mb-1">
-                  Audit Note (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Fresh consignment from artisan workshop"
-                  value={adjustmentNote}
-                  onChange={(e) => setAdjustmentNote(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#5E1224]"
-                />
-              </div>
-            </div>
+                {/* Section: Adjustment Note */}
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Enter adjustment details (optional)..."
+                    value={adjustmentNote}
+                    onChange={(e) => setAdjustmentNote(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-800 focus:outline-none focus:border-[#5E1224]"
+                  />
+                </div>
 
-            {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-              <span className="text-xs text-gray-500">
-                {hasInputErrors ? (
-                  <span className="text-red-600 font-medium">Please fix invalid input fields</span>
-                ) : modalTotals.changedCount === 0 ? (
-                  'No sizes modified'
-                ) : (
-                  `${modalTotals.changedCount} size variant${modalTotals.changedCount > 1 ? 's' : ''} modified`
-                )}
-              </span>
+                {/* Direct Link to Stock History */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => openHistory(editingProduct.product_id, editingProduct.product_name)}
+                    className="inline-flex items-center gap-1.5 text-xs text-[#5E1224] hover:text-[#4A0E1C] font-semibold hover:underline"
+                  >
+                    <History className="w-3.5 h-3.5 text-[#B58A3C]" />
+                    <span>View Stock History</span>
+                  </button>
+                </div>
+              </form>
 
-              <div className="flex items-center gap-2">
+              {/* Drawer Footer Actions */}
+              <div className="p-4 border-t border-gray-100 bg-[#FAF5EC]/40 shrink-0 flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setEditingProduct(null)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded text-xs font-medium transition-colors"
+                  className="flex-1 sm:flex-none px-6 py-2.5 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg text-xs font-semibold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={() => handleSaveBulkStock()}
                   disabled={isSaving || hasInputErrors}
-                  className="px-5 py-2 bg-[#5E1224] hover:bg-[#4A0E1C] disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
+                  className="flex-1 py-2.5 px-6 bg-[#5E1224] hover:bg-[#4A0E1C] active:bg-[#3D0B17] disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center justify-center gap-2"
                 >
                   {isSaving ? (
                     <>
@@ -1335,12 +1736,12 @@ export const AdminInventory: React.FC = () => {
                       <span>Saving Stock...</span>
                     </>
                   ) : (
-                    <span>Save Stock Changes</span>
+                    <span>Save Stock</span>
                   )}
                 </button>
               </div>
             </div>
-          </form>
+          </div>
         </div>
       )}
 
@@ -1426,7 +1827,7 @@ export const AdminInventory: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-xs font-semibold"
+                className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs font-semibold transition-colors"
               >
                 Close
               </button>
