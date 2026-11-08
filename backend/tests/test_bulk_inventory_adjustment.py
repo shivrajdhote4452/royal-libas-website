@@ -693,6 +693,140 @@ finally:
         self.assertEqual(proc.returncode, 0, f"Process isolation test failed!\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
         self.assertIn("CANARY_TEST_PASSED", proc.stdout)
 
+    def test_17_duplicate_sizes_across_colours_bulk_adjust_and_concurrency(self):
+        """Regression Test: Verify products with duplicate sizes across multiple colours are cleanly handled, listed, and concurrency-protected."""
+        from app.models import Product, ProductVariant, StockAdjustment
+        from decimal import Decimal
+
+        db = self.TestSessionLocal()
+        try:
+            # Seed a multi-colour product with overlapping sizes:
+            # Ruby Red: M=2, L=6
+            # Navy Blue: M=5, L=0 (sold out)
+            # Emerald Green: Free Size=10
+            multi_prod = Product(
+                name="Gulnaar Heritage Anarkali Set",
+                slug="gulnaar-heritage-anarkali-set",
+                category="HEAVY DRESS",
+                subcategory="Designer Wear",
+                status="PUBLISHED",
+                is_active=True,
+                description="Luxurious multi-colour anarkali with duplicate sizes per shade",
+            )
+            db.add(multi_prod)
+            db.commit()
+
+            v_red_m = ProductVariant(
+                product_id=multi_prod.id,
+                size="M",
+                colour="Ruby Red",
+                sku="RL-GHA-RED-M",
+                selling_price=Decimal("6999.00"),
+                stock=2,
+            )
+            v_red_l = ProductVariant(
+                product_id=multi_prod.id,
+                size="L",
+                colour="Ruby Red",
+                sku="RL-GHA-RED-L",
+                selling_price=Decimal("6999.00"),
+                stock=6,
+            )
+            v_blu_m = ProductVariant(
+                product_id=multi_prod.id,
+                size="M",
+                colour="Navy Blue",
+                sku="RL-GHA-BLU-M",
+                selling_price=Decimal("6999.00"),
+                stock=5,
+            )
+            v_blu_l = ProductVariant(
+                product_id=multi_prod.id,
+                size="L",
+                colour="Navy Blue",
+                sku="RL-GHA-BLU-L",
+                selling_price=Decimal("6999.00"),
+                stock=0,
+            )
+            v_emr_fs = ProductVariant(
+                product_id=multi_prod.id,
+                size="Free Size",
+                colour="Emerald Green",
+                sku="RL-GHA-EMR-FS",
+                selling_price=Decimal("5999.00"),
+                stock=10,
+            )
+            db.add_all([v_red_m, v_red_l, v_blu_m, v_blu_l, v_emr_fs])
+            db.commit()
+
+            multi_id = multi_prod.id
+            red_m_id = v_red_m.id
+            red_l_id = v_red_l.id
+            blu_m_id = v_blu_m.id
+            blu_l_id = v_blu_l.id
+            emr_fs_id = v_emr_fs.id
+        finally:
+            db.close()
+
+        # 1. Test GET /admin/inventory listing returns every distinct variant without dropping overlapping sizes
+        res = self.client.get("/admin/inventory?search=Gulnaar+Heritage", headers=self.owner_headers)
+        self.assertEqual(res.status_code, 200, res.text)
+        items = res.json()
+        self.assertEqual(len(items), 5)
+
+        # Verify Red M = 2 and Blue M = 5 are both present with correct colour and stock
+        items_by_key = {(it["size"], it["colour"]): it for it in items}
+        self.assertIn(("M", "Ruby Red"), items_by_key)
+        self.assertIn(("M", "Navy Blue"), items_by_key)
+        self.assertEqual(items_by_key[("M", "Ruby Red")]["stock"], 2)
+        self.assertEqual(items_by_key[("M", "Navy Blue")]["stock"], 5)
+        self.assertEqual(items_by_key[("L", "Ruby Red")]["stock"], 6)
+        self.assertEqual(items_by_key[("L", "Navy Blue")]["stock"], 0)
+        self.assertEqual(items_by_key[("Free Size", "Emerald Green")]["stock"], 10)
+
+        # 2. Test Atomic Bulk Stock Adjustment across duplicate sizes and colours:
+        # Update Red M from 2 -> 4 (+2), Blue M from 5 -> 8 (+3), and Blue L from 0 -> 2 (+2)
+        bulk_payload = {
+            "product_id": multi_id,
+            "reason": "RESTOCK",
+            "note": "Artisan fresh consignment for Ruby Red and Navy Blue shades",
+            "items": [
+                {"variant_id": red_m_id, "new_stock": 4, "expected_stock": 2},
+                {"variant_id": red_l_id, "new_stock": 6, "expected_stock": 6},
+                {"variant_id": blu_m_id, "new_stock": 8, "expected_stock": 5},
+                {"variant_id": blu_l_id, "new_stock": 2, "expected_stock": 0},
+                {"variant_id": emr_fs_id, "new_stock": 10, "expected_stock": 10},
+            ],
+        }
+        res_bulk = self.client.post("/admin/inventory/bulk-adjust", json=bulk_payload, headers=self.owner_headers)
+        self.assertEqual(res_bulk.status_code, 200, res_bulk.text)
+        bulk_data = res_bulk.json()
+        self.assertEqual(bulk_data["total_stock"], 4 + 6 + 8 + 2 + 10)  # 30 units
+
+        # 3. Test Concurrency Protection when an expected_stock is stale for one specific shade
+        # Attempt to adjust Red M with stale expected_stock=2 (now 4) while Blue M has expected_stock=8
+        conflict_payload = {
+            "product_id": multi_id,
+            "reason": "RESTOCK",
+            "items": [
+                {"variant_id": red_m_id, "new_stock": 5, "expected_stock": 2},  # Stale!
+                {"variant_id": blu_m_id, "new_stock": 9, "expected_stock": 8},  # Current
+            ],
+        }
+        res_conflict = self.client.post("/admin/inventory/bulk-adjust", json=conflict_payload, headers=self.owner_headers)
+        self.assertEqual(res_conflict.status_code, 409)
+        self.assertIn("M (Ruby Red)", res_conflict.json()["detail"])
+
+        # 4. Verify Stock Adjustment Audit History preserves exact colour snapshots
+        res_hist = self.client.get(f"/admin/inventory/adjustments?product_id={multi_id}", headers=self.owner_headers)
+        self.assertEqual(res_hist.status_code, 200, res_hist.text)
+        history = res_hist.json()
+        self.assertGreaterEqual(len(history), 3)
+
+        history_colours = {h["colour"] for h in history if h.get("colour")}
+        self.assertIn("Ruby Red", history_colours)
+        self.assertIn("Navy Blue", history_colours)
+
     def test_16_isolation_regression_both_modules_already_imported(self):
         """Regression test in an isolated process verifying that if BOTH app.database AND app.main were
         already imported before the test, executing setUpClass/teardown restores all module references cleanly.
