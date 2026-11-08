@@ -9,6 +9,7 @@ export interface AdminCoupon {
   valid_from: string | null;
   valid_until: string | null;
   is_active: boolean;
+  is_public: boolean;
   is_expired: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
   created_at: string;
@@ -24,6 +25,7 @@ export interface CouponCreatePayload {
   valid_from?: string | null;
   valid_until?: string | null;
   is_active?: boolean;
+  is_public?: boolean;
 }
 
 export interface CouponUpdatePayload {
@@ -35,4 +37,5 @@ export interface CouponUpdatePayload {
   valid_from?: string | null;
   valid_until?: string | null;
   is_active?: boolean;
+  is_public?: boolean;
 }

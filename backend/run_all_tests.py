@@ -89,6 +89,7 @@ VERIFIED_SAFE_SUITES = [
     "test_product_pricing_consistency.py",
     "test_free_size_and_stock_limits.py",
     "test_coupons_management.py",
+    "test_coupon_public_promotion.py",
     "test_phase1.py",
     "test_runner_safety_harness.py",
 ]

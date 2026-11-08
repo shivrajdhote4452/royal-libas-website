@@ -14,10 +14,22 @@ router = APIRouter(prefix="/coupons", tags=["coupons"])
 
 
 @router.get("", response_model=List[CouponPublicResponse])
-def list_active_coupons(db: Session = Depends(get_db)):
-    """List currently active promotional coupons for Available Offers."""
+def list_active_coupons(
+    public_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    """List currently active promotional coupons.
+    Exclusively returns coupons designated for public storefront promotion (is_public=True).
+    Private/VIP coupons (is_public=False) are never exposed via unauthenticated public listings,
+    even if active. Direct validation via POST /coupons/validate remains available for private codes.
+    """
     now = datetime.now(timezone.utc)
-    all_coupons = db.query(Coupon).filter(Coupon.is_active == True).order_by(Coupon.id.asc()).all()
+    # Public storefront listings strictly require is_active=True and is_public=True
+    query = db.query(Coupon).filter(
+        Coupon.is_active == True,
+        Coupon.is_public == True,
+    )
+    all_coupons = query.order_by(Coupon.id.asc()).all()
     active_coupons = []
     for c in all_coupons:
         if c.valid_from:

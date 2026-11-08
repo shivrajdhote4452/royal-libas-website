@@ -14,6 +14,7 @@ import {
   Trash2,
   Loader2,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import { AdminCoupon, CouponCreatePayload, CouponUpdatePayload } from '../../types/coupon';
 import {
@@ -21,6 +22,7 @@ import {
   adminCreateCoupon,
   adminUpdateCoupon,
   adminToggleCouponActive,
+  adminToggleCouponPublic,
   adminDeleteCoupon,
 } from '../../lib/api';
 
@@ -51,6 +53,7 @@ export const AdminCoupons: React.FC = () => {
   const [formValidFrom, setFormValidFrom] = useState<string>('');
   const [formValidUntil, setFormValidUntil] = useState<string>('');
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
+  const [formIsPublic, setFormIsPublic] = useState<boolean>(false);
 
   // Submission & Action state
   const [submitting, setSubmitting] = useState(false);
@@ -133,6 +136,7 @@ export const AdminCoupons: React.FC = () => {
     setFormValidFrom(today);
     setFormValidUntil(nextMonth);
     setFormIsActive(true);
+    setFormIsPublic(false);
     setFormError(null);
     setIsDrawerOpen(true);
   };
@@ -148,6 +152,7 @@ export const AdminCoupons: React.FC = () => {
     setFormValidFrom(c.valid_from ? c.valid_from.split('T')[0] : '');
     setFormValidUntil(c.valid_until ? c.valid_until.split('T')[0] : '');
     setFormIsActive(c.is_active);
+    setFormIsPublic(Boolean(c.is_public));
     setFormError(null);
     setIsDrawerOpen(true);
   };
@@ -174,6 +179,25 @@ export const AdminCoupons: React.FC = () => {
       showToast(`Coupon ${updated.code} is now ${updated.is_active ? 'active' : 'inactive'}.`);
     } catch (err: any) {
       showToast(err.message || 'Failed to update coupon status', 'error');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Toggle Coupon Public Promotion State
+  const handleTogglePublic = async (c: AdminCoupon) => {
+    if (!token) return;
+    setActionLoadingId(c.id);
+    try {
+      const updated = await adminToggleCouponPublic(token, c.id);
+      setCoupons((prev) => prev.map((item) => (item.id === c.id ? updated : item)));
+      showToast(
+        updated.is_public
+          ? `Coupon ${updated.code} is now publicly promoted on the homepage ticket!`
+          : `Coupon ${updated.code} is now private and hidden from the homepage ticket.`
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update promotion status', 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -250,6 +274,7 @@ export const AdminCoupons: React.FC = () => {
           valid_from: formValidFrom ? new Date(formValidFrom).toISOString() : null,
           valid_until: formValidUntil ? new Date(formValidUntil + 'T23:59:59').toISOString() : null,
           is_active: formIsActive,
+          is_public: formIsPublic,
         };
         const updated = await adminUpdateCoupon(token, editingCoupon.id, payload);
         setCoupons((prev) => prev.map((item) => (item.id === editingCoupon.id ? updated : item)));
@@ -266,6 +291,7 @@ export const AdminCoupons: React.FC = () => {
           valid_from: formValidFrom ? new Date(formValidFrom).toISOString() : null,
           valid_until: formValidUntil ? new Date(formValidUntil + 'T23:59:59').toISOString() : null,
           is_active: formIsActive,
+          is_public: formIsPublic,
         };
         const created = await adminCreateCoupon(token, payload);
         setCoupons((prev) => [created, ...prev]);
@@ -496,23 +522,31 @@ export const AdminCoupons: React.FC = () => {
                 <div>
                   {/* Card Header: Status Badge + Context Label */}
                   <div className="flex items-center justify-between gap-2">
-                    {/* Status Pill */}
-                    {coupon.status === 'ACTIVE' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                        Active
-                      </span>
-                    ) : coupon.status === 'EXPIRED' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                        Expired
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
-                        Inactive
-                      </span>
-                    )}
+                    {/* Status Pill & Public Badge */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {coupon.status === 'ACTIVE' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                          Active
+                        </span>
+                      ) : coupon.status === 'EXPIRED' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                          Expired
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
+                          Inactive
+                        </span>
+                      )}
+
+                      {coupon.is_public && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#B58A3C]/15 text-[#5E1224] border border-[#B58A3C]/40">
+                          ✦ Public Promo
+                        </span>
+                      )}
+                    </div>
 
                     {/* Offer Context Tag */}
                     <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
@@ -651,6 +685,29 @@ export const AdminCoupons: React.FC = () => {
                       <span>{coupon.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
                     </button>
                   )}
+
+                  {/* Public Promotion Toggle Button */}
+                  <button
+                    type="button"
+                    disabled={isActionLoading}
+                    onClick={() => handleTogglePublic(coupon)}
+                    className={`inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg border text-xs font-semibold transition-colors disabled:opacity-50 ${
+                      coupon.is_public
+                        ? 'bg-[#B58A3C]/15 border-[#B58A3C]/40 text-[#5E1224] hover:bg-[#B58A3C]/25'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                    }`}
+                    title={
+                      coupon.is_public
+                        ? `Promoted on homepage ticket. Click to make private.`
+                        : `Private coupon. Click to promote on homepage ticket.`
+                    }
+                    aria-label={`Toggle homepage ticket promotion for ${coupon.code}`}
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${coupon.is_public ? 'text-[#B58A3C] fill-[#B58A3C]' : 'text-gray-400'}`} />
+                    <span className="text-[11px] hidden sm:inline">
+                      {coupon.is_public ? 'Promoted' : 'Private'}
+                    </span>
+                  </button>
 
                   {/* Delete Button with clear accessible label and title */}
                   <button
@@ -875,8 +932,8 @@ export const AdminCoupons: React.FC = () => {
                   </p>
                 </div>
 
-                {/* 7. Active Status Toggle */}
-                <div className="pt-2">
+                {/* 7. Active Status & Public Promotion Toggles */}
+                <div className="pt-2 space-y-3">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -887,6 +944,24 @@ export const AdminCoupons: React.FC = () => {
                     <span className="text-xs font-medium text-gray-700">
                       Enable this coupon immediately upon saving
                     </span>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer p-3 rounded-lg border border-[#B58A3C]/35 bg-[#FCF8F0]">
+                    <input
+                      type="checkbox"
+                      checked={formIsPublic}
+                      onChange={(e) => setFormIsPublic(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-[#5E1224] rounded border-gray-300 focus:ring-[#5E1224]"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-[#5E1224] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-[#B58A3C]" />
+                        <span>Promote on Public Homepage (Option 2 Ticket)</span>
+                      </span>
+                      <span className="text-[11px] text-gray-600 block mt-0.5 leading-relaxed">
+                        Feature this coupon on the homepage ticket banner below the hero. Leave unchecked for private / direct-entry VIP codes.
+                      </span>
+                    </div>
                   </label>
                 </div>
               </form>

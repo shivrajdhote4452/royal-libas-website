@@ -208,6 +208,7 @@ export interface CouponPublic {
   value: number;
   min_order_value: number;
   is_active: boolean;
+  is_public?: boolean;
 }
 
 export interface FulfillmentConfig {

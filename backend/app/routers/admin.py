@@ -5214,6 +5214,7 @@ def _serialize_coupon_admin(c: Coupon, now: datetime) -> CouponAdminResponse:
         valid_from=c.valid_from,
         valid_until=c.valid_until,
         is_active=bool(c.is_active),
+        is_public=bool(getattr(c, "is_public", False)),
         is_expired=is_expired,
         status=status_label,
         created_at=c.created_at,
@@ -5273,6 +5274,7 @@ def admin_create_coupon(
         valid_from=payload.valid_from,
         valid_until=payload.valid_until,
         is_active=payload.is_active,
+        is_public=payload.is_public,
     )
     db.add(coupon)
     db.commit()
@@ -5342,6 +5344,8 @@ def admin_update_coupon(
         coupon.valid_until = payload.valid_until
     if payload.is_active is not None:
         coupon.is_active = payload.is_active
+    if payload.is_public is not None:
+        coupon.is_public = payload.is_public
 
     db.commit()
     db.refresh(coupon)
@@ -5353,6 +5357,34 @@ def admin_update_coupon(
         "coupon",
         coupon.id,
         f"Updated coupon {coupon.code}",
+    )
+    return _serialize_coupon_admin(coupon, now)
+
+
+@router.patch("/coupons/{id}/toggle-public", response_model=CouponAdminResponse)
+def admin_toggle_coupon_public(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+):
+    """Toggle coupon is_public flag between public promotion and private code."""
+    coupon = db.query(Coupon).filter(Coupon.id == id).first()
+    if not coupon:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Coupon #{id} not found.")
+
+    now = datetime.now(timezone.utc)
+    coupon.is_public = not bool(getattr(coupon, "is_public", False))
+    db.commit()
+    db.refresh(coupon)
+
+    action_label = "PROMOTED_PUBLIC" if coupon.is_public else "UNPROMOTED_PUBLIC"
+    log_activity(
+        db,
+        current_admin,
+        f"COUPON_{action_label}",
+        "coupon",
+        coupon.id,
+        f"Set public promotion for {coupon.code} to {coupon.is_public}",
     )
     return _serialize_coupon_admin(coupon, now)
 

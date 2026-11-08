@@ -342,6 +342,7 @@ class Coupon(Base):
     value = Column(Numeric(10, 2), nullable=False)
     min_order_value = Column(Numeric(10, 2), default=0.00, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_public = Column(Boolean, default=False, server_default="0", nullable=False)
     usage_limit = Column(Integer, nullable=True)
     used_count = Column(Integer, default=0, nullable=False)
     valid_from = Column(DateTime(timezone=True), nullable=True)
