@@ -99,11 +99,16 @@ class TestCouponPublicPromotion(unittest.TestCase):
         self.assertEqual(data["code"], "SAFEPRIVATE10")
         self.assertFalse(data["is_public"], "Coupon must default to is_public=False")
 
-        # Must not appear in public_only query
+        # Must not appear in public_only query, nor default unauthenticated /coupons
         pub_res = client.get("/coupons?public_only=true")
         self.assertEqual(pub_res.status_code, 200)
         codes = [c["code"] for c in pub_res.json()]
         self.assertNotIn("SAFEPRIVATE10", codes)
+
+        default_res = client.get("/coupons")
+        self.assertEqual(default_res.status_code, 200)
+        default_codes = [c["code"] for c in default_res.json()]
+        self.assertNotIn("SAFEPRIVATE10", default_codes, "Default unauthenticated /coupons must not expose private coupons")
 
     def test_02_create_public_coupon_and_toggle(self):
         """Verify creating coupon with is_public=True and toggling via patch endpoint."""
@@ -230,6 +235,64 @@ class TestCouponPublicPromotion(unittest.TestCase):
         pub_res = client.get("/coupons?public_only=true")
         codes = [c["code"] for c in pub_res.json()]
         self.assertIn("UPDATEPROMO", codes)
+
+    def test_06_unauthenticated_default_coupons_listing_protects_private_coupons(self):
+        """Verify unauthenticated GET /coupons strictly hides private coupons by default and with query params."""
+        # Create a VIP private coupon
+        client.post("/admin/coupons", json={
+            "code": "VIPEXCLUSIVE50",
+            "type": "PERCENT",
+            "value": "50.00",
+            "min_order_value": "5000.00",
+            "is_active": True,
+            "is_public": False,
+        }, headers=self.admin_headers)
+
+        # 1. Unauthenticated default GET /coupons
+        res_default = client.get("/coupons")
+        self.assertEqual(res_default.status_code, 200)
+        default_codes = [c["code"] for c in res_default.json()]
+        self.assertNotIn("VIPEXCLUSIVE50", default_codes)
+
+        # 2. Unauthenticated GET /coupons?public_only=false must NOT reveal private coupons
+        res_param_false = client.get("/coupons?public_only=false")
+        self.assertEqual(res_param_false.status_code, 200)
+        false_codes = [c["code"] for c in res_param_false.json()]
+        self.assertNotIn("VIPEXCLUSIVE50", false_codes)
+
+        # 3. Unauthenticated GET /coupons?public_only=true
+        res_param_true = client.get("/coupons?public_only=true")
+        self.assertEqual(res_param_true.status_code, 200)
+        true_codes = [c["code"] for c in res_param_true.json()]
+        self.assertNotIn("VIPEXCLUSIVE50", true_codes)
+
+    def test_07_private_coupon_direct_validation_works_while_unlisted(self):
+        """Verify customer can validate an unlisted private coupon when entered explicitly at checkout."""
+        # Validate the private coupon created in test_06
+        val_res = client.post("/coupons/validate", json={
+            "code": "VIPEXCLUSIVE50",
+            "subtotal": "6000.00",
+        })
+        self.assertEqual(val_res.status_code, 200)
+        data = val_res.json()
+        self.assertTrue(data["valid"], "Direct validation of private coupon must succeed")
+        self.assertEqual(float(data["discount"]), 3000.00)
+
+        # Subtotal below minimum order value fails gracefully with clear message
+        val_low = client.post("/coupons/validate", json={
+            "code": "VIPEXCLUSIVE50",
+            "subtotal": "2000.00",
+        })
+        self.assertEqual(val_low.status_code, 200)
+        self.assertFalse(val_low.json()["valid"])
+        self.assertIn("Minimum order value", val_low.json()["message"])
+
+    def test_08_admin_lists_all_coupons_including_private(self):
+        """Verify authenticated admin endpoint GET /admin/coupons lists all coupons including private ones."""
+        admin_res = client.get("/admin/coupons", headers=self.admin_headers)
+        self.assertEqual(admin_res.status_code, 200)
+        admin_codes = [c["code"] for c in admin_res.json()]
+        self.assertIn("VIPEXCLUSIVE50", admin_codes, "Admin must be able to view private coupons")
 
 
 if __name__ == "__main__":

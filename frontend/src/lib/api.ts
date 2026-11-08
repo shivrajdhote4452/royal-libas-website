@@ -120,7 +120,7 @@ export async function validateCart(items: CartItemValidate[]): Promise<CartValid
   return response.json();
 }
 
-export async function fetchActiveCoupons(publicOnly = false): Promise<CouponPublic[]> {
+export async function fetchActiveCoupons(publicOnly = true): Promise<CouponPublic[]> {
   const url = publicOnly ? `${API_BASE_URL}/coupons?public_only=true` : `${API_BASE_URL}/coupons`;
   const response = await fetch(url);
   if (!response.ok) {

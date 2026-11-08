@@ -10,9 +10,12 @@ export const HomepageCouponTicket: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-    async function loadPublicPromotions() {
+
+    async function loadPublicPromotions(isInitial = false) {
       try {
-        setLoading(true);
+        if (isInitial) {
+          setLoading(true);
+        }
         // Strictly fetch coupons designated for public storefront promotion (is_public=true)
         const data = await fetchActiveCoupons(true);
         if (isMounted) {
@@ -28,15 +31,36 @@ export const HomepageCouponTicket: React.FC = () => {
           setCoupons([]);
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && isInitial) {
           setLoading(false);
         }
       }
     }
 
-    loadPublicPromotions();
+    // 1. Initial fetch on component mount
+    loadPublicPromotions(true);
+
+    // 2. Event-driven refresh: when visitor refocuses or switches back to tab
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        loadPublicPromotions(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    // 3. Low-frequency background sync (every 60s while tab remains open and active)
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadPublicPromotions(false);
+      }
+    }, 60000);
+
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      clearInterval(intervalId);
     };
   }, []);
 
