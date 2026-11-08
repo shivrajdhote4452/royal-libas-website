@@ -599,47 +599,59 @@ export const AdminInventory: React.FC = () => {
     );
   };
 
-  // Helper to render size-wise stock matrix in Product Stock Card
-  const renderCardSizeStock = (group: ProductInventoryGroup) => {
-    // Check if it's Free Size only
-    const isFreeSizeOnly =
-      group.variants.length === 1 &&
-      (/free/i.test(group.variants[0].size) || /one/i.test(group.variants[0].size));
+  // Helper to render size matrix for a single variant group (e.g. single shade or single-shade product)
+  const renderSingleGroupSizeStock = (variants: InventoryItem[]) => {
+    // Check if this variant group consists only of Free Size (or custom one-size)
+    const isFreeSizeGroup = variants.every((v) => /free|one/i.test(v.size));
 
-    if (isFreeSizeOnly) {
-      const v = group.variants[0];
+    if (isFreeSizeGroup) {
       return (
-        <div className="flex items-center justify-between text-xs py-1">
-          <span className="font-sans text-gray-700 font-medium">Free Size:</span>
-          <span
-            className={`font-mono font-bold px-2 py-0.5 rounded ${
-              v.stock === 0
-                ? 'bg-red-50 text-red-600'
-                : v.stock <= 5
-                ? 'bg-amber-50 text-amber-800'
-                : 'bg-emerald-50 text-emerald-800'
-            }`}
-          >
-            {v.stock}
-          </span>
+        <div className="flex items-center gap-3 flex-wrap text-xs py-0.5">
+          {variants.map((v) => (
+            <div key={v.variant_id} className="flex items-center gap-1.5 font-mono">
+              <span className="font-sans text-gray-700 font-medium">Free Size:</span>
+              <span
+                className={`font-mono font-bold px-1.5 py-0.5 rounded text-xs ${
+                  v.stock === 0
+                    ? 'text-red-600 bg-red-50 border border-red-200'
+                    : v.stock <= 5
+                    ? 'text-amber-700 bg-amber-50 border border-amber-200'
+                    : 'text-gray-900 bg-gray-50 border border-gray-200'
+                }`}
+                title={`Free Size: ${v.stock} units`}
+              >
+                {v.stock}
+              </span>
+            </div>
+          ))}
         </div>
       );
     }
 
+    // Map variants in this specific group by normalized size
     const variantMap = new Map<string, InventoryItem>();
-    for (const v of group.variants) {
+    for (const v of variants) {
       variantMap.set(v.size.toUpperCase().trim(), v);
     }
 
     const standardSizes = ['S', 'M', 'L', 'XL', 'XXL'];
-    const customSizes = group.variants
-      .map((v) => v.size.toUpperCase().trim())
-      .filter((s) => !standardSizes.includes(s));
-    const allSizes = [...standardSizes, ...Array.from(new Set(customSizes))];
+    const hasAnyStandardSize = variants.some((v) =>
+      standardSizes.includes(v.size.toUpperCase().trim())
+    );
+
+    let sizesToDisplay: string[];
+    if (hasAnyStandardSize) {
+      const customSizes = variants
+        .map((v) => v.size.toUpperCase().trim())
+        .filter((s) => !standardSizes.includes(s));
+      sizesToDisplay = [...standardSizes, ...Array.from(new Set(customSizes))];
+    } else {
+      sizesToDisplay = Array.from(variantMap.keys());
+    }
 
     return (
       <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-xs font-mono">
-        {allSizes.map((sizeKey) => {
+        {sizesToDisplay.map((sizeKey) => {
           const v = variantMap.get(sizeKey);
           const hasVariant = !!v;
           const stock = v?.stock ?? 0;
@@ -671,6 +683,41 @@ export const AdminInventory: React.FC = () => {
         })}
       </div>
     );
+  };
+
+  // Helper to render size-wise stock in Product Stock Card
+  const renderCardSizeStock = (group: ProductInventoryGroup) => {
+    // Multi-shade product: render each colour group distinctly so duplicate sizes across shades never collide
+    if (group.colourGroups.length > 1) {
+      return (
+        <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5">
+          {group.colourGroups.map((cg) => {
+            const shadeStock = cg.variants.reduce((sum, v) => sum + v.stock, 0);
+
+            return (
+              <div
+                key={cg.colour}
+                className="py-1.5 first:pt-0.5 last:pb-0.5 border-b last:border-b-0 border-amber-200/50 space-y-1"
+              >
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-[#5E1224] uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#B58A3C]" />
+                    <span>Shade: {cg.colour}</span>
+                  </span>
+                  <span className="font-mono text-gray-500 text-[10px]">
+                    {shadeStock} units
+                  </span>
+                </div>
+                {renderSingleGroupSizeStock(cg.variants)}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Single colour or standard product
+    return renderSingleGroupSizeStock(group.variants);
   };
 
   return (
@@ -1581,96 +1628,215 @@ export const AdminInventory: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                    {editingProduct.variants.map((v) => {
-                      const orig = initialStockMap[v.variant_id] ?? 0;
-                      const rawVal = stockInputStrings[v.variant_id] ?? '';
-                      const fieldError = getVariantValidationError(rawVal);
-                      const parsed = parseInt(rawVal, 10);
-                      const isValidNumber = !fieldError && !isNaN(parsed);
-                      const diff = isValidNumber ? parsed - orig : null;
+                  {editingProduct.colourGroups.length > 1 ? (
+                    <div className="space-y-3.5">
+                      {editingProduct.colourGroups.map((cg) => {
+                        const shadeProposedTotal = cg.variants.reduce((sum, v) => {
+                          const raw = stockInputStrings[v.variant_id];
+                          const parsed = parseInt(raw ?? '', 10);
+                          return sum + (isNaN(parsed) ? (initialStockMap[v.variant_id] ?? 0) : parsed);
+                        }, 0);
 
-                      return (
-                        <div
-                          key={v.variant_id}
-                          className="p-3 flex items-center justify-between hover:bg-gray-50/70 transition-colors"
-                        >
-                          {/* Left: Size, Colour & Current */}
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="w-12 text-center py-1 bg-gray-100 rounded-md font-mono font-bold text-xs text-gray-900 shrink-0">
-                              {v.size}
-                            </span>
-                            <div className="min-w-0">
-                              {v.colour && (
-                                <p className="text-[11px] text-gray-500 truncate">
-                                  {v.colour}
-                                </p>
-                              )}
-                              <p className="text-xs text-gray-600 font-mono">
-                                Current: <span className="font-semibold">{orig}</span>
-                              </p>
+                        return (
+                          <div
+                            key={cg.colour}
+                            className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs"
+                          >
+                            <div className="bg-[#FAF5EC] px-3.5 py-2 border-b border-gray-200 flex items-center justify-between text-xs">
+                              <span className="font-bold text-[#5E1224] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-[#B58A3C]" />
+                                <span>Shade: {cg.colour}</span>
+                              </span>
+                              <span className="font-mono text-gray-600 font-semibold text-[11px]">
+                                {shadeProposedTotal} units
+                              </span>
+                            </div>
+                            <div className="divide-y divide-gray-100">
+                              {cg.variants.map((v) => {
+                                const orig = initialStockMap[v.variant_id] ?? 0;
+                                const rawVal = stockInputStrings[v.variant_id] ?? '';
+                                const fieldError = getVariantValidationError(rawVal);
+                                const parsed = parseInt(rawVal, 10);
+                                const isValidNumber = !fieldError && !isNaN(parsed);
+                                const diff = isValidNumber ? parsed - orig : null;
+
+                                return (
+                                  <div
+                                    key={v.variant_id}
+                                    className="p-3 flex items-center justify-between hover:bg-gray-50/70 transition-colors"
+                                  >
+                                    {/* Left: Size, SKU & Current */}
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <span className="w-12 text-center py-1 bg-gray-100 rounded-md font-mono font-bold text-xs text-gray-900 shrink-0">
+                                        {v.size}
+                                      </span>
+                                      <div className="min-w-0">
+                                        {v.sku && (
+                                          <p className="text-[10px] text-gray-400 font-mono truncate">
+                                            {v.sku}
+                                          </p>
+                                        )}
+                                        <p className="text-xs text-gray-600 font-mono">
+                                          Current: <span className="font-semibold">{orig}</span>
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {/* Right: Stepper Control [-] [ count ] [+] */}
+                                    <div className="flex flex-col items-end gap-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuickDelta(v.variant_id, -1)}
+                                          className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
+                                          title="Decrease 1"
+                                        >
+                                          -
+                                        </button>
+                                        <input
+                                          type="text"
+                                          inputMode="numeric"
+                                          value={rawVal}
+                                          onChange={(e) => handleStockInputChange(v.variant_id, e.target.value)}
+                                          className={`w-14 h-8 text-center font-mono font-bold text-sm border rounded-lg focus:outline-none transition-colors ${
+                                            fieldError
+                                              ? 'border-red-500 bg-red-50/40 text-red-900 focus:border-red-600'
+                                              : 'border-gray-300 focus:border-[#5E1224]'
+                                          }`}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuickDelta(v.variant_id, 1)}
+                                          className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
+                                          title="Increase 1"
+                                        >
+                                          +
+                                        </button>
+                                        {diff !== null && diff !== 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleResetVariantStock(v.variant_id)}
+                                            className="p-1 text-gray-400 hover:text-gray-700 ml-0.5"
+                                            title="Reset to current"
+                                          >
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                      {fieldError ? (
+                                        <span className="text-[10px] text-red-600 font-medium">
+                                          {fieldError}
+                                        </span>
+                                      ) : diff !== null && diff !== 0 ? (
+                                        <span
+                                          className={`text-[11px] font-mono font-semibold ${
+                                            diff > 0 ? 'text-emerald-700' : 'text-red-600'
+                                          }`}
+                                        >
+                                          {diff > 0 ? `+${diff}` : diff} units
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                      {editingProduct.variants.map((v) => {
+                        const orig = initialStockMap[v.variant_id] ?? 0;
+                        const rawVal = stockInputStrings[v.variant_id] ?? '';
+                        const fieldError = getVariantValidationError(rawVal);
+                        const parsed = parseInt(rawVal, 10);
+                        const isValidNumber = !fieldError && !isNaN(parsed);
+                        const diff = isValidNumber ? parsed - orig : null;
 
-                          {/* Right: Stepper Control [-] [ count ] [+] */}
-                          <div className="flex flex-col items-end gap-1">
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleQuickDelta(v.variant_id, -1)}
-                                className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
-                                title="Decrease 1"
-                              >
-                                -
-                              </button>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                value={rawVal}
-                                onChange={(e) => handleStockInputChange(v.variant_id, e.target.value)}
-                                className={`w-14 h-8 text-center font-mono font-bold text-sm border rounded-lg focus:outline-none transition-colors ${
-                                  fieldError
-                                    ? 'border-red-500 bg-red-50/40 text-red-900 focus:border-red-600'
-                                    : 'border-gray-300 focus:border-[#5E1224]'
-                                }`}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleQuickDelta(v.variant_id, 1)}
-                                className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
-                                title="Increase 1"
-                              >
-                                +
-                              </button>
-                              {diff !== null && diff !== 0 && (
+                        return (
+                          <div
+                            key={v.variant_id}
+                            className="p-3 flex items-center justify-between hover:bg-gray-50/70 transition-colors"
+                          >
+                            {/* Left: Size, Colour & Current */}
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="w-12 text-center py-1 bg-gray-100 rounded-md font-mono font-bold text-xs text-gray-900 shrink-0">
+                                {v.size}
+                              </span>
+                              <div className="min-w-0">
+                                {v.colour && (
+                                  <p className="text-[11px] text-gray-500 truncate">
+                                    {v.colour}
+                                  </p>
+                                )}
+                                <p className="text-xs text-gray-600 font-mono">
+                                  Current: <span className="font-semibold">{orig}</span>
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Right: Stepper Control [-] [ count ] [+] */}
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => handleResetVariantStock(v.variant_id)}
-                                  className="p-1 text-gray-400 hover:text-gray-700 ml-0.5"
-                                  title="Reset to current"
+                                  onClick={() => handleQuickDelta(v.variant_id, -1)}
+                                  className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
+                                  title="Decrease 1"
                                 >
-                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  -
                                 </button>
-                              )}
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={rawVal}
+                                  onChange={(e) => handleStockInputChange(v.variant_id, e.target.value)}
+                                  className={`w-14 h-8 text-center font-mono font-bold text-sm border rounded-lg focus:outline-none transition-colors ${
+                                    fieldError
+                                      ? 'border-red-500 bg-red-50/40 text-red-900 focus:border-red-600'
+                                      : 'border-gray-300 focus:border-[#5E1224]'
+                                  }`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickDelta(v.variant_id, 1)}
+                                  className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 flex items-center justify-center text-gray-700 font-bold text-sm transition-colors"
+                                  title="Increase 1"
+                                >
+                                  +
+                                </button>
+                                {diff !== null && diff !== 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResetVariantStock(v.variant_id)}
+                                    className="p-1 text-gray-400 hover:text-gray-700 ml-0.5"
+                                    title="Reset to current"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                              {fieldError ? (
+                                <span className="text-[10px] text-red-600 font-medium">
+                                  {fieldError}
+                                </span>
+                              ) : diff !== null && diff !== 0 ? (
+                                <span
+                                  className={`text-[11px] font-mono font-semibold ${
+                                    diff > 0 ? 'text-emerald-700' : 'text-red-600'
+                                  }`}
+                                >
+                                  {diff > 0 ? `+${diff}` : diff} units
+                                </span>
+                              ) : null}
                             </div>
-                            {fieldError ? (
-                              <span className="text-[10px] text-red-600 font-medium">
-                                {fieldError}
-                              </span>
-                            ) : diff !== null && diff !== 0 ? (
-                              <span
-                                className={`text-[11px] font-mono font-semibold ${
-                                  diff > 0 ? 'text-emerald-700' : 'text-red-600'
-                                }`}
-                              >
-                                {diff > 0 ? `+${diff}` : diff} units
-                              </span>
-                            ) : null}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Section: Adjustment Reason */}
