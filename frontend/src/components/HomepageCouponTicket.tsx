@@ -13,7 +13,7 @@ export const HomepageCouponTicket: React.FC = () => {
     async function loadPublicPromotions() {
       try {
         setLoading(true);
-        // Strictly fetch coupons designated for public promotion (is_public=true)
+        // Strictly fetch coupons designated for public storefront promotion (is_public=true)
         const data = await fetchActiveCoupons(true);
         if (isMounted) {
           // Double-check eligibility on client: active and public
@@ -64,6 +64,7 @@ export const HomepageCouponTicket: React.FC = () => {
         textArea.style.top = '-9999px';
         document.body.appendChild(textArea);
         textArea.select();
+        textArea.setSelectionRange(0, 99999);
         copied = document.execCommand('copy');
         document.body.removeChild(textArea);
       } catch {
@@ -86,16 +87,18 @@ export const HomepageCouponTicket: React.FC = () => {
     return null;
   }
 
+  const isSingle = coupons.length === 1;
+
   return (
     <section
       id="homepage-coupon-tickets"
       aria-label="Exclusive Boutique Offers"
-      className="relative bg-[#180A0E] text-[#2B1B1E] pt-2 pb-8 sm:pb-12 px-4 sm:px-6 lg:px-8 border-b border-[#B58A3C]/40"
+      className="relative w-full bg-[#FAF5EC] text-[#2B1B1E] py-5 sm:py-6 lg:py-8 px-4 sm:px-6 lg:px-8 border-t border-[#B58A3C]/30 border-b border-[#E8DFC8] shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
     >
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div
           className={`grid gap-5 sm:gap-6 ${
-            coupons.length === 1 ? 'grid-cols-1 max-w-4xl mx-auto' : 'grid-cols-1 lg:grid-cols-2'
+            isSingle ? 'grid-cols-1 max-w-6xl mx-auto' : 'grid-cols-1 lg:grid-cols-2'
           }`}
         >
           {coupons.map((coupon) => {
@@ -111,88 +114,157 @@ export const HomepageCouponTicket: React.FC = () => {
             return (
               <div
                 key={coupon.id}
-                className="relative bg-[#FCF8F0] border border-[#B58A3C]/80 shadow-[0_8px_30px_rgba(0,0,0,0.45)] p-4 sm:p-5 lg:px-7 lg:py-5 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-5 transition-transform duration-300 hover:scale-[1.01] group overflow-hidden"
+                className="relative bg-[#FFFDF9] border border-[#B58A3C] shadow-[0_4px_24px_rgba(43,27,30,0.06)] p-4 sm:p-5 lg:px-8 lg:py-5 flex flex-col justify-between transition-transform duration-300 hover:scale-[1.006] group overflow-hidden"
               >
-                {/* Semicircular Ticket Notches on Left & Right Edges */}
+                {/* Decorative Inset Ticket Border Frame */}
                 <div
                   aria-hidden="true"
-                  className="absolute -left-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-[#180A0E] border-r border-[#B58A3C] shadow-inner pointer-events-none z-10"
+                  className="absolute inset-1 sm:inset-1.5 border border-[#B58A3C]/30 pointer-events-none rounded-[1px]"
+                />
+
+                {/* Semicircular Ticket Punch-Out Notches on Left & Right Edges */}
+                <div
+                  aria-hidden="true"
+                  className="absolute -left-3 sm:-left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#FAF5EC] border-r border-[#B58A3C] shadow-inner pointer-events-none z-10"
                 />
                 <div
                   aria-hidden="true"
-                  className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-[#180A0E] border-l border-[#B58A3C] shadow-inner pointer-events-none z-10"
+                  className="absolute -right-3 sm:-right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#FAF5EC] border-l border-[#B58A3C] shadow-inner pointer-events-none z-10"
                 />
 
-                {/* Left Zone: Offer Headline (Serif Burgundy Bold) */}
-                <div className="flex items-center justify-center sm:justify-start shrink-0 text-center sm:text-left min-w-[130px] lg:min-w-[150px]">
-                  <span className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#5E1224] leading-none whitespace-nowrap">
-                    {offerText}
-                  </span>
-                </div>
+                {/* ========================================================
+                    1. DESKTOP / TABLET SINGLE-ROW LAYOUT (>= md screens)
+                    Matches exact visual reference hierarchy across full width
+                    ======================================================== */}
+                <div className="hidden md:flex items-center justify-between gap-4 lg:gap-6 w-full relative z-20">
+                  {/* Left: Large Burgundy Discount */}
+                  <div className="shrink-0 text-left min-w-[140px] lg:min-w-[170px]">
+                    <span className="font-serif text-3xl lg:text-[40px] font-bold tracking-tight text-[#5E1224] leading-none whitespace-nowrap">
+                      {offerText}
+                    </span>
+                  </div>
 
-                {/* Vertical Divider (Desktop/Tablet) */}
-                <div
-                  aria-hidden="true"
-                  className="hidden sm:block h-9 w-[1px] bg-[#B58A3C]/35 shrink-0"
-                />
+                  {/* Vertical Separator 1 */}
+                  <div
+                    aria-hidden="true"
+                    className="h-10 w-[1px] bg-[#B58A3C]/35 shrink-0"
+                  />
 
-                {/* Center Zone: Code & Minimum Order Details */}
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-5 text-center sm:text-left flex-1 min-w-0">
-                  {/* Coupon Code Callout */}
-                  <div className="flex items-center gap-1.5 whitespace-nowrap">
-                    <span className="text-xs sm:text-sm text-[#2B1B1E]/80 font-medium">
+                  {/* Center-Left: Gold-Highlighted Coupon Code */}
+                  <div className="flex items-center gap-2 whitespace-nowrap shrink-0">
+                    <span className="text-sm lg:text-base text-[#4A3B32] font-medium">
                       Use code:
                     </span>
                     <span
                       id={`coupon-code-${coupon.id}`}
-                      className="font-serif sm:font-mono text-base sm:text-lg font-bold tracking-wider text-[#5E1224] bg-[#5E1224]/5 px-2 py-0.5 border border-[#5E1224]/20 rounded-xs"
+                      className="font-serif text-base lg:text-lg font-bold tracking-wider text-[#5E1224] bg-[#F4EBD9] px-3 py-1 rounded border border-[#B58A3C]/50 shadow-2xs"
                     >
                       {coupon.code}
                     </span>
                   </div>
 
-                  {/* Vertical Divider between Code & Min Order */}
+                  {/* Vertical Separator 2 */}
                   <div
                     aria-hidden="true"
-                    className="hidden sm:block h-6 w-[1px] bg-[#B58A3C]/25 shrink-0"
+                    className="h-10 w-[1px] bg-[#B58A3C]/35 shrink-0"
                   />
 
-                  {/* Minimum Order */}
-                  <div className="text-xs sm:text-sm text-[#2B1B1E]/80 whitespace-nowrap">
+                  {/* Center-Right: Minimum Order Value */}
+                  <div className="text-sm lg:text-base text-[#4A3B32] font-medium whitespace-nowrap shrink-0">
                     {minOrder > 0 ? (
                       <span>
-                        Minimum order: <strong className="text-[#2B1B1E] font-semibold">₹{minOrder.toLocaleString('en-IN')}</strong>
+                        Minimum order: <strong className="text-[#2B1B1E] font-bold">₹{minOrder.toLocaleString('en-IN')}</strong>
                       </span>
                     ) : (
-                      <span className="text-emerald-800 font-medium">No minimum order</span>
+                      <span className="text-emerald-800 font-semibold">No minimum order</span>
                     )}
+                  </div>
+
+                  {/* Right: Rounded Burgundy COPY CODE Button */}
+                  <div className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCode(coupon.code, coupon.id)}
+                      aria-label={`Copy coupon code ${coupon.code}`}
+                      className={`min-h-[44px] px-6 lg:px-8 py-3 rounded-md text-xs font-semibold uppercase tracking-[0.2em] font-ui transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow active:scale-[0.98] ${
+                        isCopied
+                          ? 'bg-emerald-700 text-white hover:bg-emerald-800'
+                          : 'bg-[#5E1224] text-[#FFFDF9] hover:bg-[#4A0E1C]'
+                      }`}
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-4 h-4 text-white" />
+                          <span>COPIED!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-[#FFFDF9]/80 group-hover:scale-110 transition-transform" />
+                          <span>COPY CODE</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
 
-                {/* Right Zone: COPY CODE Button */}
-                <div className="shrink-0 w-full sm:w-auto flex justify-center sm:justify-end z-20">
-                  <button
-                    type="button"
-                    onClick={() => handleCopyCode(coupon.code, coupon.id)}
-                    aria-label={`Copy coupon code ${coupon.code}`}
-                    className={`w-full sm:w-auto min-h-[44px] px-6 py-2.5 sm:py-3 text-xs font-semibold uppercase tracking-[0.2em] font-ui transition-all duration-200 flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] ${
-                      isCopied
-                        ? 'bg-emerald-700 text-white hover:bg-emerald-800'
-                        : 'bg-[#5E1224] text-[#FCF8F0] hover:bg-[#4A0E1C]'
-                    }`}
-                  >
-                    {isCopied ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-white" />
-                        <span>COPIED!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-[#FCF8F0]/80 group-hover:scale-110 transition-transform" />
-                        <span>COPY CODE</span>
-                      </>
-                    )}
-                  </button>
+                {/* ========================================================
+                    2. MOBILE APPROVED TWO-ROW COMPACT LAYOUT (< md screens)
+                    Comfortable touch targets (min 44px) & zero horizontal overflow
+                    ======================================================== */}
+                <div className="flex md:hidden flex-col gap-3 w-full relative z-20">
+                  {/* Row 1: Large Burgundy Discount & Gold-Highlighted Coupon Code */}
+                  <div className="flex items-center justify-between gap-3 border-b border-[#B58A3C]/20 pb-2.5 px-0.5">
+                    <span className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-[#5E1224] leading-none whitespace-nowrap">
+                      {offerText}
+                    </span>
+                    <div className="flex items-center gap-1.5 bg-[#F4EBD9] px-2.5 py-1 rounded border border-[#B58A3C]/50 shadow-2xs shrink-0">
+                      <span className="text-[11px] text-[#4A3B32] font-medium uppercase tracking-wider">
+                        Use code:
+                      </span>
+                      <span
+                        id={`coupon-code-mobile-${coupon.id}`}
+                        className="font-serif text-sm sm:text-base font-bold tracking-wider text-[#5E1224]"
+                      >
+                        {coupon.code}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Clear Minimum Order & Rounded Burgundy COPY CODE Button */}
+                  <div className="flex items-center justify-between gap-3 px-0.5">
+                    <div className="text-xs sm:text-sm text-[#4A3B32] font-medium leading-tight">
+                      {minOrder > 0 ? (
+                        <span>
+                          Min. order: <strong className="text-[#2B1B1E] font-semibold">₹{minOrder.toLocaleString('en-IN')}</strong>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-800 font-semibold">No min. order</span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCode(coupon.code, coupon.id)}
+                      aria-label={`Copy coupon code ${coupon.code}`}
+                      className={`min-h-[44px] px-5 sm:px-6 py-2.5 rounded-md text-xs font-semibold uppercase tracking-[0.16em] font-ui transition-all duration-200 flex items-center justify-center gap-2 shadow-xs shrink-0 active:scale-[0.98] ${
+                        isCopied
+                          ? 'bg-emerald-700 text-white hover:bg-emerald-800'
+                          : 'bg-[#5E1224] text-[#FFFDF9] hover:bg-[#4A0E1C]'
+                      }`}
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-white" />
+                          <span>COPIED!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-[#FFFDF9]/80" />
+                          <span>COPY CODE</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
