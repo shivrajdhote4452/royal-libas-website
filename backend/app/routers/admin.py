@@ -16,8 +16,9 @@ import threading
 from typing import List, Optional, Tuple, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Query, Form
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, text
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 from app.auth import get_current_admin, verify_password, hash_password, create_access_token, require_roles
 from app.config import (
@@ -5129,35 +5130,56 @@ def admin_list_staff(
     return query.order_by(Admin.id.asc()).all()
 
 
+STAFF_RBAC_MUTATION_LOCK_ID = 84521093
+
+
 @router.post("/staff", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
 def admin_create_staff(
     payload: AdminCreate,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER")),
 ):
-    """Create a new staff account (Owner only)."""
+    """Create a new staff account with consistent transaction-level lock synchronization (Owner only)."""
     email_clean = payload.email.lower().strip()
-    existing = db.query(Admin).filter(Admin.email == email_clean).first()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists.")
-
     valid_roles = ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF"]
     role_clean = payload.role.upper().strip()
     if role_clean not in valid_roles:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role. Must be one of: {', '.join(valid_roles)}")
 
-    new_admin = Admin(
-        email=email_clean,
-        name=payload.name.strip() if payload.name else None,
-        role=role_clean,
-        password_hash=hash_password(payload.password),
-        is_active=True,
-    )
-    db.add(new_admin)
-    db.commit()
-    db.refresh(new_admin)
-    log_activity(db, current_admin, "STAFF_CREATED", "admin", new_admin.id, f"Created {new_admin.email} as {new_admin.role}")
-    return new_admin
+    try:
+        # Consistent transaction-level synchronization across all staff mutations in PostgreSQL
+        if db.bind and db.bind.dialect.name == "postgresql":
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": STAFF_RBAC_MUTATION_LOCK_ID},
+            )
+
+        existing = db.query(Admin).filter(Admin.email == email_clean).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists.")
+
+        new_admin = Admin(
+            email=email_clean,
+            name=payload.name.strip() if payload.name else None,
+            role=role_clean,
+            password_hash=hash_password(payload.password),
+            is_active=True,
+        )
+        db.add(new_admin)
+        db.commit()
+        db.refresh(new_admin)
+        log_activity(db, current_admin, "STAFF_CREATED", "admin", new_admin.id, f"Created {new_admin.email} as {new_admin.role}")
+        return new_admin
+    except HTTPException:
+        db.rollback()
+        raise
+    except (OperationalError, DBAPIError) as err:
+        db.rollback()
+        logger.error(f"Database concurrency/lock failure during staff creation for {email_clean}: {err}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A concurrent staff modification is in progress. Please retry.",
+        )
 
 
 @router.patch("/staff/{id}", response_model=AdminUserResponse)
@@ -5167,65 +5189,81 @@ def admin_update_staff_role(
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(require_roles("OWNER")),
 ):
-    """Update staff role or active state (Owner only)."""
-    target = db.query(Admin).filter(Admin.id == id).first()
-    if not target:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff account not found.")
-
-    if target.id == current_admin.id and payload.is_active is False:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot deactivate your own account.")
-
-    # Validate target role if provided
+    """Update staff role or active state with unified locking and fresh state re-reading (Owner only)."""
     valid_roles = ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF"]
     if payload.role is not None:
         rc = payload.role.upper().strip()
         if rc not in valid_roles:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role.")
 
-    # Determine whether this update reduces the count of ACTIVE owners
-    target_is_active_owner = (target.role == "OWNER") and target.is_active
-    is_demoting_active_owner = (
-        target_is_active_owner
-        and payload.role is not None
-        and payload.role.upper().strip() != "OWNER"
-    )
-    is_deactivating_active_owner = target_is_active_owner and (payload.is_active is False)
-
-    if is_demoting_active_owner or is_deactivating_active_owner:
-        # Last-Owner Protection with Deterministic Global Lock Ordering:
-        # Acquire row-level locks on all active OWNER rows in ascending id order
-        # to serialize concurrent deactivations/demotions in PostgreSQL
-        active_owners = (
-            db.query(Admin)
-            .filter(Admin.role == "OWNER", Admin.is_active == True)
-            .order_by(Admin.id.asc())
-            .with_for_update()
-            .all()
-        )
-        if len(active_owners) <= 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot deactivate or demote the only active Owner account. Designate another active Owner first.",
+    try:
+        # 1. Consistent transaction-level synchronization across all staff mutations in PostgreSQL:
+        # Serializes concurrent creations, promotions, activations, demotions, and deactivations.
+        if db.bind and db.bind.dialect.name == "postgresql":
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": STAFF_RBAC_MUTATION_LOCK_ID},
             )
-        # Re-fetch target under the acquired lock
-        target = db.query(Admin).filter(Admin.id == id).first()
-    else:
-        # Non-reducing update: lock target row directly
-        target = db.query(Admin).with_for_update().filter(Admin.id == id).first()
 
-    if payload.role is not None:
-        target.role = payload.role.upper().strip()
+        # 2. Lock target row and refresh SQLAlchemy identity map (populate_existing) under lock
+        target = (
+            db.query(Admin)
+            .filter(Admin.id == id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
+        if not target:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff account not found.")
 
-    if payload.is_active is not None:
-        target.is_active = payload.is_active
+        # Self-deactivation prevention
+        if target.id == current_admin.id and payload.is_active is False:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot deactivate your own account.")
 
-    if payload.name is not None:
-        target.name = payload.name.strip()
+        # 3. Determine authoritative state under the acquired lock
+        next_role = payload.role.upper().strip() if payload.role is not None else target.role
+        next_is_active = payload.is_active if payload.is_active is not None else target.is_active
 
-    db.commit()
-    db.refresh(target)
-    log_activity(db, current_admin, "STAFF_UPDATED", "admin", target.id, f"Updated role/status for {target.email}")
-    return target
+        current_is_active_owner = (target.role == "OWNER") and target.is_active
+        next_is_active_owner = (next_role == "OWNER") and next_is_active
+
+        # If this update transitions an active owner to inactive or non-owner:
+        if current_is_active_owner and not next_is_active_owner:
+            # Re-read authoritative count of active owners under lock
+            active_owners_count = (
+                db.query(Admin)
+                .filter(Admin.role == "OWNER", Admin.is_active == True)
+                .count()
+            )
+            if active_owners_count <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot deactivate or demote the only active Owner account. Designate another active Owner first.",
+                )
+
+        if payload.role is not None:
+            target.role = next_role
+
+        if payload.is_active is not None:
+            target.is_active = next_is_active
+
+        if payload.name is not None:
+            target.name = payload.name.strip()
+
+        db.commit()
+        db.refresh(target)
+        log_activity(db, current_admin, "STAFF_UPDATED", "admin", target.id, f"Updated role/status for {target.email}")
+        return target
+    except HTTPException:
+        db.rollback()
+        raise
+    except (OperationalError, DBAPIError) as err:
+        db.rollback()
+        logger.error(f"Database lock/concurrency failure during staff update for id={id}: {err}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A concurrent staff modification is in progress. Please retry.",
+        )
 
 
 # ==========================================

@@ -970,6 +970,119 @@ class TestPostgresConcurrency(unittest.TestCase):
             finally:
                 restore_db.close()
 
+    def test_postgres_concurrent_mixed_promotion_and_demotion_serialized(self):
+        """Verify PostgreSQL serializes mixed operations (promotion + demotion) preserving the active-owner invariant."""
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+
+        db = self.SessionLocal()
+        try:
+            # Clean up
+            db.query(Admin).filter(Admin.email.in_([
+                "pg_mixed_owner@royallibas.com",
+                "pg_mixed_mgr@royallibas.com",
+            ])).delete(synchronize_session=False)
+            db.commit()
+
+            owner = Admin(
+                email="pg_mixed_owner@royallibas.com",
+                name="Mixed Owner",
+                role="OWNER",
+                password_hash=hash_password("owner123"),
+                is_active=True,
+            )
+            mgr = Admin(
+                email="pg_mixed_mgr@royallibas.com",
+                name="Mixed Manager",
+                role="STORE_MANAGER",
+                password_hash=hash_password("mgr123"),
+                is_active=True,
+            )
+            db.add_all([owner, mgr])
+            db.commit()
+            db.refresh(owner)
+            db.refresh(mgr)
+            owner_id = owner.id
+            mgr_id = mgr.id
+        finally:
+            db.close()
+
+        owner_token = create_access_token({"sub": str(owner_id), "role": "OWNER"})
+        headers = {"Authorization": f"Bearer {owner_token}"}
+
+        results = {}
+
+        def promote_req():
+            th_client = TestClient(self.app)
+            res = th_client.patch(f"/admin/staff/{mgr_id}", json={"role": "OWNER"}, headers=headers)
+            results["promote"] = (res.status_code, res.json())
+
+        def demote_req():
+            th_client = TestClient(self.app)
+            # Demote the owner to STORE_MANAGER
+            res = th_client.patch(f"/admin/staff/{owner_id}", json={"role": "STORE_MANAGER"}, headers=headers)
+            results["demote"] = (res.status_code, res.json())
+
+        t1 = threading.Thread(target=promote_req)
+        t2 = threading.Thread(target=demote_req)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Regardless of execution order:
+        # If promote finishes first, demote succeeds because 2 active owners exist. Both 200.
+        # If demote finishes first, demote fails (400) because only 1 active owner exists, then promote succeeds (200).
+        # In ALL possible interleavings, there is AT LEAST 1 active owner in PostgreSQL.
+        db = self.SessionLocal()
+        try:
+            active_owners = db.query(Admin).filter(Admin.role == "OWNER", Admin.is_active == True).all()
+            self.assertGreaterEqual(len(active_owners), 1, "Must maintain >= 1 active owner in PostgreSQL")
+        finally:
+            db.close()
+
+    def test_postgres_inactive_owner_edits_without_guard_trigger(self):
+        """Editing an already inactive owner in PostgreSQL must never trigger the last-active-owner guard."""
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+
+        db = self.SessionLocal()
+        try:
+            db.query(Admin).filter(Admin.email == "pg_inactive_owner@royallibas.com").delete()
+            db.commit()
+
+            inact = Admin(
+                email="pg_inactive_owner@royallibas.com",
+                name="Inactive Owner",
+                role="OWNER",
+                password_hash=hash_password("inact123"),
+                is_active=False,
+            )
+            db.add(inact)
+            db.commit()
+            db.refresh(inact)
+            inact_id = inact.id
+        finally:
+            db.close()
+
+        c = TestClient(self.app)
+        # Edit name -> 200 OK
+        res1 = c.patch(f"/admin/staff/{inact_id}", json={"name": "Renamed Inactive"}, headers=self.owner_headers)
+        self.assertEqual(res1.status_code, 200)
+
+        # Demote to STORE_MANAGER -> 200 OK
+        res2 = c.patch(f"/admin/staff/{inact_id}", json={"role": "STORE_MANAGER"}, headers=self.owner_headers)
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(res2.json()["role"], "STORE_MANAGER")
+
+        # Reactivate and restore role to OWNER -> 200 OK
+        res3 = c.patch(f"/admin/staff/{inact_id}", json={"role": "OWNER", "is_active": True}, headers=self.owner_headers)
+        self.assertEqual(res3.status_code, 200)
+        self.assertTrue(res3.json()["is_active"])
+        self.assertEqual(res3.json()["role"], "OWNER")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
