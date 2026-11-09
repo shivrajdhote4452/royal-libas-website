@@ -353,6 +353,107 @@ class TestSeoSitemap(unittest.TestCase):
         self.assertIn("image/x-icon", api_resp.headers["content-type"])
         self.assertEqual(api_resp.content[:4], b"\x00\x00\x01\x00")
 
+    def test_13_frontend_initial_html_website_structured_data(self):
+        """Verify initial frontend/index.html contains valid, compliant Schema.org WebSite JSON-LD for Google Site Names."""
+        import json
+        import re
+
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        index_html_path = os.path.join(project_root, "frontend", "index.html")
+        self.assertTrue(os.path.exists(index_html_path), f"frontend/index.html not found at {index_html_path}")
+
+        with open(index_html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # Find all JSON-LD scripts
+        pattern = re.compile(r'<script\s+type=["\']application/ld\+json["\']\s*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
+        matches = pattern.findall(html)
+        self.assertGreaterEqual(len(matches), 1, "No <script type='application/ld+json'> found in frontend/index.html")
+
+        website_schemas = []
+        for script_content in matches:
+            parsed = json.loads(script_content.strip())
+            if isinstance(parsed, dict) and parsed.get("@type") == "WebSite":
+                website_schemas.append(parsed)
+
+        # Ensure exactly one WebSite schema exists to avoid conflicting or duplicate signals
+        self.assertEqual(len(website_schemas), 1, f"Expected exactly 1 WebSite schema, found {len(website_schemas)}")
+        ws = website_schemas[0]
+
+        # Verify Google Site Name guidelines compliance
+        self.assertEqual(ws.get("@context"), "https://schema.org")
+        self.assertEqual(ws.get("@type"), "WebSite")
+        self.assertEqual(ws.get("name"), "Royal Libas by Tanya")
+        
+        alt_names = ws.get("alternateName")
+        if isinstance(alt_names, list):
+            self.assertIn("Royal Libas", alt_names)
+        else:
+            self.assertEqual(alt_names, "Royal Libas")
+
+        self.assertEqual(ws.get("url"), "https://royallibasbytanya.com/")
+
+    def test_14_frontend_initial_html_site_name_meta_tags(self):
+        """Verify og:site_name, og:type, and title exist and align with brand name,
+        and confirm canonical link and og:url are NOT hard-coded in the shared SPA shell
+        (preventing the SPA canonical trap on /shop and /product/:slug routes)."""
+        import re
+
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        index_html_path = os.path.join(project_root, "frontend", "index.html")
+
+        with open(index_html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # Ensure canonical link is NOT hard-coded in shared template shell to prevent SPA canonical trap
+        canonical_match = re.search(r'<link\s+rel=["\']canonical["\']', html, re.IGNORECASE)
+        self.assertIsNone(canonical_match, "frontend/index.html must not hard-code a static canonical link in shared SPA template shell")
+
+        # Ensure og:url is NOT hard-coded in shared template shell
+        og_url_match = re.search(r'<meta\s+property=["\']og:url["\']', html, re.IGNORECASE)
+        self.assertIsNone(og_url_match, "frontend/index.html must not hard-code a static og:url in shared SPA template shell")
+
+        # og:site_name tag
+        site_name_match = re.search(r'<meta\s+property=["\']og:site_name["\']\s+content=["\']Royal Libas by Tanya["\']\s*/?>', html, re.IGNORECASE)
+        self.assertIsNotNone(site_name_match, "Missing or invalid og:site_name meta tag in frontend/index.html")
+
+        # og:type tag
+        type_match = re.search(r'<meta\s+property=["\']og:type["\']\s+content=["\']website["\']\s*/?>', html, re.IGNORECASE)
+        self.assertIsNotNone(type_match, "Missing or invalid og:type meta tag in frontend/index.html")
+
+        # Title begins with brand name
+        title_match = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE)
+        self.assertIsNotNone(title_match, "Missing <title> tag in frontend/index.html")
+        self.assertTrue(title_match.group(1).startswith("Royal Libas by Tanya"), f"Title does not start with brand name: {title_match.group(1)}")
+
+    def test_15_production_dist_html_website_structured_data_if_built(self):
+        """If frontend/dist/index.html exists, verify it retains valid WebSite JSON-LD and no hard-coded canonical trap."""
+        import json
+        import re
+
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        dist_html_path = os.path.join(project_root, "frontend", "dist", "index.html")
+        if not os.path.exists(dist_html_path):
+            self.skipTest("frontend/dist/index.html not built yet")
+
+        with open(dist_html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # Ensure dist/index.html does not contain hard-coded canonical link or og:url
+        self.assertIsNone(re.search(r'<link\s+rel=["\']canonical["\']', html, re.IGNORECASE), "dist/index.html must not hard-code canonical link")
+        self.assertIsNone(re.search(r'<meta\s+property=["\']og:url["\']', html, re.IGNORECASE), "dist/index.html must not hard-code og:url")
+
+        pattern = re.compile(r'<script\s+type=["\']application/ld\+json["\']\s*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
+        matches = pattern.findall(html)
+        self.assertGreaterEqual(len(matches), 1, "No <script type='application/ld+json'> found in frontend/dist/index.html")
+
+        ws = json.loads(matches[0].strip())
+        self.assertEqual(ws.get("@context"), "https://schema.org")
+        self.assertEqual(ws.get("@type"), "WebSite")
+        self.assertEqual(ws.get("name"), "Royal Libas by Tanya")
+        self.assertEqual(ws.get("url"), "https://royallibasbytanya.com/")
+
+
 
 if __name__ == "__main__":
     unittest.main()

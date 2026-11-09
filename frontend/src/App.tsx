@@ -54,7 +54,7 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { BackToTop } from './components/BackToTop';
 import { ScrollRestoration } from './components/ScrollRestoration';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { setCanonicalUrl, setMetaDescription, ROUTE_METADATA, DEFAULT_HOMEPAGE_DESCRIPTION } from './lib/seo';
+import { setCanonicalUrl, setPageTitle, setMetaDescription, ROUTE_METADATA, DEFAULT_HOMEPAGE_DESCRIPTION } from './lib/seo';
 
 const StorefrontLayout: React.FC = () => {
   const location = useLocation();
@@ -67,10 +67,10 @@ const StorefrontLayout: React.FC = () => {
       setCanonicalUrl(location.pathname);
       const meta = ROUTE_METADATA[location.pathname];
       if (meta) {
-        document.title = meta.title;
+        setPageTitle(meta.title);
         setMetaDescription(meta.description);
       } else if (location.pathname.startsWith('/order-success')) {
-        document.title = 'Order Confirmation | Royal Libas by Tanya';
+        setPageTitle('Order Confirmation | Royal Libas by Tanya');
         setMetaDescription('View your Royal Libas order status, summary, and fulfillment details.');
       } else {
         setMetaDescription(DEFAULT_HOMEPAGE_DESCRIPTION);
