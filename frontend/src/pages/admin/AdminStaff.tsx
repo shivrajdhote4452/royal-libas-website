@@ -7,6 +7,8 @@ import {
   UserX,
   Edit2,
   X,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { adminListStaff, adminCreateStaff, adminUpdateStaff } from '../../lib/api';
 
@@ -31,7 +33,15 @@ export const AdminStaff: React.FC = () => {
   const [createName, setCreateName] = useState('');
   const [createRole, setCreateRole] = useState<'OWNER' | 'STORE_MANAGER' | 'FULFILLMENT_STAFF'>('STORE_MANAGER');
   const [createPassword, setCreatePassword] = useState('');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [submittingCreate, setSubmittingCreate] = useState(false);
+
+  // Reset password visibility whenever create modal closes
+  useEffect(() => {
+    if (!isCreateOpen) {
+      setShowCreatePassword(false);
+    }
+  }, [isCreateOpen]);
 
   // Edit Staff Modal
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
@@ -73,6 +83,7 @@ export const AdminStaff: React.FC = () => {
       });
       setNotification({ type: 'success', message: `Staff member ${createEmail} created.` });
       setIsCreateOpen(false);
+      setShowCreatePassword(false);
       setCreateEmail('');
       setCreateName('');
       setCreatePassword('');
@@ -128,7 +139,10 @@ export const AdminStaff: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsCreateOpen(true)}
+            onClick={() => {
+              setShowCreatePassword(false);
+              setIsCreateOpen(true);
+            }}
             className="px-4 py-2 bg-[#5E1224] text-white rounded-lg text-xs font-semibold hover:bg-[#4A0E1C] transition-colors shadow-sm inline-flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
@@ -282,7 +296,15 @@ export const AdminStaff: React.FC = () => {
                 <Plus className="w-4 h-4 text-[#5E1224]" />
                 Add New Staff Member
               </h3>
-              <button onClick={() => setIsCreateOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreateOpen(false);
+                  setShowCreatePassword(false);
+                }}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                aria-label="Close modal"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -332,20 +354,38 @@ export const AdminStaff: React.FC = () => {
                 <label className="block font-semibold text-gray-700 mb-1">
                   Secure Password <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••••••"
-                  value={createPassword}
-                  onChange={(e) => setCreatePassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
-                />
+                <div className="relative">
+                  <input
+                    type={showCreatePassword ? 'text' : 'password'}
+                    required
+                    placeholder="••••••••••••"
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePassword((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#5E1224] rounded transition-colors"
+                    aria-label={showCreatePassword ? 'Hide password' : 'Show password'}
+                    title={showCreatePassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showCreatePassword ? (
+                      <EyeOff className="w-4 h-4 text-gray-600" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCreateOpen(false)}
+                  onClick={() => {
+                    setIsCreateOpen(false);
+                    setShowCreatePassword(false);
+                  }}
                   className="px-3 py-1.5 font-semibold text-gray-600 hover:text-gray-800"
                 >
                   Cancel
