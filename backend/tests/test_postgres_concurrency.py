@@ -840,6 +840,136 @@ class TestPostgresConcurrency(unittest.TestCase):
         finally:
             db.close()
 
+    def test_postgres_concurrent_active_owner_deactivation_serialized(self):
+        """Verify PostgreSQL row-level locking serializes concurrent active owner deactivations.
+        
+        When exactly 2 active owners exist, 2 concurrent deactivation/demotion requests
+        must be serialized so that exactly one succeeds and the other is rejected with 400 Bad Request,
+        guaranteeing that 0 active owners can never occur.
+        """
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+
+        c = TestClient(self.app)
+        db = self.SessionLocal()
+        try:
+            # Clean up test owners
+            db.query(Admin).filter(Admin.email.in_([
+                "pg_co_owner_a@royallibas.com",
+                "pg_co_owner_b@royallibas.com",
+                "pg_controller@royallibas.com",
+            ])).delete(synchronize_session=False)
+            db.commit()
+
+            # Seed a controlling owner (to authenticate the requests) and 2 co-owners to test concurrent deactivation
+            controller = Admin(
+                email="pg_controller@royallibas.com",
+                name="PG Controller",
+                role="OWNER",
+                password_hash=hash_password("controller123"),
+                is_active=True,
+            )
+            owner_a = Admin(
+                email="pg_co_owner_a@royallibas.com",
+                name="PG Co-Owner A",
+                role="OWNER",
+                password_hash=hash_password("ownera123"),
+                is_active=True,
+            )
+            owner_b = Admin(
+                email="pg_co_owner_b@royallibas.com",
+                name="PG Co-Owner B",
+                role="OWNER",
+                password_hash=hash_password("ownerb123"),
+                is_active=True,
+            )
+            db.add_all([controller, owner_a, owner_b])
+            db.commit()
+            db.refresh(controller)
+            db.refresh(owner_a)
+            db.refresh(owner_b)
+
+            controller_id = controller.id
+            owner_a_id = owner_a.id
+            owner_b_id = owner_b.id
+        finally:
+            db.close()
+
+        # Keep exactly 2 active owners in the entire database: controller (id1) and owner_b (id2)
+        db = self.SessionLocal()
+        try:
+            pg_owner = db.query(Admin).filter(Admin.email == "pg_owner@royallibas.com").first()
+            if pg_owner:
+                pg_owner.is_active = False
+
+            ctrl = db.query(Admin).filter(Admin.id == controller_id).first()
+            ctrl.is_active = True
+            oa = db.query(Admin).filter(Admin.id == owner_a_id).first()
+            oa.is_active = False
+            ob = db.query(Admin).filter(Admin.id == owner_b_id).first()
+            ob.is_active = True
+            db.commit()
+
+            # Baseline check: precisely 2 active owners in PostgreSQL
+            total_active = db.query(Admin).filter(Admin.role == "OWNER", Admin.is_active == True).count()
+            self.assertEqual(total_active, 2)
+        finally:
+            db.close()
+
+        token_ctrl = create_access_token({"sub": str(controller_id), "role": "OWNER"})
+        token_b = create_access_token({"sub": str(owner_b_id), "role": "OWNER"})
+
+        results = {}
+
+        def deactivate_req(admin_token, target_id, key):
+            th_client = TestClient(self.app)
+            res = th_client.patch(
+                f"/admin/staff/{target_id}",
+                json={"is_active": False},
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            results[key] = (res.status_code, res.json())
+
+        try:
+            t1 = threading.Thread(target=deactivate_req, args=(token_ctrl, owner_b_id, "ctrl_deactivates_b"))
+            t2 = threading.Thread(target=deactivate_req, args=(token_b, controller_id, "b_deactivates_ctrl"))
+
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
+
+            # In PostgreSQL, with row-level locks on active owners, exactly one transaction must succeed
+            # and the other transaction must observe that only 1 active owner remains and be rejected with 400.
+            statuses = [r[0] for r in results.values()]
+            self.assertIn(200, statuses, f"Expected one 200 OK, got: {results}")
+            self.assertIn(400, statuses, f"Expected one 400 Bad Request (last owner guard), got: {results}")
+
+            rejected_detail = [r[1].get("detail", "") for r in results.values() if r[0] == 400][0]
+            self.assertIn("only active owner", rejected_detail.lower())
+
+            # Verify PostgreSQL database state: exactly 1 active owner remains!
+            db = self.SessionLocal()
+            try:
+                active_owners_in_db = db.query(Admin).filter(
+                    Admin.id.in_([controller_id, owner_b_id]),
+                    Admin.role == "OWNER",
+                    Admin.is_active == True,
+                ).all()
+                self.assertEqual(len(active_owners_in_db), 1, "Exactly 1 active owner must remain in PostgreSQL!")
+            finally:
+                db.close()
+        finally:
+            restore_db = self.SessionLocal()
+            try:
+                pg_owner = restore_db.query(Admin).filter(Admin.email == "pg_owner@royallibas.com").first()
+                if pg_owner:
+                    pg_owner.is_active = True
+                restore_db.commit()
+            finally:
+                restore_db.close()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -271,7 +271,108 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         self.assertEqual(res_deact_second.status_code, 200)
         self.assertFalse(res_deact_second.json()["is_active"])
 
-    def test_09_historical_audit_and_stock_logs_preserved(self):
+    def test_09_editing_inactive_owner_does_not_trigger_guard(self):
+        """Editing an already inactive owner must not incorrectly trigger the last-active-owner guard."""
+        db = SessionLocal()
+        try:
+            inactive_owner = Admin(
+                email="inactive_owner_test@royallibas.com",
+                name="Inactive Owner",
+                role="OWNER",
+                password_hash=hash_password("InactiveOwnerPass123!"),
+                is_active=False,
+            )
+            db.add(inactive_owner)
+            db.commit()
+            db.refresh(inactive_owner)
+            inactive_id = inactive_owner.id
+        finally:
+            db.close()
+
+        # 1. Update name on inactive owner -> should succeed (200)
+        res_name = client.patch(
+            f"/admin/staff/{inactive_id}",
+            json={"name": "Updated Inactive Owner Name"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_name.status_code, 200)
+        self.assertEqual(res_name.json()["name"], "Updated Inactive Owner Name")
+        self.assertFalse(res_name.json()["is_active"])
+
+        # 2. Demote inactive owner to STORE_MANAGER -> should succeed (200) without last-owner block
+        res_demote = client.patch(
+            f"/admin/staff/{inactive_id}",
+            json={"role": "STORE_MANAGER"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_demote.status_code, 200)
+        self.assertEqual(res_demote.json()["role"], "STORE_MANAGER")
+
+        # 3. Save with is_active: false explicitly -> should succeed (200)
+        res_active_false = client.patch(
+            f"/admin/staff/{inactive_id}",
+            json={"is_active": False},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_active_false.status_code, 200)
+        self.assertFalse(res_active_false.json()["is_active"])
+
+    def test_10_ordinary_deactivation_and_demotion_of_non_owners(self):
+        """Non-owner staff (STORE_MANAGER, FULFILLMENT_STAFF) can be deactivated and role-changed without restriction."""
+        # Deactivate manager
+        res_deact = client.patch(
+            f"/admin/staff/{self.mgr_id}",
+            json={"is_active": False},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_deact.status_code, 200)
+        self.assertFalse(res_deact.json()["is_active"])
+
+        # Change manager role to FULFILLMENT_STAFF
+        res_role = client.patch(
+            f"/admin/staff/{self.mgr_id}",
+            json={"role": "FULFILLMENT_STAFF"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_role.status_code, 200)
+        self.assertEqual(res_role.json()["role"], "FULFILLMENT_STAFF")
+
+        # Reactivate staff
+        res_react = client.patch(
+            f"/admin/staff/{self.mgr_id}",
+            json={"is_active": True, "role": "STORE_MANAGER"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_react.status_code, 200)
+        self.assertTrue(res_react.json()["is_active"])
+        self.assertEqual(res_react.json()["role"], "STORE_MANAGER")
+
+    def test_11_demoting_active_owner_with_second_owner_present(self):
+        """When multiple active owners exist, demoting one active owner to STORE_MANAGER succeeds."""
+        # Create a second active owner
+        res_second = client.post(
+            "/admin/staff",
+            json={
+                "email": "co_owner_test@royallibas.com",
+                "name": "Co-Owner",
+                "role": "OWNER",
+                "password": "CoOwnerPass123!",
+            },
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_second.status_code, 201)
+        co_owner_id = res_second.json()["id"]
+
+        # Demote the second active owner to STORE_MANAGER -> must succeed because self.owner remains active
+        res_demote = client.patch(
+            f"/admin/staff/{co_owner_id}",
+            json={"role": "STORE_MANAGER"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_demote.status_code, 200)
+        self.assertEqual(res_demote.json()["role"], "STORE_MANAGER")
+
+    def test_12_historical_audit_and_stock_logs_preserved(self):
         """Audit logs and stock adjustments with actor_email remain intact upon deactivation."""
         db = SessionLocal()
         try:

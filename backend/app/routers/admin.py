@@ -5175,32 +5175,46 @@ def admin_update_staff_role(
     if target.id == current_admin.id and payload.is_active is False:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot deactivate your own account.")
 
-    # Last-Owner Protection: Ensure at least one active OWNER always remains
-    is_demoting_owner = (
-        target.role == "OWNER"
+    # Validate target role if provided
+    valid_roles = ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF"]
+    if payload.role is not None:
+        rc = payload.role.upper().strip()
+        if rc not in valid_roles:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role.")
+
+    # Determine whether this update reduces the count of ACTIVE owners
+    target_is_active_owner = (target.role == "OWNER") and target.is_active
+    is_demoting_active_owner = (
+        target_is_active_owner
         and payload.role is not None
         and payload.role.upper().strip() != "OWNER"
     )
-    is_deactivating_owner = target.role == "OWNER" and target.is_active and payload.is_active is False
+    is_deactivating_active_owner = target_is_active_owner and (payload.is_active is False)
 
-    if is_demoting_owner or is_deactivating_owner:
+    if is_demoting_active_owner or is_deactivating_active_owner:
+        # Last-Owner Protection with Deterministic Global Lock Ordering:
+        # Acquire row-level locks on all active OWNER rows in ascending id order
+        # to serialize concurrent deactivations/demotions in PostgreSQL
         active_owners = (
             db.query(Admin)
             .filter(Admin.role == "OWNER", Admin.is_active == True)
-            .count()
+            .order_by(Admin.id.asc())
+            .with_for_update()
+            .all()
         )
-        if active_owners <= 1:
+        if len(active_owners) <= 1:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot deactivate or demote the only active Owner account. Designate another active Owner first.",
             )
+        # Re-fetch target under the acquired lock
+        target = db.query(Admin).filter(Admin.id == id).first()
+    else:
+        # Non-reducing update: lock target row directly
+        target = db.query(Admin).with_for_update().filter(Admin.id == id).first()
 
     if payload.role is not None:
-        valid_roles = ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF"]
-        rc = payload.role.upper().strip()
-        if rc not in valid_roles:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role.")
-        target.role = rc
+        target.role = payload.role.upper().strip()
 
     if payload.is_active is not None:
         target.is_active = payload.is_active
