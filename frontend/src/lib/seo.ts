@@ -99,6 +99,40 @@ export function setCanonicalUrl(urlOrPath: string): void {
     document.head.appendChild(link);
   }
   link.setAttribute('href', href);
+
+  let ogUrl = document.querySelector('meta[property="og:url"]') as HTMLMetaElement | null;
+  if (!ogUrl) {
+    ogUrl = document.createElement('meta');
+    ogUrl.setAttribute('property', 'og:url');
+    document.head.appendChild(ogUrl);
+  }
+  ogUrl.setAttribute('content', href);
+}
+
+/**
+ * Dynamically sets or updates document.title and synchronizes og:title and twitter:title.
+ */
+export function setPageTitle(title: string): void {
+  if (typeof document === 'undefined') return;
+
+  const content = title.trim();
+  document.title = content;
+
+  let ogTitle = document.querySelector('meta[property="og:title"]') as HTMLMetaElement | null;
+  if (!ogTitle) {
+    ogTitle = document.createElement('meta');
+    ogTitle.setAttribute('property', 'og:title');
+    document.head.appendChild(ogTitle);
+  }
+  ogTitle.setAttribute('content', content);
+
+  let twitterTitle = document.querySelector('meta[name="twitter:title"]') as HTMLMetaElement | null;
+  if (!twitterTitle) {
+    twitterTitle = document.createElement('meta');
+    twitterTitle.setAttribute('name', 'twitter:title');
+    document.head.appendChild(twitterTitle);
+  }
+  twitterTitle.setAttribute('content', content);
 }
 
 /**
