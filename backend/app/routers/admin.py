@@ -5133,6 +5133,39 @@ def admin_list_staff(
 STAFF_RBAC_MUTATION_LOCK_ID = 84521093
 
 
+def _revalidate_acting_owner_under_lock(db: Session, current_admin: Admin) -> Admin:
+    """Re-read and validate acting admin's active status and OWNER role under lock.
+    
+    Guarantees that if the acting admin was deactivated or demoted while waiting
+    on the transaction-level lock (e.g. pg_advisory_xact_lock), the pending request
+    is immediately rejected and cannot mutate staff.
+    """
+    acting = (
+        db.query(Admin)
+        .filter(Admin.id == current_admin.id)
+        .populate_existing()
+        .first()
+    )
+    if not acting:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin account not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not acting.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin account is inactive. Please contact store owner.",
+        )
+    acting_role = (acting.role or "").upper().strip()
+    if acting_role != "OWNER":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Requires one of roles: OWNER",
+        )
+    return acting
+
+
 @router.post("/staff", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
 def admin_create_staff(
     payload: AdminCreate,
@@ -5153,6 +5186,9 @@ def admin_create_staff(
                 text("SELECT pg_advisory_xact_lock(:lock_id)"),
                 {"lock_id": STAFF_RBAC_MUTATION_LOCK_ID},
             )
+
+        # Re-read and validate acting admin under lock to ensure authorization wasn't revoked while waiting on lock
+        current_admin = _revalidate_acting_owner_under_lock(db, current_admin)
 
         existing = db.query(Admin).filter(Admin.email == email_clean).first()
         if existing:
@@ -5204,6 +5240,9 @@ def admin_update_staff_role(
                 text("SELECT pg_advisory_xact_lock(:lock_id)"),
                 {"lock_id": STAFF_RBAC_MUTATION_LOCK_ID},
             )
+
+        # Re-read and validate acting admin under lock to ensure authorization wasn't revoked while waiting on lock
+        current_admin = _revalidate_acting_owner_under_lock(db, current_admin)
 
         # 2. Lock target row and refresh SQLAlchemy identity map (populate_existing) under lock
         target = (
