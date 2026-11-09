@@ -394,7 +394,9 @@ class TestSeoSitemap(unittest.TestCase):
         self.assertEqual(ws.get("url"), "https://royallibasbytanya.com/")
 
     def test_14_frontend_initial_html_site_name_meta_tags(self):
-        """Verify canonical link, og:site_name, og:url, og:type, and title exist and align with brand name."""
+        """Verify og:site_name, og:type, and title exist and align with brand name,
+        and confirm canonical link and og:url are NOT hard-coded in the shared SPA shell
+        (preventing the SPA canonical trap on /shop and /product/:slug routes)."""
         import re
 
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -403,9 +405,13 @@ class TestSeoSitemap(unittest.TestCase):
         with open(index_html_path, "r", encoding="utf-8") as f:
             html = f.read()
 
-        # Canonical tag
-        canonical_match = re.search(r'<link\s+rel=["\']canonical["\']\s+href=["\'](https://royallibasbytanya\.com/?)["\']\s*/?>', html, re.IGNORECASE)
-        self.assertIsNotNone(canonical_match, "Missing or invalid canonical link in frontend/index.html")
+        # Ensure canonical link is NOT hard-coded in shared template shell to prevent SPA canonical trap
+        canonical_match = re.search(r'<link\s+rel=["\']canonical["\']', html, re.IGNORECASE)
+        self.assertIsNone(canonical_match, "frontend/index.html must not hard-code a static canonical link in shared SPA template shell")
+
+        # Ensure og:url is NOT hard-coded in shared template shell
+        og_url_match = re.search(r'<meta\s+property=["\']og:url["\']', html, re.IGNORECASE)
+        self.assertIsNone(og_url_match, "frontend/index.html must not hard-code a static og:url in shared SPA template shell")
 
         # og:site_name tag
         site_name_match = re.search(r'<meta\s+property=["\']og:site_name["\']\s+content=["\']Royal Libas by Tanya["\']\s*/?>', html, re.IGNORECASE)
@@ -421,7 +427,7 @@ class TestSeoSitemap(unittest.TestCase):
         self.assertTrue(title_match.group(1).startswith("Royal Libas by Tanya"), f"Title does not start with brand name: {title_match.group(1)}")
 
     def test_15_production_dist_html_website_structured_data_if_built(self):
-        """If frontend/dist/index.html exists, verify it retains valid WebSite JSON-LD and site name signals."""
+        """If frontend/dist/index.html exists, verify it retains valid WebSite JSON-LD and no hard-coded canonical trap."""
         import json
         import re
 
@@ -432,6 +438,10 @@ class TestSeoSitemap(unittest.TestCase):
 
         with open(dist_html_path, "r", encoding="utf-8") as f:
             html = f.read()
+
+        # Ensure dist/index.html does not contain hard-coded canonical link or og:url
+        self.assertIsNone(re.search(r'<link\s+rel=["\']canonical["\']', html, re.IGNORECASE), "dist/index.html must not hard-code canonical link")
+        self.assertIsNone(re.search(r'<meta\s+property=["\']og:url["\']', html, re.IGNORECASE), "dist/index.html must not hard-code og:url")
 
         pattern = re.compile(r'<script\s+type=["\']application/ld\+json["\']\s*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
         matches = pattern.findall(html)

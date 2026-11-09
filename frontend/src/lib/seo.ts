@@ -151,13 +151,19 @@ export function setMetaDescription(description: string): void {
   }
   meta.setAttribute('content', content);
 
-  const ogDesc = document.querySelector('meta[property="og:description"]') as HTMLMetaElement | null;
-  if (ogDesc) {
-    ogDesc.setAttribute('content', content);
+  let ogDesc = document.querySelector('meta[property="og:description"]') as HTMLMetaElement | null;
+  if (!ogDesc) {
+    ogDesc = document.createElement('meta');
+    ogDesc.setAttribute('property', 'og:description');
+    document.head.appendChild(ogDesc);
   }
+  ogDesc.setAttribute('content', content);
 
-  const twitterDesc = document.querySelector('meta[name="twitter:description"]') as HTMLMetaElement | null;
-  if (twitterDesc) {
-    twitterDesc.setAttribute('content', content);
+  let twitterDesc = document.querySelector('meta[name="twitter:description"]') as HTMLMetaElement | null;
+  if (!twitterDesc) {
+    twitterDesc = document.createElement('meta');
+    twitterDesc.setAttribute('name', 'twitter:description');
+    document.head.appendChild(twitterDesc);
   }
+  twitterDesc.setAttribute('content', content);
 }
