@@ -5109,11 +5109,24 @@ def admin_update_settings(
 
 @router.get("/staff", response_model=List[AdminUserResponse])
 def admin_list_staff(
+    status: Optional[str] = Query(None, description="Filter staff by status: 'active', 'deactivated', or 'all'"),
+    is_active: Optional[bool] = Query(None, description="Optional boolean filter for active status"),
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin),
 ):
-    """List staff accounts and roles."""
-    return db.query(Admin).order_by(Admin.id.asc()).all()
+    """List staff accounts and roles with optional status filtering."""
+    query = db.query(Admin)
+    if is_active is not None:
+        query = query.filter(Admin.is_active == is_active)
+    elif status:
+        status_clean = status.lower().strip()
+        if status_clean == "active":
+            query = query.filter(Admin.is_active == True)
+        elif status_clean in ("deactivated", "inactive"):
+            query = query.filter(Admin.is_active == False)
+        # 'all' or any unrecognized value leaves query unfiltered
+
+    return query.order_by(Admin.id.asc()).all()
 
 
 @router.post("/staff", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
@@ -5161,6 +5174,26 @@ def admin_update_staff_role(
 
     if target.id == current_admin.id and payload.is_active is False:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot deactivate your own account.")
+
+    # Last-Owner Protection: Ensure at least one active OWNER always remains
+    is_demoting_owner = (
+        target.role == "OWNER"
+        and payload.role is not None
+        and payload.role.upper().strip() != "OWNER"
+    )
+    is_deactivating_owner = target.role == "OWNER" and target.is_active and payload.is_active is False
+
+    if is_demoting_owner or is_deactivating_owner:
+        active_owners = (
+            db.query(Admin)
+            .filter(Admin.role == "OWNER", Admin.is_active == True)
+            .count()
+        )
+        if active_owners <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot deactivate or demote the only active Owner account. Designate another active Owner first.",
+            )
 
     if payload.role is not None:
         valid_roles = ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF"]
