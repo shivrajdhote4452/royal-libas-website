@@ -5226,7 +5226,7 @@ def admin_update_staff_role(
     current_admin: Admin = Depends(require_roles("OWNER")),
 ):
     """Update staff role or active state with unified locking and fresh state re-reading (Owner only)."""
-    valid_roles = ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF"]
+    valid_roles = ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER"]
     if payload.role is not None:
         rc = payload.role.upper().strip()
         if rc not in valid_roles:

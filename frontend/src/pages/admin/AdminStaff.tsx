@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   Search,
+  AlertTriangle,
 } from 'lucide-react';
 import { adminListStaff, adminCreateStaff, adminUpdateStaff } from '../../lib/api';
 
@@ -20,7 +21,7 @@ interface StaffUser {
   id: number;
   email: string;
   name?: string;
-  role: 'OWNER' | 'STORE_MANAGER' | 'FULFILLMENT_STAFF';
+  role: 'OWNER' | 'STORE_MANAGER' | 'FULFILLMENT_STAFF' | 'MANAGER' | string;
   is_active: boolean;
   created_at: string;
 }
@@ -44,20 +45,23 @@ export const AdminStaff: React.FC = () => {
   const [createPassword, setCreatePassword] = useState('');
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [submittingCreate, setSubmittingCreate] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  // Reset password visibility whenever create modal closes
+  // Reset password visibility and errors whenever create modal closes
   useEffect(() => {
     if (!isCreateOpen) {
       setShowCreatePassword(false);
+      setCreateError(null);
     }
   }, [isCreateOpen]);
 
   // Edit Staff Modal
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
-  const [editRole, setEditRole] = useState<'OWNER' | 'STORE_MANAGER' | 'FULFILLMENT_STAFF'>('STORE_MANAGER');
+  const [editRole, setEditRole] = useState<string>('STORE_MANAGER');
   const [editIsActive, setEditIsActive] = useState(true);
   const [editName, setEditName] = useState('');
   const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const fetchStaff = async () => {
     setLoading(true);
@@ -121,8 +125,9 @@ export const AdminStaff: React.FC = () => {
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError(null);
     if (!createEmail.trim() || !createPassword.trim()) {
-      setNotification({ type: 'error', message: 'Email and password are required.' });
+      setCreateError('Email and password are required.');
       return;
     }
 
@@ -140,9 +145,12 @@ export const AdminStaff: React.FC = () => {
       setCreateEmail('');
       setCreateName('');
       setCreatePassword('');
+      setCreateError(null);
       await fetchStaff();
     } catch (err: any) {
-      setNotification({ type: 'error', message: err.message || 'Failed to create staff account' });
+      const msg = err.message || 'Failed to create staff account';
+      setCreateError(msg);
+      setNotification({ type: 'error', message: msg });
     } finally {
       setSubmittingCreate(false);
     }
@@ -153,6 +161,7 @@ export const AdminStaff: React.FC = () => {
     if (!editingStaff) return;
 
     setSubmittingEdit(true);
+    setEditError(null);
     try {
       await adminUpdateStaff(token, editingStaff.id, {
         role: editRole,
@@ -166,9 +175,12 @@ export const AdminStaff: React.FC = () => {
           : `Staff account ${editingStaff.email} deactivated. Sessions revoked.`,
       });
       setEditingStaff(null);
+      setEditError(null);
       await fetchStaff();
     } catch (err: any) {
-      setNotification({ type: 'error', message: err.message || 'Failed to update staff account' });
+      const msg = err.message || 'Failed to update staff account';
+      setEditError(msg);
+      setNotification({ type: 'error', message: msg });
     } finally {
       setSubmittingEdit(false);
     }
@@ -179,6 +191,7 @@ export const AdminStaff: React.FC = () => {
     setEditRole(u.role);
     setEditIsActive(u.is_active);
     setEditName(u.name || '');
+    setEditError(null);
   };
 
   return (
@@ -400,12 +413,12 @@ export const AdminStaff: React.FC = () => {
                           className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
                             u.role === 'OWNER'
                               ? 'bg-amber-100 text-[#5E1224] border border-amber-300'
-                              : u.role === 'STORE_MANAGER'
+                              : u.role === 'STORE_MANAGER' || u.role === 'MANAGER'
                               ? 'bg-purple-100 text-purple-900 border border-purple-200'
                               : 'bg-sky-100 text-sky-900 border border-sky-200'
                           }`}
                         >
-                          {u.role}
+                          {u.role === 'MANAGER' ? 'MANAGER (Legacy)' : u.role}
                         </span>
                       </td>
                       <td className="py-3 px-4">
@@ -454,6 +467,7 @@ export const AdminStaff: React.FC = () => {
                 onClick={() => {
                   setIsCreateOpen(false);
                   setShowCreatePassword(false);
+                  setCreateError(null);
                 }}
                 className="text-gray-400 hover:text-gray-600 focus:outline-none"
                 aria-label="Close modal"
@@ -461,6 +475,13 @@ export const AdminStaff: React.FC = () => {
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {createError && (
+              <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                <span className="flex-1 font-medium">{createError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleCreateSubmit} className="mt-4 space-y-3 text-xs">
               <div>
@@ -565,10 +586,25 @@ export const AdminStaff: React.FC = () => {
                 <Edit2 className="w-4 h-4 text-[#5E1224]" />
                 Edit Staff: {editingStaff.email}
               </h3>
-              <button onClick={() => setEditingStaff(null)} className="text-gray-400 hover:text-gray-600">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingStaff(null);
+                  setEditError(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                aria-label="Close modal"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {editError && (
+              <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                <span className="flex-1 font-medium">{editError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleEditSubmit} className="mt-4 space-y-3 text-xs">
               <div>
@@ -585,9 +621,12 @@ export const AdminStaff: React.FC = () => {
                 <label className="block font-semibold text-gray-700 mb-1">Assigned Role</label>
                 <select
                   value={editRole}
-                  onChange={(e) => setEditRole(e.target.value as any)}
+                  onChange={(e) => setEditRole(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#5E1224] font-medium"
                 >
+                  {(editRole === 'MANAGER' || editingStaff.role === 'MANAGER') && (
+                    <option value="MANAGER">MANAGER (Legacy)</option>
+                  )}
                   <option value="STORE_MANAGER">STORE_MANAGER</option>
                   <option value="FULFILLMENT_STAFF">FULFILLMENT_STAFF</option>
                   <option value="OWNER">OWNER</option>

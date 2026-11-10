@@ -408,6 +408,208 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         finally:
             db.close()
 
+    def test_13_legacy_manager_deactivation_without_role_change(self):
+        """A legacy account with role='MANAGER' can be deactivated without requiring a role change.
+
+        Matches the exact payload sent by AdminStaff edit modal: {role: 'MANAGER', is_active: false, name: ...}
+        """
+        db = SessionLocal()
+        legacy_pwd = "LegacyManagerPass123!"
+        try:
+            legacy_admin = Admin(
+                email="legacy_manager_target@royallibas.com",
+                name="Legacy Manager Target",
+                role="MANAGER",
+                password_hash=hash_password(legacy_pwd),
+                is_active=True,
+            )
+            db.add(legacy_admin)
+            db.commit()
+            db.refresh(legacy_admin)
+            legacy_id = legacy_admin.id
+        finally:
+            db.close()
+
+        # 1. Login works while active
+        login_res = client.post(
+            "/admin/login",
+            json={"email": "legacy_manager_target@royallibas.com", "password": legacy_pwd},
+        )
+        self.assertEqual(login_res.status_code, 200)
+        legacy_token = login_res.json()["access_token"]
+        legacy_headers = {"Authorization": f"Bearer {legacy_token}"}
+
+        # 2. Token works for /admin/me
+        me_res = client.get("/admin/me", headers=legacy_headers)
+        self.assertEqual(me_res.status_code, 200)
+        self.assertEqual(me_res.json()["role"], "MANAGER")
+
+        # 3. Owner deactivates legacy manager sending role="MANAGER", is_active=False
+        deact_res = client.patch(
+            f"/admin/staff/{legacy_id}",
+            json={
+                "name": "Legacy Manager Deactivated",
+                "role": "MANAGER",
+                "is_active": False,
+            },
+            headers=self.owner_headers,
+        )
+        self.assertEqual(deact_res.status_code, 200, deact_res.text)
+        data = deact_res.json()
+        self.assertFalse(data["is_active"])
+        self.assertEqual(data["role"], "MANAGER")
+        self.assertEqual(data["name"], "Legacy Manager Deactivated")
+
+        # 4. Immediate session revocation: token rejected with 403
+        revoked_res = client.get("/admin/me", headers=legacy_headers)
+        self.assertEqual(revoked_res.status_code, 403)
+        self.assertIn("inactive", revoked_res.json()["detail"].lower())
+
+        # 5. New login attempt is rejected with 403
+        bad_login = client.post(
+            "/admin/login",
+            json={"email": "legacy_manager_target@royallibas.com", "password": legacy_pwd},
+        )
+        self.assertEqual(bad_login.status_code, 403)
+        self.assertIn("inactive", bad_login.json()["detail"].lower())
+
+        # 6. Reactivate legacy manager while preserving MANAGER role
+        react_res = client.patch(
+            f"/admin/staff/{legacy_id}",
+            json={"is_active": True, "role": "MANAGER"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(react_res.status_code, 200)
+        self.assertTrue(react_res.json()["is_active"])
+        self.assertEqual(react_res.json()["role"], "MANAGER")
+
+        # 7. Login works again after reactivation
+        react_login = client.post(
+            "/admin/login",
+            json={"email": "legacy_manager_target@royallibas.com", "password": legacy_pwd},
+        )
+        self.assertEqual(react_login.status_code, 200)
+
+    def test_14_legacy_manager_permissions_and_owner_restrictions(self):
+        """Legacy MANAGER inherits STORE_MANAGER permissions but is denied OWNER-only routes."""
+        db = SessionLocal()
+        legacy_pwd = "LegacyPermsPass123!"
+        try:
+            legacy_admin = Admin(
+                email="legacy_perms_test@royallibas.com",
+                name="Legacy Perms Manager",
+                role="MANAGER",
+                password_hash=hash_password(legacy_pwd),
+                is_active=True,
+            )
+            db.add(legacy_admin)
+            db.commit()
+            db.refresh(legacy_admin)
+            legacy_id = legacy_admin.id
+        finally:
+            db.close()
+
+        login_res = client.post(
+            "/admin/login",
+            json={"email": "legacy_perms_test@royallibas.com", "password": legacy_pwd},
+        )
+        self.assertEqual(login_res.status_code, 200)
+        legacy_headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
+
+        # 1. Accessing endpoint requiring STORE_MANAGER succeeds for legacy MANAGER
+        # /admin/media/folders/prepare-preview requires ("OWNER", "STORE_MANAGER")
+        res_preview = client.get("/admin/media/folders/prepare-preview", headers=legacy_headers)
+        self.assertEqual(res_preview.status_code, 200)
+
+        # 2. Accessing OWNER-only create staff route (POST /admin/staff) is denied with 403
+        res_create = client.post(
+            "/admin/staff",
+            json={
+                "email": "unauthorized_create@royallibas.com",
+                "name": "Should Fail",
+                "role": "STORE_MANAGER",
+                "password": "FailPassword123!",
+            },
+            headers=legacy_headers,
+        )
+        self.assertEqual(res_create.status_code, 403)
+        self.assertIn("Access denied", res_create.json()["detail"])
+
+        # 3. Mutating staff (/admin/staff/{id}) is denied with 403
+        res_mutate = client.patch(
+            f"/admin/staff/{self.owner_id}",
+            json={"is_active": False},
+            headers=legacy_headers,
+        )
+        self.assertEqual(res_mutate.status_code, 403)
+        self.assertIn("Access denied", res_mutate.json()["detail"])
+
+    def test_15_legacy_manager_upgraded_to_store_manager(self):
+        """Owner can choose to migrate a legacy MANAGER to modern STORE_MANAGER role."""
+        db = SessionLocal()
+        legacy_pwd = "LegacyUpgradePass123!"
+        try:
+            legacy_admin = Admin(
+                email="legacy_upgrade_test@royallibas.com",
+                name="Legacy Upgrade Manager",
+                role="MANAGER",
+                password_hash=hash_password(legacy_pwd),
+                is_active=True,
+            )
+            db.add(legacy_admin)
+            db.commit()
+            db.refresh(legacy_admin)
+            legacy_id = legacy_admin.id
+        finally:
+            db.close()
+
+        # Update role to STORE_MANAGER
+        res_upgrade = client.patch(
+            f"/admin/staff/{legacy_id}",
+            json={"role": "STORE_MANAGER"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_upgrade.status_code, 200)
+        self.assertEqual(res_upgrade.json()["role"], "STORE_MANAGER")
+
+    def test_16_invalid_role_rejected_with_400(self):
+        """Submitting an unrecognized role produces a 400 Bad Request error."""
+        res_bad_role = client.patch(
+            f"/admin/staff/{self.mgr_id}",
+            json={"role": "SUPERADMIN"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_bad_role.status_code, 400)
+        self.assertIn("Invalid role", res_bad_role.json()["detail"])
+
+        res_bad_role2 = client.patch(
+            f"/admin/staff/{self.mgr_id}",
+            json={"role": "ADMINISTRATOR"},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_bad_role2.status_code, 400)
+        self.assertIn("Invalid role", res_bad_role2.json()["detail"])
+
+    def test_17_modern_store_manager_deactivation_cycle(self):
+        """Current STORE_MANAGER role deactivates and revokes access without affecting owner guards."""
+        res_deact = client.patch(
+            f"/admin/staff/{self.mgr_id}",
+            json={"role": "STORE_MANAGER", "is_active": False},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_deact.status_code, 200)
+        self.assertFalse(res_deact.json()["is_active"])
+        self.assertEqual(res_deact.json()["role"], "STORE_MANAGER")
+
+        # Reactivate
+        res_react = client.patch(
+            f"/admin/staff/{self.mgr_id}",
+            json={"role": "STORE_MANAGER", "is_active": True},
+            headers=self.owner_headers,
+        )
+        self.assertEqual(res_react.status_code, 200)
+        self.assertTrue(res_react.json()["is_active"])
+
 
 if __name__ == "__main__":
     unittest.main()
