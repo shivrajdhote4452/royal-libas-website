@@ -490,8 +490,12 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         )
         self.assertEqual(react_login.status_code, 200)
 
-    def test_14_legacy_manager_permissions_and_owner_restrictions(self):
-        """Legacy MANAGER inherits STORE_MANAGER permissions but is denied OWNER-only routes."""
+    def test_14_legacy_manager_strict_permissions_no_store_manager_expansion(self):
+        """Legacy MANAGER does NOT automatically receive STORE_MANAGER permissions.
+
+        Preserves least privilege: legacy MANAGER is denied STORE_MANAGER-restricted
+        and OWNER-only endpoints, preventing silent privilege escalation.
+        """
         db = SessionLocal()
         legacy_pwd = "LegacyPermsPass123!"
         try:
@@ -516,12 +520,38 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         self.assertEqual(login_res.status_code, 200)
         legacy_headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
 
-        # 1. Accessing endpoint requiring STORE_MANAGER succeeds for legacy MANAGER
+        # 1. Accessing general admin endpoints (get_current_admin) succeeds
+        me_res = client.get("/admin/me", headers=legacy_headers)
+        self.assertEqual(me_res.status_code, 200)
+        self.assertEqual(me_res.json()["role"], "MANAGER")
+
+        orders_res = client.get("/admin/orders", headers=legacy_headers)
+        self.assertEqual(orders_res.status_code, 200)
+
+        # 2. Accessing route with explicit MANAGER inclusion (PUT /admin/settings) succeeds
+        settings_res = client.put(
+            "/admin/settings",
+            json={"standard_shipping_fee": 100},
+            headers=legacy_headers,
+        )
+        self.assertEqual(settings_res.status_code, 200)
+
+        # 3. Accessing STORE_MANAGER-restricted endpoints is DENIED with 403 Forbidden
         # /admin/media/folders/prepare-preview requires ("OWNER", "STORE_MANAGER")
         res_preview = client.get("/admin/media/folders/prepare-preview", headers=legacy_headers)
-        self.assertEqual(res_preview.status_code, 200)
+        self.assertEqual(res_preview.status_code, 403)
+        self.assertIn("Access denied", res_preview.json()["detail"])
 
-        # 2. Accessing OWNER-only create staff route (POST /admin/staff) is denied with 403
+        # /admin/inventory/adjust requires ("OWNER", "STORE_MANAGER")
+        res_inv = client.post(
+            "/admin/inventory/adjust",
+            json={"variant_id": 1, "quantity_delta": 5, "reason": "Test"},
+            headers=legacy_headers,
+        )
+        self.assertEqual(res_inv.status_code, 403)
+        self.assertIn("Access denied", res_inv.json()["detail"])
+
+        # 4. Accessing OWNER-only create staff route (POST /admin/staff) is denied with 403
         res_create = client.post(
             "/admin/staff",
             json={
@@ -535,7 +565,7 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         self.assertEqual(res_create.status_code, 403)
         self.assertIn("Access denied", res_create.json()["detail"])
 
-        # 3. Mutating staff (/admin/staff/{id}) is denied with 403
+        # 5. Mutating staff (/admin/staff/{id}) is denied with 403
         res_mutate = client.patch(
             f"/admin/staff/{self.owner_id}",
             json={"is_active": False},
@@ -545,7 +575,7 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         self.assertIn("Access denied", res_mutate.json()["detail"])
 
     def test_15_legacy_manager_upgraded_to_store_manager(self):
-        """Owner can choose to migrate a legacy MANAGER to modern STORE_MANAGER role."""
+        """Owner can choose to migrate a legacy MANAGER to modern STORE_MANAGER role, granting STORE_MANAGER access."""
         db = SessionLocal()
         legacy_pwd = "LegacyUpgradePass123!"
         try:
@@ -563,7 +593,16 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         finally:
             db.close()
 
-        # Update role to STORE_MANAGER
+        # Before upgrade, STORE_MANAGER endpoint returns 403
+        login_res1 = client.post(
+            "/admin/login",
+            json={"email": "legacy_upgrade_test@royallibas.com", "password": legacy_pwd},
+        )
+        headers1 = {"Authorization": f"Bearer {login_res1.json()['access_token']}"}
+        res_preview_before = client.get("/admin/media/folders/prepare-preview", headers=headers1)
+        self.assertEqual(res_preview_before.status_code, 403)
+
+        # Owner explicitly updates role to STORE_MANAGER
         res_upgrade = client.patch(
             f"/admin/staff/{legacy_id}",
             json={"role": "STORE_MANAGER"},
@@ -571,6 +610,10 @@ class TestStaffStatusAndAuth(unittest.TestCase):
         )
         self.assertEqual(res_upgrade.status_code, 200)
         self.assertEqual(res_upgrade.json()["role"], "STORE_MANAGER")
+
+        # After upgrade, the staff member now has STORE_MANAGER access
+        res_preview_after = client.get("/admin/media/folders/prepare-preview", headers=headers1)
+        self.assertEqual(res_preview_after.status_code, 200)
 
     def test_16_invalid_role_rejected_with_400(self):
         """Submitting an unrecognized role produces a 400 Bad Request error."""

@@ -129,7 +129,6 @@ def require_roles(*allowed_roles: str) -> Callable:
       - OWNER: Full unrestricted access
       - STORE_MANAGER: Products, inventory, orders, customer service
       - FULFILLMENT_STAFF: Packing, shipping, order tracking
-      - MANAGER: Legacy manager role with STORE_MANAGER permissions
     """
     def role_checker(admin: Admin = Depends(get_current_admin)) -> Admin:
         admin_role = (admin.role or "OWNER").upper().strip()
@@ -137,13 +136,8 @@ def require_roles(*allowed_roles: str) -> Callable:
         if admin_role == "OWNER":
             return admin
 
-        # Legacy MANAGER role inherits STORE_MANAGER permissions
-        effective_roles = {admin_role}
-        if admin_role == "MANAGER":
-            effective_roles.add("STORE_MANAGER")
-
-        clean_allowed = {r.upper().strip() for r in allowed_roles}
-        if not effective_roles.intersection(clean_allowed):
+        clean_allowed = [r.upper().strip() for r in allowed_roles]
+        if admin_role not in clean_allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Requires one of roles: {', '.join(allowed_roles)}",
