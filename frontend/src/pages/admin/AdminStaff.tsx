@@ -1,16 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Shield,
   Plus,
   RefreshCw,
   UserCheck,
   UserX,
+  Users,
   Edit2,
   X,
   Eye,
   EyeOff,
+  Search,
 } from 'lucide-react';
 import { adminListStaff, adminCreateStaff, adminUpdateStaff } from '../../lib/api';
+
+type StatusFilter = 'ACTIVE' | 'DEACTIVATED' | 'ALL';
 
 interface StaffUser {
   id: number;
@@ -26,6 +30,11 @@ export const AdminStaff: React.FC = () => {
   const [staff, setStaff] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: number; email: string; role: string } | null>(null);
+
+  // Filter & Search state
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ACTIVE');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Create Staff Modal
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -65,6 +74,50 @@ export const AdminStaff: React.FC = () => {
   useEffect(() => {
     fetchStaff();
   }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+      fetch(`${API_BASE_URL}/admin/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) setCurrentUser(data);
+        })
+        .catch(() => {});
+    }
+  }, [token]);
+
+  // Counts for tabs
+  const counts = useMemo(
+    () => ({
+      ACTIVE: staff.filter((u) => u.is_active).length,
+      DEACTIVATED: staff.filter((u) => !u.is_active).length,
+      ALL: staff.length,
+    }),
+    [staff]
+  );
+
+  // Filtered & searched staff members
+  const filteredStaff = useMemo(() => {
+    return staff.filter((u) => {
+      // Status filter
+      if (statusFilter === 'ACTIVE' && !u.is_active) return false;
+      if (statusFilter === 'DEACTIVATED' && u.is_active) return false;
+
+      // Search query (name, email, role)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchName = u.name?.toLowerCase().includes(q);
+        const matchEmail = u.email.toLowerCase().includes(q);
+        const matchRole = u.role.toLowerCase().includes(q);
+        if (!matchName && !matchEmail && !matchRole) return false;
+      }
+
+      return true;
+    });
+  }, [staff, statusFilter, searchQuery]);
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +159,12 @@ export const AdminStaff: React.FC = () => {
         is_active: editIsActive,
         name: editName.trim() || undefined,
       });
-      setNotification({ type: 'success', message: `Staff account updated.` });
+      setNotification({
+        type: 'success',
+        message: editIsActive
+          ? `Staff account ${editingStaff.email} updated.`
+          : `Staff account ${editingStaff.email} deactivated. Sessions revoked.`,
+      });
       setEditingStaff(null);
       await fetchStaff();
     } catch (err: any) {
@@ -206,6 +264,65 @@ export const AdminStaff: React.FC = () => {
         </div>
       </div>
 
+      {/* Status Filter Tabs & Search Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+        {/* Status Pills: Active / Deactivated / All */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {(['ACTIVE', 'DEACTIVATED', 'ALL'] as StatusFilter[]).map((tab) => {
+            const isSelected = statusFilter === tab;
+            const count = counts[tab];
+            const label = tab === 'ACTIVE' ? 'Active' : tab === 'DEACTIVATED' ? 'Deactivated' : 'All';
+
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setStatusFilter(tab)}
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg border transition-all inline-flex items-center gap-1.5 whitespace-nowrap ${
+                  isSelected
+                    ? 'bg-[#5E1224] text-white border-[#5E1224] shadow-xs'
+                    : 'bg-white hover:bg-[#FAF6F0] text-gray-700 border-[#E8DFD0]'
+                }`}
+              >
+                {tab === 'ACTIVE' && <UserCheck className="w-3.5 h-3.5" />}
+                {tab === 'DEACTIVATED' && <UserX className="w-3.5 h-3.5" />}
+                {tab === 'ALL' && <Users className="w-3.5 h-3.5" />}
+                <span>{label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full sm:w-64">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search by name, email, role..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-8 pr-8 py-1.5 bg-white border border-[#E8DFD0] rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#5E1224] text-gray-800 placeholder-gray-400"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              title="Clear search"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Staff Table */}
       <div className="bg-white rounded-xl border border-[#E5D9C5]/80 shadow-sm overflow-hidden">
         {loading ? (
@@ -216,7 +333,35 @@ export const AdminStaff: React.FC = () => {
         ) : staff.length === 0 ? (
           <div className="p-16 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
             <Shield className="w-8 h-8 text-gray-300" />
-            No staff accounts found.
+            <p className="font-semibold text-gray-700 text-sm">No staff accounts found.</p>
+            <p className="text-gray-500 text-[11px]">Add a team member to grant access to the admin portal.</p>
+          </div>
+        ) : filteredStaff.length === 0 ? (
+          <div className="p-16 text-center text-xs text-gray-500 flex flex-col items-center justify-center gap-2">
+            <Shield className="w-8 h-8 text-gray-300" />
+            <p className="font-semibold text-gray-700 text-sm">
+              {searchQuery
+                ? `No staff match "${searchQuery}"`
+                : statusFilter === 'DEACTIVATED'
+                ? 'No deactivated staff accounts'
+                : 'No active staff accounts'}
+            </p>
+            <p className="text-gray-500 text-[11px] max-w-sm">
+              {searchQuery
+                ? 'Try adjusting your search keywords or clear the search field.'
+                : statusFilter === 'DEACTIVATED'
+                ? 'All registered staff accounts are currently active with valid sign-in permissions.'
+                : 'All staff accounts are currently deactivated. Reactivate an account to restore access.'}
+            </p>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="mt-2 px-3 py-1 bg-white border border-[#E8DFD0] text-gray-700 rounded-lg text-xs hover:bg-gray-50"
+              >
+                Clear Search
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -232,55 +377,63 @@ export const AdminStaff: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {staff.map((u) => (
-                  <tr key={u.id} className="hover:bg-amber-50/20">
-                    <td className="py-3 px-4 font-semibold text-gray-900">
-                      {u.name || 'Staff Member'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-gray-700">{u.email}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          u.role === 'OWNER'
-                            ? 'bg-amber-100 text-[#5E1224] border border-amber-300'
-                            : u.role === 'STORE_MANAGER'
-                            ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                            : 'bg-sky-100 text-sky-900 border border-sky-200'
-                        }`}
-                      >
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-                          u.is_active ? 'text-emerald-700' : 'text-gray-400'
-                        }`}
-                      >
-                        {u.is_active ? (
-                          <>
-                            <UserCheck className="w-3.5 h-3.5" /> Active
-                          </>
-                        ) : (
-                          <>
-                            <UserX className="w-3.5 h-3.5" /> Deactivated
-                          </>
+                {filteredStaff.map((u) => {
+                  const isDeactivated = !u.is_active;
+                  return (
+                    <tr
+                      key={u.id}
+                      className={`hover:bg-amber-50/20 transition-colors ${
+                        isDeactivated ? 'bg-gray-50/60 opacity-80' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-4 font-semibold text-gray-900">
+                        {u.name || 'Staff Member'}
+                        {u.id === currentUser?.id && (
+                          <span className="ml-2 text-[10px] font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                            You
+                          </span>
                         )}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-500 text-[11px]">
-                      {new Date(u.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => openEditModal(u)}
-                        className="px-2.5 py-1 bg-white border border-[#E5D9C5] text-gray-700 rounded text-xs font-semibold hover:bg-[#FCF8F0] transition-colors inline-flex items-center gap-1"
-                      >
-                        <Edit2 className="w-3 h-3" /> Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-gray-700">{u.email}</td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            u.role === 'OWNER'
+                              ? 'bg-amber-100 text-[#5E1224] border border-amber-300'
+                              : u.role === 'STORE_MANAGER'
+                              ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                              : 'bg-sky-100 text-sky-900 border border-sky-200'
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {u.is_active ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                            <UserCheck className="w-3.5 h-3.5" /> Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400">
+                            <UserX className="w-3.5 h-3.5" /> Deactivated
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-gray-500 text-[11px]">
+                        {new Date(u.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => openEditModal(u)}
+                          className="px-2.5 py-1 bg-white border border-[#E5D9C5] text-gray-700 rounded text-xs font-semibold hover:bg-[#FCF8F0] transition-colors inline-flex items-center gap-1"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          {u.is_active ? 'Edit' : 'Manage / Reactivate'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -441,15 +594,27 @@ export const AdminStaff: React.FC = () => {
                 </select>
               </div>
 
-              <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="pt-2 pb-1 border-t border-gray-100 mt-2">
+                <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={editIsActive}
+                    disabled={editingStaff.id === currentUser?.id}
                     onChange={(e) => setEditIsActive(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#5E1224] focus:ring-[#5E1224]"
+                    className="w-4 h-4 mt-0.5 rounded text-[#5E1224] focus:ring-[#5E1224] disabled:opacity-50"
                   />
-                  <span className="font-semibold text-gray-800">Account Active & Authorized to Sign In</span>
+                  <div>
+                    <span className="font-semibold text-gray-800 block text-xs">
+                      Account Active & Authorized to Sign In
+                    </span>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                      {editingStaff.id === currentUser?.id
+                        ? 'You cannot deactivate your own active account.'
+                        : editIsActive
+                        ? 'Active staff can sign in and perform actions based on their assigned role.'
+                        : 'Deactivating immediately blocks sign in and instantly revokes all active sessions. Historical actions, stock adjustments, and audit trails remain preserved.'}
+                    </p>
+                  </div>
                 </label>
               </div>
 
@@ -476,3 +641,4 @@ export const AdminStaff: React.FC = () => {
     </div>
   );
 };
+

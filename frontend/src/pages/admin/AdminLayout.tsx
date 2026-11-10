@@ -42,7 +42,7 @@ export const AdminLayout: React.FC = () => {
     })
       .then((res) => {
         if (!res.ok) {
-          if (res.status === 401) {
+          if (res.status === 401 || res.status === 403) {
             localStorage.removeItem('royal_libas_admin_token');
             navigate('/admin/login');
           }

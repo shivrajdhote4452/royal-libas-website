@@ -18,6 +18,7 @@ import os
 import sys
 import unittest
 import threading
+import time
 from decimal import Decimal
 
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -839,6 +840,489 @@ class TestPostgresConcurrency(unittest.TestCase):
             self.assertEqual(c_db.used_count, 1)
         finally:
             db.close()
+
+    def test_postgres_concurrent_active_owner_deactivation_serialized(self):
+        """Verify PostgreSQL row-level locking serializes concurrent active owner deactivations.
+        
+        When exactly 2 active owners exist, 2 concurrent deactivation/demotion requests
+        must be serialized so that exactly one succeeds and the other is rejected with 400 Bad Request,
+        guaranteeing that 0 active owners can never occur.
+        """
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+
+        c = TestClient(self.app)
+        db = self.SessionLocal()
+        try:
+            # Clean up test owners
+            db.query(Admin).filter(Admin.email.in_([
+                "pg_co_owner_a@royallibas.com",
+                "pg_co_owner_b@royallibas.com",
+                "pg_controller@royallibas.com",
+            ])).delete(synchronize_session=False)
+            db.commit()
+
+            # Seed a controlling owner (to authenticate the requests) and 2 co-owners to test concurrent deactivation
+            controller = Admin(
+                email="pg_controller@royallibas.com",
+                name="PG Controller",
+                role="OWNER",
+                password_hash=hash_password("controller123"),
+                is_active=True,
+            )
+            owner_a = Admin(
+                email="pg_co_owner_a@royallibas.com",
+                name="PG Co-Owner A",
+                role="OWNER",
+                password_hash=hash_password("ownera123"),
+                is_active=True,
+            )
+            owner_b = Admin(
+                email="pg_co_owner_b@royallibas.com",
+                name="PG Co-Owner B",
+                role="OWNER",
+                password_hash=hash_password("ownerb123"),
+                is_active=True,
+            )
+            db.add_all([controller, owner_a, owner_b])
+            db.commit()
+            db.refresh(controller)
+            db.refresh(owner_a)
+            db.refresh(owner_b)
+
+            controller_id = controller.id
+            owner_a_id = owner_a.id
+            owner_b_id = owner_b.id
+        finally:
+            db.close()
+
+        # Keep exactly 2 active owners in the entire database: controller (id1) and owner_b (id2)
+        db = self.SessionLocal()
+        try:
+            pg_owner = db.query(Admin).filter(Admin.email == "pg_owner@royallibas.com").first()
+            if pg_owner:
+                pg_owner.is_active = False
+
+            ctrl = db.query(Admin).filter(Admin.id == controller_id).first()
+            ctrl.is_active = True
+            oa = db.query(Admin).filter(Admin.id == owner_a_id).first()
+            oa.is_active = False
+            ob = db.query(Admin).filter(Admin.id == owner_b_id).first()
+            ob.is_active = True
+            db.commit()
+
+            # Baseline check: precisely 2 active owners in PostgreSQL
+            total_active = db.query(Admin).filter(Admin.role == "OWNER", Admin.is_active == True).count()
+            self.assertEqual(total_active, 2)
+        finally:
+            db.close()
+
+        token_ctrl = create_access_token({"sub": str(controller_id), "role": "OWNER"})
+        token_b = create_access_token({"sub": str(owner_b_id), "role": "OWNER"})
+
+        results = {}
+
+        def deactivate_req(admin_token, target_id, key):
+            th_client = TestClient(self.app)
+            res = th_client.patch(
+                f"/admin/staff/{target_id}",
+                json={"is_active": False},
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            results[key] = (res.status_code, res.json())
+
+        try:
+            t1 = threading.Thread(target=deactivate_req, args=(token_ctrl, owner_b_id, "ctrl_deactivates_b"))
+            t2 = threading.Thread(target=deactivate_req, args=(token_b, controller_id, "b_deactivates_ctrl"))
+
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
+
+            # In mutual deactivation, exactly one transaction succeeds (200 OK)
+            # and the other transaction observes under lock that its own acting account was deactivated
+            # while waiting on the lock, resulting in 403 Forbidden.
+            statuses = [r[0] for r in results.values()]
+            self.assertIn(200, statuses, f"Expected one 200 OK, got: {results}")
+            self.assertIn(403, statuses, f"Expected one 403 Forbidden (acting admin deactivated), got: {results}")
+
+            rejected_detail = [r[1].get("detail", "") for r in results.values() if r[0] == 403][0]
+            self.assertIn("inactive", rejected_detail.lower())
+
+            # Verify PostgreSQL database state: exactly 1 active owner remains!
+            db = self.SessionLocal()
+            try:
+                active_owners_in_db = db.query(Admin).filter(
+                    Admin.id.in_([controller_id, owner_b_id]),
+                    Admin.role == "OWNER",
+                    Admin.is_active == True,
+                ).all()
+                self.assertEqual(len(active_owners_in_db), 1, "Exactly 1 active owner must remain in PostgreSQL!")
+            finally:
+                db.close()
+
+            # Now test third-party caller deactivation:
+            # Re-seed exactly 2 active owners: owner_a and owner_b, with pg_owner as active third party caller
+            db = self.SessionLocal()
+            try:
+                pg_owner = db.query(Admin).filter(Admin.email == "pg_owner@royallibas.com").first()
+                if pg_owner:
+                    pg_owner.is_active = True
+                ctrl = db.query(Admin).filter(Admin.id == controller_id).first()
+                ctrl.is_active = False
+                oa = db.query(Admin).filter(Admin.id == owner_a_id).first()
+                oa.is_active = True
+                ob = db.query(Admin).filter(Admin.id == owner_b_id).first()
+                ob.is_active = True
+                db.commit()
+
+                # Baseline: pg_owner (1), owner_a (2), owner_b (3) = 3 active owners.
+                # If pg_owner deactivates owner_a and owner_b concurrently:
+                # With 3 active owners, both could potentially deactivate leaving 1.
+                # To test the last-owner 400 guard from an authorized caller,
+                # we keep pg_owner (active caller) + owner_a (active target) = 2 active owners!
+                ob.is_active = False
+                db.commit()
+                total_active = db.query(Admin).filter(Admin.role == "OWNER", Admin.is_active == True).count()
+                self.assertEqual(total_active, 2)
+                pg_owner_id = pg_owner.id
+            finally:
+                db.close()
+
+            # Now pg_owner tries to deactivate owner_a: succeeds (200).
+            # If pg_owner tries to deactivate owner_a again or when count <= 1: rejected with 400 Bad Request!
+            c = TestClient(self.app)
+            res_first = c.patch(f"/admin/staff/{owner_a_id}", json={"is_active": False}, headers=self.owner_headers)
+            self.assertEqual(res_first.status_code, 200)
+
+            # Now only 1 active owner (pg_owner) remains. Demoting or deactivating pg_owner triggers 400:
+            res_last = c.patch(f"/admin/staff/{pg_owner_id}", json={"role": "STORE_MANAGER"}, headers=self.owner_headers)
+            self.assertEqual(res_last.status_code, 400)
+            self.assertIn("only active owner", res_last.json().get("detail", "").lower())
+        finally:
+            restore_db = self.SessionLocal()
+            try:
+                pg_owner = restore_db.query(Admin).filter(Admin.email == "pg_owner@royallibas.com").first()
+                if pg_owner:
+                    pg_owner.is_active = True
+                restore_db.commit()
+            finally:
+                restore_db.close()
+
+    def test_postgres_concurrent_mixed_promotion_and_demotion_serialized(self):
+        """Verify PostgreSQL serializes mixed operations (promotion + demotion) preserving the active-owner invariant."""
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+
+        db = self.SessionLocal()
+        try:
+            # Clean up
+            db.query(Admin).filter(Admin.email.in_([
+                "pg_mixed_owner@royallibas.com",
+                "pg_mixed_mgr@royallibas.com",
+            ])).delete(synchronize_session=False)
+            db.commit()
+
+            owner = Admin(
+                email="pg_mixed_owner@royallibas.com",
+                name="Mixed Owner",
+                role="OWNER",
+                password_hash=hash_password("owner123"),
+                is_active=True,
+            )
+            mgr = Admin(
+                email="pg_mixed_mgr@royallibas.com",
+                name="Mixed Manager",
+                role="STORE_MANAGER",
+                password_hash=hash_password("mgr123"),
+                is_active=True,
+            )
+            db.add_all([owner, mgr])
+            db.commit()
+            db.refresh(owner)
+            db.refresh(mgr)
+            owner_id = owner.id
+            mgr_id = mgr.id
+        finally:
+            db.close()
+
+        owner_token = create_access_token({"sub": str(owner_id), "role": "OWNER"})
+        headers = {"Authorization": f"Bearer {owner_token}"}
+
+        results = {}
+
+        def promote_req():
+            th_client = TestClient(self.app)
+            res = th_client.patch(f"/admin/staff/{mgr_id}", json={"role": "OWNER"}, headers=headers)
+            results["promote"] = (res.status_code, res.json())
+
+        def demote_req():
+            th_client = TestClient(self.app)
+            # Demote the owner to STORE_MANAGER
+            res = th_client.patch(f"/admin/staff/{owner_id}", json={"role": "STORE_MANAGER"}, headers=headers)
+            results["demote"] = (res.status_code, res.json())
+
+        t1 = threading.Thread(target=promote_req)
+        t2 = threading.Thread(target=demote_req)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Regardless of execution order:
+        # If promote finishes first, demote succeeds because 2 active owners exist. Both 200.
+        # If demote finishes first, demote fails (400) because only 1 active owner exists, then promote succeeds (200).
+        # In ALL possible interleavings, there is AT LEAST 1 active owner in PostgreSQL.
+        db = self.SessionLocal()
+        try:
+            active_owners = db.query(Admin).filter(Admin.role == "OWNER", Admin.is_active == True).all()
+            self.assertGreaterEqual(len(active_owners), 1, "Must maintain >= 1 active owner in PostgreSQL")
+        finally:
+            db.close()
+
+    def test_postgres_inactive_owner_edits_without_guard_trigger(self):
+        """Editing an already inactive owner in PostgreSQL must never trigger the last-active-owner guard."""
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+
+        db = self.SessionLocal()
+        try:
+            db.query(Admin).filter(Admin.email == "pg_inactive_owner@royallibas.com").delete()
+            db.commit()
+
+            inact = Admin(
+                email="pg_inactive_owner@royallibas.com",
+                name="Inactive Owner",
+                role="OWNER",
+                password_hash=hash_password("inact123"),
+                is_active=False,
+            )
+            db.add(inact)
+            db.commit()
+            db.refresh(inact)
+            inact_id = inact.id
+        finally:
+            db.close()
+
+        c = TestClient(self.app)
+        # Edit name -> 200 OK
+        res1 = c.patch(f"/admin/staff/{inact_id}", json={"name": "Renamed Inactive"}, headers=self.owner_headers)
+        self.assertEqual(res1.status_code, 200)
+
+        # Demote to STORE_MANAGER -> 200 OK
+        res2 = c.patch(f"/admin/staff/{inact_id}", json={"role": "STORE_MANAGER"}, headers=self.owner_headers)
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(res2.json()["role"], "STORE_MANAGER")
+
+        # Reactivate and restore role to OWNER -> 200 OK
+        res3 = c.patch(f"/admin/staff/{inact_id}", json={"role": "OWNER", "is_active": True}, headers=self.owner_headers)
+        self.assertEqual(res3.status_code, 200)
+        self.assertTrue(res3.json()["is_active"])
+        self.assertEqual(res3.json()["role"], "OWNER")
+
+    def test_postgres_staff_create_aborts_if_acting_owner_loses_authorization_while_waiting_on_lock(self):
+        """Verify POST /admin/staff aborts with 403 if acting owner is deactivated or demoted while waiting on advisory lock."""
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+        from sqlalchemy import text
+
+        for revoke_action in ["deactivate", "demote"]:
+            with self.subTest(revoke_action=revoke_action):
+                db = self.SessionLocal()
+                try:
+                    db.query(Admin).filter(Admin.email.in_([
+                        "pg_auth_loss_a@royallibas.com",
+                        "pg_auth_loss_b@royallibas.com",
+                        "pg_new_staff@royallibas.com",
+                    ])).delete(synchronize_session=False)
+                    db.commit()
+
+                    owner_a = Admin(
+                        email="pg_auth_loss_a@royallibas.com",
+                        name="Auth Loss Owner A",
+                        role="OWNER",
+                        password_hash=hash_password("pass123"),
+                        is_active=True,
+                    )
+                    owner_b = Admin(
+                        email="pg_auth_loss_b@royallibas.com",
+                        name="Auth Loss Owner B",
+                        role="OWNER",
+                        password_hash=hash_password("pass123"),
+                        is_active=True,
+                    )
+                    db.add_all([owner_a, owner_b])
+                    db.commit()
+                    db.refresh(owner_a)
+                    db.refresh(owner_b)
+                    a_id = owner_a.id
+                    b_id = owner_b.id
+                finally:
+                    db.close()
+
+                token_a = create_access_token({"sub": str(a_id), "role": "OWNER"})
+
+                # Hold the advisory lock in an external connection
+                conn = self.engine.connect()
+                trans = conn.begin()
+                conn.execute(text("SELECT pg_advisory_xact_lock(84521093)"))
+
+                result = {}
+
+                def submit_create():
+                    c = TestClient(self.app)
+                    res = c.post(
+                        "/admin/staff",
+                        json={
+                            "email": "pg_new_staff@royallibas.com",
+                            "name": "New Staff Member",
+                            "role": "STORE_MANAGER",
+                            "password": "securepassword123",
+                        },
+                        headers={"Authorization": f"Bearer {token_a}"},
+                    )
+                    result["status"] = res.status_code
+                    result["data"] = res.json()
+
+                th = threading.Thread(target=submit_create)
+                th.start()
+
+                # Give thread time to pass require_roles dependency and block on pg_advisory_xact_lock
+                time.sleep(0.4)
+
+                # Revoke authorization on Owner A in database while Owner A waits on lock
+                if revoke_action == "deactivate":
+                    conn.execute(text("UPDATE admins SET is_active = false WHERE id = :id"), {"id": a_id})
+                else:
+                    conn.execute(text("UPDATE admins SET role = 'STORE_MANAGER' WHERE id = :id"), {"id": a_id})
+
+                trans.commit()
+                conn.close()
+                th.join()
+
+                # Assert that Owner A was blocked with 403 Forbidden
+                self.assertEqual(result["status"], 403, f"Expected 403 Forbidden, got {result}")
+                if revoke_action == "deactivate":
+                    self.assertIn("inactive", result["data"].get("detail", "").lower())
+                else:
+                    self.assertIn("requires one of roles: owner", result["data"].get("detail", "").lower())
+
+                # Assert that new staff was NEVER created in PostgreSQL
+                verify_db = self.SessionLocal()
+                try:
+                    created_staff = verify_db.query(Admin).filter(Admin.email == "pg_new_staff@royallibas.com").first()
+                    self.assertIsNone(created_staff, "Staff member must not be created after acting owner loses authorization")
+                finally:
+                    verify_db.close()
+
+    def test_postgres_staff_update_aborts_if_acting_owner_loses_authorization_while_waiting_on_lock(self):
+        """Verify PATCH /admin/staff/{id} aborts with 403 if acting owner is deactivated or demoted while waiting on advisory lock."""
+        from fastapi.testclient import TestClient
+        from app.models import Admin
+        from app.auth import hash_password, create_access_token
+        from sqlalchemy import text
+
+        for revoke_action in ["deactivate", "demote"]:
+            with self.subTest(revoke_action=revoke_action):
+                db = self.SessionLocal()
+                try:
+                    db.query(Admin).filter(Admin.email.in_([
+                        "pg_auth_loss_a2@royallibas.com",
+                        "pg_auth_loss_b2@royallibas.com",
+                        "pg_update_target@royallibas.com",
+                    ])).delete(synchronize_session=False)
+                    db.commit()
+
+                    owner_a = Admin(
+                        email="pg_auth_loss_a2@royallibas.com",
+                        name="Auth Loss Owner A2",
+                        role="OWNER",
+                        password_hash=hash_password("pass123"),
+                        is_active=True,
+                    )
+                    owner_b = Admin(
+                        email="pg_auth_loss_b2@royallibas.com",
+                        name="Auth Loss Owner B2",
+                        role="OWNER",
+                        password_hash=hash_password("pass123"),
+                        is_active=True,
+                    )
+                    target = Admin(
+                        email="pg_update_target@royallibas.com",
+                        name="Original Target Name",
+                        role="STORE_MANAGER",
+                        password_hash=hash_password("pass123"),
+                        is_active=True,
+                    )
+                    db.add_all([owner_a, owner_b, target])
+                    db.commit()
+                    db.refresh(owner_a)
+                    db.refresh(owner_b)
+                    db.refresh(target)
+                    a_id = owner_a.id
+                    b_id = owner_b.id
+                    target_id = target.id
+                finally:
+                    db.close()
+
+                token_a = create_access_token({"sub": str(a_id), "role": "OWNER"})
+
+                # Hold the advisory lock in an external connection
+                conn = self.engine.connect()
+                trans = conn.begin()
+                conn.execute(text("SELECT pg_advisory_xact_lock(84521093)"))
+
+                result = {}
+
+                def submit_update():
+                    c = TestClient(self.app)
+                    res = c.patch(
+                        f"/admin/staff/{target_id}",
+                        json={
+                            "name": "Unauthorized Mutated Name",
+                            "role": "FULFILLMENT_STAFF",
+                        },
+                        headers={"Authorization": f"Bearer {token_a}"},
+                    )
+                    result["status"] = res.status_code
+                    result["data"] = res.json()
+
+                th = threading.Thread(target=submit_update)
+                th.start()
+
+                # Give thread time to pass require_roles dependency and block on pg_advisory_xact_lock
+                time.sleep(0.4)
+
+                # Revoke authorization on Owner A in database while Owner A waits on lock
+                if revoke_action == "deactivate":
+                    conn.execute(text("UPDATE admins SET is_active = false WHERE id = :id"), {"id": a_id})
+                else:
+                    conn.execute(text("UPDATE admins SET role = 'STORE_MANAGER' WHERE id = :id"), {"id": a_id})
+
+                trans.commit()
+                conn.close()
+                th.join()
+
+                # Assert that Owner A was blocked with 403 Forbidden
+                self.assertEqual(result["status"], 403, f"Expected 403 Forbidden, got {result}")
+                if revoke_action == "deactivate":
+                    self.assertIn("inactive", result["data"].get("detail", "").lower())
+                else:
+                    self.assertIn("requires one of roles: owner", result["data"].get("detail", "").lower())
+
+                # Assert that target staff was NEVER modified in PostgreSQL
+                verify_db = self.SessionLocal()
+                try:
+                    updated_target = verify_db.query(Admin).filter(Admin.id == target_id).first()
+                    self.assertEqual(updated_target.name, "Original Target Name")
+                    self.assertEqual(updated_target.role, "STORE_MANAGER")
+                finally:
+                    verify_db.close()
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

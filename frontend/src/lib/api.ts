@@ -1420,8 +1420,11 @@ export async function adminDeleteSizeChart(token: string, id: number): Promise<a
   return response.json();
 }
 
-export async function adminListStaff(token: string): Promise<any[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/staff`, {
+export async function adminListStaff(token: string, status?: string): Promise<any[]> {
+  const url = status && status.toLowerCase() !== 'all'
+    ? `${API_BASE_URL}/admin/staff?status=${encodeURIComponent(status)}`
+    : `${API_BASE_URL}/admin/staff`;
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
