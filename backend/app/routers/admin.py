@@ -248,7 +248,7 @@ def get_admin_profile(current_admin: Admin = Depends(get_current_admin)):
 @router.get("/dashboard", response_model=AdminDashboardResponse)
 def get_admin_dashboard(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve real database-backed metrics for the boutique owner.
     
@@ -419,7 +419,7 @@ def admin_list_orders(
     search: Optional[str] = None,
     date: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """List orders with filters for search, status, payment state, and date."""
     query = db.query(Order).options(joinedload(Order.items), joinedload(Order.address))
@@ -459,7 +459,7 @@ def admin_list_orders(
 def admin_get_order(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Retrieve complete order details for fulfillment, payment reconciliation, and audit."""
     order = (
@@ -481,7 +481,7 @@ def admin_update_order_status(
     id: int,
     payload: OrderStatusUpdateRequest,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Update order status with strict business transitions and inventory restocking on cancellation."""
     order = (
@@ -590,7 +590,7 @@ def admin_update_order_notes(
     id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Save staff internal notes on an order."""
     order = db.query(Order).filter(Order.id == id).first()
@@ -615,7 +615,7 @@ def admin_list_payments(
     method: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """List all payment records derived truthfully from orders."""
     query = db.query(Order)
@@ -662,7 +662,7 @@ def admin_list_payments(
 def admin_sync_payment_status(
     order_code: str,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Perform server-side Cashfree reconciliation for an order."""
     ok, msg, order = sync_cashfree_payment_status(db, order_code.strip().upper())
@@ -689,7 +689,7 @@ def admin_record_cod_collection(
     order_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Mark a COD order as successfully collected/paid by courier or boutique delivery."""
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -728,7 +728,7 @@ def admin_list_shipments(
     tab: Optional[str] = "all",
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """List shipment records with courier, AWB, pickup status, and label links."""
     query = db.query(Order).options(joinedload(Order.address))
@@ -794,7 +794,7 @@ def admin_list_shipments(
 
 @router.get("/fulfillment/config", response_model=FulfillmentConfigResponse)
 def admin_get_fulfillment_config(
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Return Shiprocket integration status and configuration state for admin."""
     configured = is_shiprocket_configured()
@@ -811,7 +811,7 @@ def admin_check_fulfillment_serviceability(
     id: int,
     payload: FulfillmentServiceabilityRequest,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Check courier serviceability and rates for an order via Shiprocket."""
     if not is_shiprocket_configured():
@@ -877,7 +877,7 @@ def admin_ship_order_via_shiprocket(
     id: int,
     payload: FulfillmentShipRequest,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Execute Shiprocket fulfillment flow for an order."""
     if not is_shiprocket_configured():
@@ -1061,7 +1061,7 @@ def admin_ship_order_via_shiprocket(
 def admin_refresh_fulfillment_tracking(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Live refresh tracking details for an order with an active AWB code."""
     order = (
@@ -1097,7 +1097,7 @@ def admin_refresh_fulfillment_tracking(
 def admin_generate_order_invoice(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Generate, refresh, and retrieve the Shiprocket invoice PDF URL for an order."""
     if not is_shiprocket_configured():
@@ -1142,7 +1142,7 @@ def admin_get_order_invoice(
     id: int,
     regenerate: bool = Query(False, description="Force regenerate fresh invoice URL from Shiprocket"),
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Retrieve existing invoice URL or regenerate fresh URL from Shiprocket."""
     if not is_shiprocket_configured():
@@ -1187,7 +1187,7 @@ def admin_get_order_invoice(
 def admin_retry_order_label(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Retry generating or retrieving the shipping label PDF from Shiprocket."""
     if not is_shiprocket_configured():
@@ -1229,7 +1229,7 @@ def admin_retry_order_label(
 def admin_retry_order_pickup(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Retry scheduling courier pickup for an existing Shiprocket shipment."""
     if not is_shiprocket_configured():
@@ -1278,7 +1278,7 @@ def admin_retry_order_pickup(
 def admin_retry_order_manifest(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER")),
 ):
     """Generate or retry shipping manifest PDF from Shiprocket."""
     if not is_shiprocket_configured():
@@ -1328,7 +1328,7 @@ def admin_list_inventory(
     subcategory: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve variant-level inventory with stock levels and filtering."""
     query = (
@@ -1501,7 +1501,7 @@ def admin_adjust_stock(
 @router.get("/inventory/summary", response_model=InventorySummaryResponse)
 def admin_get_inventory_summary(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve stable aggregate inventory metrics across the entire boutique catalogue."""
     # 1. Published Live Catalogue
@@ -1775,7 +1775,7 @@ def admin_list_stock_adjustments(
     product_id: Optional[int] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve audit history of stock adjustments (filtered by variant or product)."""
     query = (
@@ -1827,7 +1827,7 @@ def admin_list_returns(
     request_type: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """List customer return, exchange, and refund requests."""
     query = (
@@ -1894,7 +1894,7 @@ def admin_list_returns(
 def admin_create_return_request(
     payload: ReturnRequestCreate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Initiate a return or exchange request on behalf of a customer.
 
@@ -1987,7 +1987,7 @@ def admin_update_return_status(
 @router.get("/customers", response_model=List[AdminCustomerResponse])
 def admin_list_customers(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Read-only customer list built from orders: name, phone, order count, total spent."""
     orders = db.query(Order).order_by(Order.created_at.desc()).all()
@@ -2021,7 +2021,7 @@ def admin_list_customers(
 def admin_get_customer_detail(
     phone: str,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve full customer dossier: order history, returns, and support contact messages."""
     clean_phone = phone.strip()
@@ -2096,7 +2096,7 @@ def admin_get_customer_detail(
 def admin_list_inquiries(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve customer concierge and contact form inquiries."""
     query = db.query(ContactInquiry)
@@ -2111,7 +2111,7 @@ def admin_reply_inquiry(
     id: int,
     payload: ContactInquiryReply,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Record staff response and update inquiry resolution state."""
     inquiry = db.query(ContactInquiry).filter(ContactInquiry.id == id).first()
@@ -2137,7 +2137,7 @@ def admin_reply_inquiry(
 def admin_get_reports(
     period: Optional[str] = "30d",
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Compute truthful date-filtered metrics, separating prepaid collected from pending COD."""
     now = datetime.now()
@@ -2223,7 +2223,7 @@ def admin_export_orders_csv(
     status: Optional[str] = None,
     payment_method: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Export real orders to standard CSV format."""
     query = db.query(Order).options(joinedload(Order.items), joinedload(Order.address))
@@ -2425,7 +2425,7 @@ def ensure_ancestor_folders(db: Session, folder_path: str, known_paths: set) -> 
 @router.get("/media/folders", response_model=List[MediaFolderResponse])
 def admin_list_media_folders(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """List all media folders with recursive asset counts and subfolder counts."""
     folders = db.query(MediaFolder).order_by(MediaFolder.path.asc()).all()
@@ -2813,7 +2813,7 @@ def admin_list_media(
     hide_samples: bool = Query(True, description="Hide Cloudinary demo samples from normal boutique view"),
     sort_by: Optional[str] = Query("newest", description="Sort order: newest, oldest, largest, name"),
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve all uploaded persistent media assets with filtering, folder selection, and product usage."""
     query = db.query(MediaAsset)
@@ -3267,7 +3267,7 @@ def admin_delete_media(
 def admin_check_media_usage(
     payload: BulkDeleteMediaRequest,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Check if the specified media assets are currently referenced by products or editorial sections."""
     if not payload.asset_ids:
@@ -3962,7 +3962,7 @@ def admin_sync_cloudinary_media(
 @router.get("/media/status", response_model=CloudinaryStatusResponse)
 def admin_get_media_status(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Return status of Cloudinary configuration and media library statistics."""
     status_info = get_cloudinary_status()
@@ -4250,7 +4250,7 @@ def admin_attach_product_media(
 @router.get("/size-charts", response_model=List[SizeChartResponse])
 def admin_list_size_charts(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """List all reusable size charts with product reference counts."""
     charts = db.query(SizeChart).order_by(SizeChart.name.asc(), SizeChart.id.asc()).all()
@@ -4366,7 +4366,7 @@ def admin_delete_size_chart(
 @router.get("/products", response_model=List[ProductDetailResponse])
 def admin_list_products(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve all products (active, draft, and archived) for admin catalogue management."""
     products = (
@@ -4386,7 +4386,7 @@ def admin_list_products(
 def admin_get_product(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve a single product by ID (including draft and archived) for admin editing."""
     product = (
@@ -4866,7 +4866,7 @@ def admin_delete_product(
 @router.get("/settings", response_model=StoreSettingResponse)
 def admin_get_settings(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve persistent store settings and homepage content."""
     setting = db.query(StoreSetting).first()
@@ -5113,7 +5113,7 @@ def admin_list_staff(
     status: Optional[str] = Query(None, description="Filter staff by status: 'active', 'deactivated', or 'all'"),
     is_active: Optional[bool] = Query(None, description="Optional boolean filter for active status"),
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER")),
 ):
     """List staff accounts and roles with optional status filtering."""
     query = db.query(Admin)
@@ -5351,7 +5351,7 @@ def admin_list_coupons(
     search: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve all promotional coupons with usage statistics and status filtering."""
     now = datetime.now(timezone.utc)
@@ -5419,7 +5419,7 @@ def admin_create_coupon(
 def admin_get_coupon(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(get_current_admin),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
 ):
     """Retrieve single coupon details by ID."""
     coupon = db.query(Coupon).filter(Coupon.id == id).first()
