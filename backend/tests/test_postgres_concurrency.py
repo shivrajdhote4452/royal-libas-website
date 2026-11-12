@@ -25,6 +25,8 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+os.environ.setdefault("JWT_SECRET", "isolated-test-jwt-secret-pg-concurrency-32bytes")
+
 
 class TestPostgresConcurrency(unittest.TestCase):
     """PostgreSQL concurrency tests using an isolated disposable database."""

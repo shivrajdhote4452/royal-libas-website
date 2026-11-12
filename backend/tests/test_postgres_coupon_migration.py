@@ -26,6 +26,8 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from sqlalchemy import create_engine, text, inspect
+os.environ.setdefault("JWT_SECRET", "isolated-test-jwt-secret-pg-coupon-migration-32b")
+
 from app.database import Base
 from app.models import Coupon, Order, StoreSetting
 from app.migrations import run_migrations

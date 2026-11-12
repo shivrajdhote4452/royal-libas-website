@@ -93,6 +93,7 @@ VERIFIED_SAFE_SUITES = [
     "test_staff_status_and_auth.py",
     "test_order_phone_authorization.py",
     "test_phase1.py",
+    "test_jwt_startup_guard.py",
     "test_runner_safety_harness.py",
 ]
 
