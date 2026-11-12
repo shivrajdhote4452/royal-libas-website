@@ -76,25 +76,26 @@ class TestJwtStartupGuard(unittest.TestCase):
             else:
                 clean_env[k] = v
 
-        temp_dotenv_path = ""
+        sub_dir = tempfile.mkdtemp(prefix="sub_", dir=_TEMP_DIR)
+        target_dotenv = ""
         if temp_dotenv_content is not None:
-            fd, temp_dotenv_path = tempfile.mkstemp(prefix="rl_test_env_", suffix=".env", dir=_TEMP_DIR)
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(temp_dotenv_content)
+            dotenv_file = Path(sub_dir) / ".env"
+            dotenv_file.write_text(temp_dotenv_content, encoding="utf-8")
+            target_dotenv = str(dotenv_file.resolve())
 
         script = f"""
-import sys
+from pathlib import Path
 from unittest.mock import patch
-import dotenv
 
-temp_dotenv = {temp_dotenv_path!r}
-def _isolated_load_dotenv(*args, **kwargs):
-    if temp_dotenv:
-        return dotenv.dotenv_values and _orig_load(temp_dotenv, **{{k: v for k, v in kwargs.items() if k != 'dotenv_path'}})
-    return False
+target_dotenv = {target_dotenv!r}
+_orig_exists = Path.exists
 
-_orig_load = dotenv.load_dotenv
-with patch("dotenv.load_dotenv", side_effect=lambda *a, **kw: _orig_load(temp_dotenv, **kw) if temp_dotenv else False):
+def _isolated_exists(self):
+    if self.name == ".env":
+        return bool(target_dotenv) and str(self.resolve()) == target_dotenv
+    return _orig_exists(self)
+
+with patch.object(Path, "exists", _isolated_exists):
     import app.config as cfg
     assert cfg.JWT_SECRET
     if {import_main!r}:
@@ -113,7 +114,7 @@ print("SUBPROCESS_STARTUP_OK")
             env=clean_env,
             capture_output=True,
             text=True,
-            cwd=_TEMP_DIR,
+            cwd=sub_dir,
         )
 
     def _assert_no_secret_leak(self, text: str, secret: str):
