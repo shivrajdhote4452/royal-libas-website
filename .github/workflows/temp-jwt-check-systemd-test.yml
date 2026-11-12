@@ -25,10 +25,15 @@ jobs:
           uname -a
           systemctl --version | head -n 2
 
+          timeout 45 systemctl is-system-running --wait >/dev/null 2>&1 || true
           sys_state="$(systemctl is-system-running || true)"
           echo "systemd state=${sys_state}"
           case "${sys_state}" in
             running|degraded) ;;
+            starting)
+              systemctl list-jobs --no-pager || true
+              test "$(systemctl is-active systemd-journald)" = "active"
+              ;;
             *)
               echo "FAIL: systemd is not active (${sys_state})" >&2
               exit 1
@@ -464,6 +469,7 @@ jobs:
           sudo -n /usr/bin/python3 -I - <<'TEST_DRIVER'
           import hashlib
           import os
+          import secrets
           import shutil
           import subprocess
           import time
@@ -476,20 +482,23 @@ jobs:
           ENV_DIR = "/etc/royal-libas"
           OP_SCRIPT = "/tmp/jwt_operator_check.py"
 
-          # Dummy secrets only (distinctive odd lengths for zero-leak assertions)
-          DUMMY_SECRET_47 = "DUMMY_TEST_JWT_SECRET_47_CHARS_A9B8C7D6E5F4G3H2"
-          DUMMY_SECRET_53 = "DUMMY_TEST_ALT_JWT_53_CHARS_Z9Y8X7W6V5U4T3S2R1Q0P"
-          DUMMY_CANARY_KEY = "CASHFREE_SECRET_KEY=DUMMY_CANARY_NEVER_PRINT_8821"
+          # Dynamically generated dummy secrets only (never hardcoded in YAML/echo logs)
+          DUMMY_SECRET_47 = ("DUMMY_A_" + secrets.token_hex(24))[:47]
+          DUMMY_SECRET_53 = ("DUMMY_B_" + secrets.token_hex(26))[:53]
+          DUMMY_CANARY_VAL = "CANARY_" + secrets.token_hex(12)
+          DUMMY_CANARY_KEY = "CASHFREE_SECRET_KEY=" + DUMMY_CANARY_VAL
           DUMMY_SENSITIVE_STRINGS = [
               DUMMY_SECRET_47,
               DUMMY_SECRET_53,
-              "DUMMY_CANARY_NEVER_PRINT_8821",
+              DUMMY_CANARY_VAL,
               "CASHFREE_SECRET_KEY",
               "royal_libas_dev_secret_key_change_in_prod",
               "YOUR_JWT_SECRET_HERE",
               str(len(DUMMY_SECRET_47)),
               str(len(DUMMY_SECRET_53)),
+              hashlib.sha256(DUMMY_SECRET_47.encode()).hexdigest(),
               hashlib.sha256(DUMMY_SECRET_47.encode()).hexdigest()[:12],
+              hashlib.sha256(DUMMY_SECRET_53.encode()).hexdigest(),
               hashlib.sha256(DUMMY_SECRET_53.encode()).hexdigest()[:12],
           ]
 
