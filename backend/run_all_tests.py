@@ -91,6 +91,7 @@ VERIFIED_SAFE_SUITES = [
     "test_coupons_management.py",
     "test_coupon_public_promotion.py",
     "test_staff_status_and_auth.py",
+    "test_order_phone_authorization.py",
     "test_phase1.py",
     "test_runner_safety_harness.py",
 ]
