@@ -1,4 +1,6 @@
+import hmac
 import random
+import re
 import secrets
 import string
 from datetime import datetime, timezone, timedelta
@@ -32,6 +34,62 @@ def mask_phone(phone: str) -> str:
     if len(clean) >= 4:
         return "*" * (len(clean) - 4) + clean[-4:]
     return "******"
+
+
+def normalize_indian_phone(phone: Optional[str]) -> Optional[str]:
+    """Normalize a complete Indian mobile number to its 10-digit canonical form.
+
+    Explicitly supports:
+    - 10-digit mobile numbers (with optional spaces, hyphens, or parentheses)
+    - +91 / 91 country-code prefix (12 digits starting with '91')
+    - 0091 international dial prefix without '+' (14 digits starting with '0091')
+    - Leading trunk 0 prefix without '+' (11 digits starting with '0')
+
+    Returns None for empty, short/partial, malformed, non-Indian country-code,
+    or invalid-length inputs so callers never match short suffixes.
+    """
+    if not phone or not isinstance(phone, str):
+        return None
+    raw = phone.strip()
+    if not raw:
+        return None
+
+    # Allow only ASCII digits 0-9, whitespace, hyphens, parentheses, and an optional leading '+'
+    if not re.fullmatch(r"\+?[0-9\s\-()]+", raw):
+        return None
+
+    digits = "".join(ch for ch in raw if "0" <= ch <= "9")
+    if raw.startswith("+"):
+        if len(digits) == 12 and digits.startswith("91"):
+            return digits[2:]
+        return None
+
+    if len(digits) == 14 and digits.startswith("0091"):
+        digits = digits[4:]
+    elif len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+
+    if len(digits) != 10:
+        return None
+    return digits
+
+
+def phones_match(provided_phone: Optional[str], stored_phone: Optional[str]) -> bool:
+    """Compare two complete phone numbers in constant time after canonical normalization."""
+    norm_provided = normalize_indian_phone(provided_phone)
+    norm_stored = normalize_indian_phone(stored_phone)
+    if not norm_provided or not norm_stored:
+        return False
+    return hmac.compare_digest(norm_provided.encode("utf-8"), norm_stored.encode("utf-8"))
+
+
+def order_tokens_match(provided_token: Optional[str], stored_token: Optional[str]) -> bool:
+    """Compare two order access tokens in constant time, safely handling non-ASCII input."""
+    if not provided_token or not stored_token:
+        return False
+    return hmac.compare_digest(provided_token.encode("utf-8"), stored_token.encode("utf-8"))
 
 
 def generate_order_token() -> str:

@@ -21,6 +21,9 @@ from app.services.order_service import (
     create_order_transaction,
     mask_name,
     mask_phone,
+    normalize_indian_phone,
+    order_tokens_match,
+    phones_match,
 )
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -76,9 +79,7 @@ def track_order(
 
     clean_code = (order_code or "").strip().upper()
     has_phone = bool(phone and phone.strip())
-    clean_phone = "".join(filter(str.isdigit, phone or ""))
-    if len(clean_phone) == 12 and clean_phone.startswith("91"):
-        clean_phone = clean_phone[2:]
+    normalized_phone = normalize_indian_phone(phone) if has_phone else None
 
     # Phone-alone lookup must NEVER return order details
     if not clean_code and has_phone:
@@ -100,7 +101,7 @@ def track_order(
             detail="To protect your privacy, please enter the 10-digit mobile number used when placing this order.",
         )
 
-    if has_phone and len(clean_phone) != 10:
+    if has_phone and normalized_phone is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please provide a valid 10-digit mobile number.",
@@ -124,14 +125,10 @@ def track_order(
 
     # Verify phone or token
     verified = False
-    if token and order.order_token and token == order.order_token:
+    if order_tokens_match(token, order.order_token):
         verified = True
-    elif has_phone:
-        stored_phone = "".join(filter(str.isdigit, order.phone))
-        if len(stored_phone) == 12 and stored_phone.startswith("91"):
-            stored_phone = stored_phone[2:]
-        if stored_phone == clean_phone:
-            verified = True
+    elif has_phone and normalized_phone and phones_match(phone, order.phone):
+        verified = True
 
     if not verified:
         raise HTTPException(
@@ -236,13 +233,10 @@ def get_order_by_code(
 
     # Check if request has full customer access verification
     is_authorized = False
-    if token and order.order_token and token == order.order_token:
+    if order_tokens_match(token, order.order_token):
         is_authorized = True
-    elif phone:
-        clean_phone = "".join(filter(str.isdigit, phone))
-        stored_phone = "".join(filter(str.isdigit, order.phone))
-        if clean_phone and stored_phone.endswith(clean_phone[-10:]):
-            is_authorized = True
+    elif phone and phones_match(phone, order.phone):
+        is_authorized = True
 
     if is_authorized:
         # Legitimate customer: return authorized full view
@@ -286,6 +280,7 @@ def get_order_by_code(
         awb_code=order.awb_code,
         label_url=None,  # Never leak internal shipping labels publicly
         manifest_url=None,
+        invoice_url=None,
         pickup_status=None,
         created_at=order.created_at,
         updated_at=order.updated_at,
@@ -324,8 +319,8 @@ def cancel_order_by_customer(
             detail=f"Order '{clean_code}' not found.",
         )
 
-    # Verification: must match order_token if set
-    if order.order_token and payload.token != order.order_token:
+    # Verification: order must have a stored token and payload must match in constant time
+    if not order_tokens_match(payload.token, order.order_token):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid order token for cancellation.",
