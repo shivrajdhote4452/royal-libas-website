@@ -121,6 +121,9 @@ def create_isolated_order(variant_id: int, phone: str = "9876543210") -> dict:
         order.cashfree_order_id = "cf_order_secret_999"
         order.shiprocket_order_id = 776655
         order.shipment_id = 887766
+        order.courier_name = "BlueDart Surface"
+        order.awb_code = "AWB9988776655"
+        order.tracking_url = "https://shiprocket.co/tracking/AWB9988776655"
         order.label_url = "https://shiprocket.example/internal-label.pdf"
         order.manifest_url = "https://shiprocket.example/internal-manifest.pdf"
         order.invoice_url = "https://shiprocket.example/internal-invoice.pdf"
@@ -133,24 +136,55 @@ def create_isolated_order(variant_id: int, phone: str = "9876543210") -> dict:
 
 
 def assert_unverified_masked_order_response(data: dict, expected_code: str):
+    import json
+
+    assert data["id"] == 0, "Internal DB primary key must not leak to unverified callers"
     assert data["order_code"] == expected_code
     assert data["order_token"] is None, "order_token MUST NOT leak to unverified callers!"
-    assert data["customer_name"] == "P**** V****"
-    assert data["phone"] == "******3210"
+    assert data["reservation_expires_at"] is None
+    assert data["customer_name"] == "Customer"
+    assert data["phone"] == ""
     assert data["admin_notes"] is None
     assert data["razorpay_order_id"] is None
     assert data["cashfree_order_id"] is None
+    assert Decimal(str(data["subtotal"])) == Decimal("0.00")
+    assert Decimal(str(data["shipping_charge"])) == Decimal("0.00")
+    assert Decimal(str(data["discount"])) == Decimal("0.00")
+    assert Decimal(str(data["total"])) == Decimal("0.00")
+    assert data["courier_name"] is None
+    assert data["tracking_url"] is None
+    assert data["awb_code"] is None
     assert data["shiprocket_order_id"] is None
     assert data["shipment_id"] is None
     assert data["label_url"] is None
     assert data["manifest_url"] is None
     assert data["invoice_url"] is None
     assert data["pickup_status"] is None
-    assert data["address"] is not None
-    assert data["address"]["name"] == "P**** V****"
-    assert data["address"]["phone"] == "******3210"
-    assert data["address"]["line1"] == "*** Protected ***"
-    assert data["address"]["line2"] is None
+    assert data["updated_at"] is None
+    assert data["items"] == [], "Order items must not leak without verification"
+    assert data["address"] is None, "Address/city/state/pincode must not leak without verification"
+    assert data["exchanges"] == []
+
+    serialized = json.dumps(data)
+    for sensitive_fragment in (
+        "Priya",
+        "Verma",
+        "9876543210",
+        "3210",
+        "284001",
+        "Jhansi",
+        "Uttar Pradesh",
+        "Palace Road",
+        "Clock Tower",
+        "Anarkali",
+        "BlueDart",
+        "AWB9988776655",
+        "shiprocket.co",
+        "2499",
+    ):
+        assert sensitive_fragment not in serialized, (
+            f"Unverified response leaked sensitive fragment: {sensitive_fragment}"
+        )
 
 
 class TestOrderPhoneNormalization(unittest.TestCase):
@@ -390,8 +424,46 @@ class TestOrderPhoneAuthorizationEndpoints(unittest.TestCase):
 
         _order_lookup_attempts.clear()
         corrupted_res = client.get(f"/orders/{self.order_code}", params={"phone": "123"})
-        self.assertIsNone(corrupted_res.json()["order_token"])
-        self.assertEqual(corrupted_res.json()["address"]["line1"], "*** Protected ***")
+        assert_unverified_masked_order_response(corrupted_res.json(), self.order_code)
+
+    def test_unauthenticated_response_privacy_vs_authorized_confirmation_and_tracking(self):
+        # 1. Completely unauthenticated GET /orders/{order_code} exposes ONLY minimal status
+        anon_res = client.get(f"/orders/{self.order_code}")
+        self.assertEqual(anon_res.status_code, 200)
+        anon_data = anon_res.json()
+        self.assertEqual(anon_data["status"], "PENDING")
+        self.assertEqual(anon_data["payment_method"], "PREPAID")
+        self.assertEqual(anon_data["payment_status"], "PENDING")
+        assert_unverified_masked_order_response(anon_data, self.order_code)
+
+        # 2. Authorized order confirmation (?token=...) restores full items, address, and shipment info
+        tok_res = client.get(f"/orders/{self.order_code}", params={"token": self.order_token})
+        self.assertEqual(tok_res.status_code, 200)
+        tok_data = tok_res.json()
+        self.assertEqual(tok_data["customer_name"], "Priya Verma")
+        self.assertEqual(tok_data["phone"], "9876543210")
+        self.assertEqual(tok_data["address"]["pincode"], "284001")
+        self.assertEqual(tok_data["address"]["city"], "Jhansi")
+        self.assertEqual(tok_data["address"]["line1"], "42 Palace Road, Civil Lines")
+        self.assertEqual(len(tok_data["items"]), 1)
+        self.assertEqual(tok_data["courier_name"], "BlueDart Surface")
+        self.assertEqual(tok_data["awb_code"], "AWB9988776655")
+        self.assertEqual(tok_data["tracking_url"], "https://shiprocket.co/tracking/AWB9988776655")
+        self.assertEqual(Decimal(str(tok_data["total"])), Decimal("2499.00"))
+
+        # 3. Authorized tracking (GET /orders/track with verified phone) still returns tracking & location
+        track_res = client.get(
+            "/orders/track",
+            params={"order_code": self.order_code, "phone": "+91 98765 43210"},
+        )
+        self.assertEqual(track_res.status_code, 200)
+        track_data = track_res.json()
+        self.assertEqual(track_data["delivery_city"], "Jhansi")
+        self.assertEqual(track_data["delivery_pincode"], "284001")
+        self.assertEqual(track_data["awb_code"], "AWB9988776655")
+        self.assertEqual(track_data["courier_name"], "BlueDart Surface")
+        self.assertEqual(track_data["tracking_url"], "https://shiprocket.co/tracking/AWB9988776655")
+        self.assertEqual(len(track_data["items"]), 1)
 
     def test_cancellation_remains_strictly_token_protected(self):
         # Attacker probing ?phone=0 receives order_token=None and cannot cancel

@@ -1,5 +1,7 @@
 import time
 import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, joinedload
@@ -206,11 +208,14 @@ def get_order_by_code(
     phone: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Retrieve order details for confirmation screen with secure access control.
-    
+    """Retrieve order details for confirmation screen with strict access control.
+
     SECURITY RULE:
-    - If customer provides matching order_token or verified phone: full confirmation details returned.
-    - If neither is provided: private details (street address, phone, internal admin labels) are masked/stripped.
+    - If customer provides matching order_token or verified complete phone: full confirmation details returned.
+    - Otherwise (unauthenticated / unverified): ONLY minimal payment/order state is returned
+      (order_code, status, payment_method, payment_status). All customer PII, address/location
+      (pincode/city/state/street), line items, shipment tracking (AWB/courier/tracking URL),
+      financial breakdown, timestamps, and internal tokens/IDs are stripped.
     """
     enforce_lookup_rate_limit(request)
 
@@ -242,50 +247,39 @@ def get_order_by_code(
         # Legitimate customer: return authorized full view
         return order
 
-    # Public/unauthenticated view: Strip private customer details so guessing order_code exposes nothing
-    sanitized_addr = None
-    if order.address:
-        sanitized_addr = AddressResponse(
-            id=order.address.id,
-            name=mask_name(order.address.name),
-            phone=mask_phone(order.address.phone),
-            pincode=order.address.pincode,
-            line1="*** Protected ***",
-            line2=None,
-            city=order.address.city,
-            state=order.address.state,
-        )
-
+    # Public/unauthenticated view: strip all customer PII, address/location, order items,
+    # shipment tracking identifiers, financial breakdown, and internal IDs/tokens.
     return OrderResponse(
-        id=order.id,
+        id=0,
         order_code=order.order_code,
         order_token=None,  # Do not leak token to unverified requester!
-        reservation_expires_at=order.reservation_expires_at,
+        reservation_expires_at=None,
         admin_notes=None,
-        customer_name=mask_name(order.customer_name),
-        phone=mask_phone(order.phone),
+        customer_name="Customer",
+        phone="",
         status=order.status,
         payment_method=order.payment_method,
         payment_status=order.payment_status,
         razorpay_order_id=None,
         cashfree_order_id=None,
-        subtotal=order.subtotal,
-        shipping_charge=order.shipping_charge,
-        discount=order.discount,
-        total=order.total,
-        courier_name=order.courier_name,
-        tracking_url=order.tracking_url,
+        subtotal=Decimal("0.00"),
+        shipping_charge=Decimal("0.00"),
+        discount=Decimal("0.00"),
+        total=Decimal("0.00"),
+        courier_name=None,
+        tracking_url=None,
         shiprocket_order_id=None,  # Never leak internal Shiprocket IDs
         shipment_id=None,
-        awb_code=order.awb_code,
+        awb_code=None,
         label_url=None,  # Never leak internal shipping labels publicly
         manifest_url=None,
         invoice_url=None,
         pickup_status=None,
-        created_at=order.created_at,
-        updated_at=order.updated_at,
-        items=order.items,
-        address=sanitized_addr,
+        created_at=datetime(1970, 1, 1, tzinfo=timezone.utc),
+        updated_at=None,
+        items=[],
+        address=None,
+        exchanges=[],
     )
 
 
