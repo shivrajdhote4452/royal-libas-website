@@ -12,6 +12,8 @@ backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+os.environ.setdefault("JWT_SECRET", "isolated-test-jwt-secret-boutique-settings-32bytes")
+
 from app.database import Base, get_db
 from app.main import app
 from app.models import Admin, StoreSetting

@@ -25,6 +25,7 @@ from pathlib import Path
 _temp_dir = tempfile.mkdtemp(prefix="rl_cleanup_test_isolated_")
 _isolated_db_path = os.path.join(_temp_dir, "isolated_cleanup_test.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_isolated_db_path}"
+os.environ.setdefault("JWT_SECRET", "isolated-test-jwt-secret-size-chart-cleanup-32bytes")
 
 def _cleanup_temp():
     if os.path.exists(_temp_dir):

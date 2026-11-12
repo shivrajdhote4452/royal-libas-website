@@ -644,7 +644,7 @@ canary_url = f"sqlite:///{{canary_path}}"
 
 try:
     os.environ["DATABASE_URL"] = canary_url
-    os.environ["JWT_SECRET"] = "canary-jwt-secret-original"
+    os.environ["JWT_SECRET"] = "canary-jwt-secret-original-isolated-32bytes"
 
     # Step A: Pre-import app.database before app.main is loaded
     import app.database as app_db
@@ -670,7 +670,7 @@ try:
 
     # Step F: Verify environment variables and engine references were restored
     assert os.environ.get("DATABASE_URL") == canary_url, f"DATABASE_URL not restored: {{os.environ.get('DATABASE_URL')}}"
-    assert os.environ.get("JWT_SECRET") == "canary-jwt-secret-original", "JWT_SECRET not restored"
+    assert os.environ.get("JWT_SECRET") == "canary-jwt-secret-original-isolated-32bytes", "JWT_SECRET not restored"
     assert app_db.engine == canary_engine, "app.database.engine was not restored"
 
     # Step G: Verify temporary disposable test DB file was removed
@@ -848,7 +848,7 @@ canary_url = f"sqlite:///{{canary_path}}"
 
 try:
     os.environ["DATABASE_URL"] = canary_url
-    os.environ["JWT_SECRET"] = "canary-jwt-secret-original"
+    os.environ["JWT_SECRET"] = "canary-jwt-secret-original-isolated-32bytes"
 
     # Step A: Pre-import BOTH app.database AND app.main
     import app.database as app_db
