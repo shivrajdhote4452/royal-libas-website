@@ -1,0 +1,813 @@
+name: TEMP - Verify JWT Check with Real Systemd
+
+on:
+  push:
+    branches:
+      - test/jwt-check-systemd
+    paths:
+      - .github/workflows/temp-jwt-check-systemd-test.yml
+
+permissions: {}
+
+jobs:
+  verify-jwt-operator-check-systemd:
+    name: Real Systemd & /proc Verification (Dummy Data Only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Step 0 - Fail closed unless running real systemd PID 1 and real /proc
+        run: |
+          set -euo pipefail
+          pid1_comm="$(ps -p 1 -o comm=)"
+          echo "PID 1 comm=${pid1_comm}"
+          test "${pid1_comm}" = "systemd"
+          uname -a
+          systemctl --version | head -n 2
+
+          sys_state="$(systemctl is-system-running || true)"
+          echo "systemd state=${sys_state}"
+          case "${sys_state}" in
+            running|degraded) ;;
+            *)
+              echo "FAIL: systemd is not active (${sys_state})" >&2
+              exit 1
+              ;;
+          esac
+
+          sudo -n /usr/bin/python3 -I - <<'PY'
+          import os, stat, time
+          assert os.path.exists("/proc/1/stat"), "/proc/1/stat missing"
+          assert os.path.exists("/proc/1/environ"), "/proc/1/environ missing"
+          for bin_path in ("/usr/bin/systemctl", "/usr/bin/python3"):
+              st = os.stat(bin_path)
+              assert stat.S_ISREG(st.st_mode), f"{bin_path} not regular file"
+              assert st.st_uid == 0 and (st.st_mode & 0o022) == 0, f"{bin_path} unsafe perms/owner"
+          boottime = time.clock_gettime(time.CLOCK_BOOTTIME)
+          assert boottime > 0
+          assert os.sysconf("SC_CLK_TCK") > 0
+          print("PREFLIGHT_REAL_SYSTEMD_AND_PROC_OK")
+          PY
+
+      - name: Step 1 - Write exact operator check script to temp stdin file
+        run: |
+          set -euo pipefail
+          cat <<'PY' > /tmp/jwt_operator_check.py
+          import os
+          import re
+          import shlex
+          import stat
+          import subprocess
+          import sys
+          import time
+
+          SERVICE_NAME = "royal-libas"
+          RELEASE_BACKEND_DIR = "/var/www/royal-libas-releases/current/backend"
+          PROC_ROOT = "/proc"
+          TRUSTED_SYSTEMCTL_PATHS = ("/usr/bin/systemctl", "/bin/systemctl")
+          MIN_TIMING_MARGIN_SECONDS = 60
+          MAX_ENV_FILE_BYTES = 1048576
+
+          KNOWN_PLACEHOLDERS = {
+              "royal_libas_dev_secret_key_change_in_prod",
+              "your_jwt_secret_here",
+              "changeme",
+              "change_me",
+              "replace_me",
+              "secret",
+              "jwt_secret",
+              "dev_secret",
+          }
+
+          def classify_secret(raw_val):
+              if raw_val is None:
+                  return "missing"
+              val = raw_val.strip()
+              if not val:
+                  return "missing"
+              low = val.lower()
+              if (
+                  low in KNOWN_PLACEHOLDERS
+                  or "your_jwt_secret_here" in low
+                  or "dev_secret" in low
+                  or "change_in_prod" in low
+                  or "placeholder" in low
+              ):
+                  return "known placeholder"
+              return "configured"
+
+          def find_trusted_systemctl():
+              for candidate in TRUSTED_SYSTEMCTL_PATHS:
+                  try:
+                      st = os.lstat(candidate)
+                  except OSError:
+                      continue
+                  if stat.S_ISLNK(st.st_mode):
+                      if st.st_uid != 0:
+                          return None, "untrusted_systemctl_symlink_owner"
+                      try:
+                          target = os.path.realpath(candidate)
+                          st = os.stat(target)
+                          check_path = target
+                      except OSError:
+                          return None, "unresolvable_systemctl_symlink"
+                  else:
+                      check_path = candidate
+                  if not stat.S_ISREG(st.st_mode):
+                      return None, "systemctl_not_regular_file"
+                  if st.st_uid != 0 or (st.st_mode & 0o022) != 0:
+                      return None, "untrusted_systemctl_ownership_or_perms"
+                  if not os.access(check_path, os.X_OK):
+                      return None, "systemctl_not_executable"
+                  return check_path, None
+              return None, "trusted_systemctl_not_found"
+
+          def parse_dotenv_fail_closed(path):
+              """Strict non-evaluating .env parser using realpath + O_NOFOLLOW + fstat."""
+              try:
+                  real_path = os.path.realpath(path)
+                  flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                  fd = os.open(real_path, flags)
+              except OSError as exc:
+                  return None, type(exc).__name__
+
+              try:
+                  st = os.fstat(fd)
+                  if not stat.S_ISREG(st.st_mode):
+                      return None, "not_regular_file"
+                  if (st.st_mode & 0o002) != 0:
+                      return None, "world_writable_env_file"
+                  if st.st_size > MAX_ENV_FILE_BYTES:
+                      return None, "env_file_too_large"
+                  with os.fdopen(fd, "r", encoding="utf-8", errors="strict") as f:
+                      fd = -1
+                      lines = f.read().splitlines()
+              except Exception as exc:
+                  return None, type(exc).__name__
+              finally:
+                  if fd != -1:
+                      try:
+                          os.close(fd)
+                      except OSError:
+                          pass
+
+              out = {}
+              seen_counts = {}
+              target_keys = ("JWT_SECRET", "APP_ENV", "ENV", "CASHFREE_ENVIRONMENT", "DATABASE_URL")
+              for line in lines:
+                  s = line.strip()
+                  if not s or s.startswith("#"):
+                      continue
+                  if s.startswith("export "):
+                      s = s[7:].strip()
+                  if "=" not in s:
+                      return None, "ambiguous_dotenv_line_syntax"
+                  k, raw_v = s.split("=", 1)
+                  k = k.strip()
+                  if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
+                      return None, "ambiguous_dotenv_key"
+                  seen_counts[k] = seen_counts.get(k, 0) + 1
+                  if seen_counts[k] > 1 and k in target_keys:
+                      return None, "duplicate_key_" + k
+
+                  v = raw_v.strip()
+                  if len(v) >= 2 and v[0] in ('"', "'") and v[-1] == v[0]:
+                      quote_char = v[0]
+                      inner = v[1:-1]
+                      if "\\" in inner or "${" in inner or "`" in inner or quote_char in inner:
+                          if k in target_keys:
+                              return None, "ambiguous_quoted_value_" + k
+                      out[k] = inner
+                  elif v.startswith('"') or v.startswith("'"):
+                      return None, "ambiguous_multiline_or_unclosed_quote"
+                  else:
+                      if any(ch in v for ch in ("#", "${", "`", '"', "'")) or any(ch.isspace() for ch in v):
+                          if k in target_keys:
+                              return None, "ambiguous_unquoted_value_" + k
+                      out[k] = v
+
+              return {"values": out, "mtime": st.st_mtime, "realpath": real_path}, None
+
+          def query_systemd(systemctl_path, svc):
+              props = [
+                  "MainPID",
+                  "ActiveState",
+                  "SubState",
+                  "WorkingDirectory",
+                  "Environment",
+                  "EnvironmentFiles",
+                  "NeedDaemonReload",
+              ]
+              cmd = [systemctl_path, "show", svc, "--no-pager"]
+              for p in props:
+                  cmd.extend(["-p", p])
+              safe_env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
+              try:
+                  res = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=safe_env, shell=False)
+              except Exception as exc:
+                  return None, type(exc).__name__
+              if res.returncode != 0:
+                  return None, "systemctl_rc_" + str(res.returncode)
+              parsed = {}
+              for line in res.stdout.splitlines():
+                  if "=" in line:
+                      k, v = line.split("=", 1)
+                      parsed[k.strip()] = v.strip()
+              return parsed, None
+
+          def parse_systemd_env_prop(raw_env):
+              out = {}
+              if not raw_env:
+                  return out, None
+              try:
+                  tokens = shlex.split(raw_env)
+              except ValueError:
+                  return None, "ambiguous_systemd_environment_syntax"
+              for tok in tokens:
+                  if "=" not in tok:
+                      return None, "ambiguous_systemd_environment_token"
+                  k, v = tok.split("=", 1)
+                  out[k] = v
+              return out, None
+
+          def parse_systemd_env_files(raw_files):
+              files = []
+              s = (raw_files or "").strip()
+              if not s:
+                  return files, None
+              pattern = re.compile(r"(\S+)\s+\(ignore_errors=(yes|no)\)")
+              pos = 0
+              for m in pattern.finditer(s):
+                  if s[pos:m.start()].strip():
+                      return None, "ambiguous_systemd_envfiles_syntax"
+                  fpath = m.group(1)
+                  optional = (m.group(2) == "yes")
+                  if fpath.startswith("-"):
+                      fpath = fpath[1:]
+                      optional = True
+                  files.append((fpath, optional))
+                  pos = m.end()
+              if s[pos:].strip():
+                  return None, "ambiguous_systemd_envfiles_syntax"
+              return files, None
+
+          def read_proc_environ(pid):
+              if not pid or not pid.isdigit() or int(pid) <= 0:
+                  return None, "no_main_pid"
+              ep = os.path.join(PROC_ROOT, pid, "environ")
+              try:
+                  with open(ep, "rb") as f:
+                      raw = f.read().split(b"\x00")
+                  out = {}
+                  for item in raw:
+                      if b"=" in item:
+                          k, v = item.split(b"=", 1)
+                          key = k.decode("utf-8", "ignore")
+                          val = v.decode("utf-8", "ignore")
+                          if key in out and key == "JWT_SECRET":
+                              return None, "duplicate_proc_jwt"
+                          out[key] = val
+                  return out, None
+              except Exception as exc:
+                  return None, type(exc).__name__
+
+          def get_process_start_epoch(pid):
+              """Compute process start wall-clock epoch from /proc/<pid>/stat field 22 + CLOCK_BOOTTIME."""
+              if not pid or not pid.isdigit() or int(pid) <= 0:
+                  return None, "no_main_pid"
+              clk_boottime = getattr(time, "CLOCK_BOOTTIME", None)
+              if clk_boottime is None or not hasattr(time, "clock_gettime") or not hasattr(os, "sysconf"):
+                  return None, "clock_boottime_unavailable"
+              stat_path = os.path.join(PROC_ROOT, pid, "stat")
+              try:
+                  with open(stat_path, "rb") as f:
+                      raw = f.read()
+                  rparen = raw.rfind(b")")
+                  if rparen == -1:
+                      return None, "malformed_proc_stat"
+                  after = raw[rparen + 2 :].split()
+                  start_ticks = int(after[19])
+                  clk_tck = os.sysconf("SC_CLK_TCK")
+                  boottime_now = time.clock_gettime(clk_boottime)
+                  proc_age = boottime_now - (float(start_ticks) / float(clk_tck))
+                  if proc_age < 0:
+                      return None, "negative_proc_age"
+                  return time.time() - proc_age, None
+              except Exception as exc:
+                  return None, type(exc).__name__
+
+          def main():
+              sc_path, sc_err = find_trusted_systemctl()
+              if sc_err:
+                  print("configured_startup_status=unable to verify")
+                  print("live_runtime_status=unable to verify")
+                  print("reason=" + sc_err)
+                  return
+
+              sysd, sysd_err = query_systemd(sc_path, SERVICE_NAME)
+              if sysd_err:
+                  print("configured_startup_status=unable to verify")
+                  print("live_runtime_status=unable to verify")
+                  print("reason=" + sysd_err)
+                  return
+
+              main_pid = sysd.get("MainPID", "0")
+              active_state = sysd.get("ActiveState", "unknown")
+              sub_state = sysd.get("SubState", "unknown")
+              need_reload = sysd.get("NeedDaemonReload", "unknown")
+              work_dir = sysd.get("WorkingDirectory", "") or ""
+
+              sysd_env_map, sysd_env_err = parse_systemd_env_prop(sysd.get("Environment", ""))
+              sysd_env_files, sysd_env_files_err = parse_systemd_env_files(sysd.get("EnvironmentFiles", ""))
+
+              sysd_file_jwt_hits = []
+              sysd_file_mtimes = []
+              sysd_file_err = sysd_env_files_err
+              if sysd_file_err is None:
+                  for fpath, optional in sysd_env_files:
+                      parsed_ef, ef_err = parse_dotenv_fail_closed(fpath)
+                      if parsed_ef is None:
+                          if optional and ef_err == "FileNotFoundError":
+                              continue
+                          sysd_file_err = ef_err
+                          break
+                      sysd_file_mtimes.append(parsed_ef["mtime"])
+                      if "JWT_SECRET" in parsed_ef["values"]:
+                          sysd_file_jwt_hits.append(parsed_ef["values"]["JWT_SECRET"])
+
+              try:
+                  release_backend_real = os.path.realpath(RELEASE_BACKEND_DIR)
+                  release_root_dir = os.path.dirname(release_backend_real)
+              except OSError as exc:
+                  print("configured_startup_status=unable to verify")
+                  print("live_runtime_status=unable to verify")
+                  print("reason=release_path_" + type(exc).__name__)
+                  return
+
+              candidates = [
+                  ("release_root_dotenv", os.path.join(release_root_dir, ".env")),
+                  ("release_backend_dotenv", os.path.join(release_backend_real, ".env")),
+              ]
+              if work_dir:
+                  candidates.append(("systemd_workdir_dotenv", os.path.join(work_dir, ".env")))
+
+              winning_label = None
+              winning_path = None
+              winning_parsed = None
+              winning_err = None
+              stray_root_dotenv = False
+              workdir_ambiguous = False
+
+              for label, cpath in candidates:
+                  if os.path.exists(cpath):
+                      if label == "release_root_dotenv":
+                          stray_root_dotenv = True
+                      if winning_path is None:
+                          winning_label = label
+                          winning_path = cpath
+                          winning_parsed, winning_err = parse_dotenv_fail_closed(cpath)
+
+              if winning_path is None and not work_dir:
+                  workdir_ambiguous = True
+
+              proc_env, proc_err = read_proc_environ(main_pid)
+              proc_start_epoch, proc_start_err = get_process_start_epoch(main_pid)
+
+              def evaluate_startup():
+                  if sysd_env_err:
+                      return "unable to verify", sysd_env_err
+                  if sysd_file_err:
+                      return "unable to verify", "systemd_envfile_" + sysd_file_err
+                  if len(sysd_file_jwt_hits) > 1:
+                      return "unable to verify", "multiple_systemd_envfiles_set_jwt"
+                  has_sysd_inline = "JWT_SECRET" in sysd_env_map
+                  has_sysd_file = len(sysd_file_jwt_hits) == 1
+                  if has_sysd_inline and has_sysd_file:
+                      return "unable to verify", "ambiguous_systemd_inline_vs_envfile_order"
+                  if has_sysd_inline:
+                      return classify_secret(sysd_env_map["JWT_SECRET"]), "systemd_inline_environment"
+                  if has_sysd_file:
+                      return classify_secret(sysd_file_jwt_hits[0]), "systemd_environment_file"
+
+                  if workdir_ambiguous:
+                      return "unable to verify", "missing_systemd_working_directory"
+                  if winning_path is None:
+                      return "missing", "absent_in_systemd_and_no_dotenv"
+                  if winning_parsed is None:
+                      return "unable to verify", "dotenv_" + str(winning_err)
+                  vals = winning_parsed["values"]
+                  if "JWT_SECRET" not in vals:
+                      return "missing", "absent_in_systemd_and_" + str(winning_label)
+                  return classify_secret(vals["JWT_SECRET"]), str(winning_label)
+
+              startup_status, startup_source = evaluate_startup()
+
+              def evaluate_live_runtime():
+                  if active_state != "active" or sub_state != "running":
+                      return "unable to verify", "service_not_running"
+                  if proc_err:
+                      return "unable to verify", "proc_environ_" + proc_err
+                  if need_reload == "yes":
+                      return "unable to verify", "systemd_daemon_reload_needed"
+                  if proc_start_err or proc_start_epoch is None:
+                      return "unable to verify", "proc_start_" + str(proc_start_err)
+
+                  if "JWT_SECRET" in proc_env:
+                      for mt in sysd_file_mtimes:
+                          if mt >= (proc_start_epoch - MIN_TIMING_MARGIN_SECONDS):
+                              return "unable to verify", "systemd_envfile_modified_after_or_near_start"
+                      return classify_secret(proc_env["JWT_SECRET"]), "verified_from_execve_proc_environ"
+
+                  if winning_parsed is not None and winning_parsed["mtime"] >= (proc_start_epoch - MIN_TIMING_MARGIN_SECONDS):
+                      return "unable to verify", "dotenv_modified_after_or_near_start"
+                  return "unable to verify", "dotenv_loaded_in_python_heap_not_observable_in_proc_environ"
+
+              runtime_status, runtime_reason = evaluate_live_runtime()
+
+              def safe_mode(key, allowed):
+                  raw = None
+                  if proc_env is not None and key in proc_env:
+                      raw = proc_env[key]
+                  elif winning_parsed is not None and key in winning_parsed["values"]:
+                      raw = winning_parsed["values"][key]
+                  if raw is None or not raw.strip():
+                      return "unset"
+                  low = raw.strip().lower()
+                  return low if low in allowed else "custom_non_empty"
+
+              raw_db = ""
+              if proc_env is not None and "DATABASE_URL" in proc_env:
+                  raw_db = proc_env["DATABASE_URL"]
+              elif winning_parsed is not None and "DATABASE_URL" in winning_parsed["values"]:
+                  raw_db = winning_parsed["values"]["DATABASE_URL"]
+              db_driver = "postgresql" if "postgres" in raw_db.lower() else ("sqlite" if "sqlite" in raw_db.lower() else ("unset" if not raw_db.strip() else "other"))
+
+              print("service_state=" + active_state + "/" + sub_state)
+              print("configured_startup_status=" + startup_status)
+              print("configured_startup_source=" + startup_source)
+              print("live_runtime_status=" + runtime_status)
+              print("live_runtime_note=" + runtime_reason)
+              print("stray_release_root_dotenv=" + str(stray_root_dotenv).lower())
+              print("app_env=" + safe_mode("APP_ENV", {"production", "prod", "development", "dev", "test", "testing", "staging"}) +
+                    " env=" + safe_mode("ENV", {"production", "prod", "development", "dev", "test", "testing", "staging"}) +
+                    " cashfree_mode=" + safe_mode("CASHFREE_ENVIRONMENT", {"production", "sandbox"}) +
+                    " db_driver=" + db_driver)
+
+          if __name__ == "__main__":
+              main()
+          PY
+          chmod 0644 /tmp/jwt_operator_check.py
+
+      - name: Step 2 - Run real systemd + /proc test matrix with dummy secrets only
+        run: |
+          set -euo pipefail
+          sudo -n /usr/bin/python3 -I - <<'TEST_DRIVER'
+          import hashlib
+          import os
+          import shutil
+          import subprocess
+          import time
+
+          RELEASE_ROOT = "/var/www/royal-libas-releases/r1"
+          RELEASE_BACKEND = "/var/www/royal-libas-releases/r1/backend"
+          CURRENT_LINK = "/var/www/royal-libas-releases/current"
+          SHARED_BACKEND = "/var/www/royal-libas/backend"
+          UNIT_PATH = "/etc/systemd/system/royal-libas.service"
+          ENV_DIR = "/etc/royal-libas"
+          OP_SCRIPT = "/tmp/jwt_operator_check.py"
+
+          # Dummy secrets only (distinctive odd lengths for zero-leak assertions)
+          DUMMY_SECRET_47 = "DUMMY_TEST_JWT_SECRET_47_CHARS_A9B8C7D6E5F4G3H2"
+          DUMMY_SECRET_53 = "DUMMY_TEST_ALT_JWT_53_CHARS_Z9Y8X7W6V5U4T3S2R1Q0P"
+          DUMMY_CANARY_KEY = "CASHFREE_SECRET_KEY=DUMMY_CANARY_NEVER_PRINT_8821"
+          DUMMY_SENSITIVE_STRINGS = [
+              DUMMY_SECRET_47,
+              DUMMY_SECRET_53,
+              "DUMMY_CANARY_NEVER_PRINT_8821",
+              "CASHFREE_SECRET_KEY",
+              "royal_libas_dev_secret_key_change_in_prod",
+              "YOUR_JWT_SECRET_HERE",
+              str(len(DUMMY_SECRET_47)),
+              str(len(DUMMY_SECRET_53)),
+              hashlib.sha256(DUMMY_SECRET_47.encode()).hexdigest()[:12],
+              hashlib.sha256(DUMMY_SECRET_53.encode()).hexdigest()[:12],
+          ]
+
+          def run(cmd, check=True):
+              return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+          def ensure_user():
+              r = run(["id", "royal-deploy"], check=False)
+              if r.returncode != 0:
+                  run(["useradd", "--system", "--no-create-home", "royal-deploy"])
+
+          def reset_fs():
+              run(["systemctl", "stop", "royal-libas"], check=False)
+              for d in ("/var/www/royal-libas-releases", "/var/www/royal-libas", ENV_DIR):
+                  shutil.rmtree(d, ignore_errors=True)
+              os.makedirs(RELEASE_BACKEND, exist_ok=True)
+              os.makedirs(SHARED_BACKEND, exist_ok=True)
+              os.makedirs(ENV_DIR, exist_ok=True)
+              if os.path.lexists(CURRENT_LINK):
+                  os.unlink(CURRENT_LINK)
+              os.symlink(RELEASE_ROOT, CURRENT_LINK)
+              run(["chown", "-R", "royal-deploy:royal-deploy", "/var/www/royal-libas-releases", "/var/www/royal-libas"])
+
+          def write_unit(directives, reload_daemon=True, restart=True, make_old_files=None):
+              body = "\n".join([
+                  "[Unit]",
+                  "Description=Royal Libas Dummy Test Service",
+                  "",
+                  "[Service]",
+                  "Type=simple",
+                  "User=royal-deploy",
+                  "ExecStart=/usr/bin/python3 -I -c \"import time; time.sleep(3600)\"",
+                  *directives,
+                  "",
+                  "[Install]",
+                  "WantedBy=multi-user.target",
+                  "",
+              ])
+              with open(UNIT_PATH, "w", encoding="utf-8") as f:
+                  f.write(body)
+              if make_old_files:
+                  old_ts = time.time() - 180
+                  for p in make_old_files:
+                      os.utime(p, (old_ts, old_ts))
+              if reload_daemon:
+                  run(["systemctl", "daemon-reload"])
+              if restart:
+                  run(["systemctl", "restart", "royal-libas"])
+                  time.sleep(0.3)
+
+          def write_env_file(path, content, mode=0o600, backdate=False):
+              with open(path, "w", encoding="utf-8") as f:
+                  f.write(content)
+              os.chmod(path, mode)
+              if backdate:
+                  old_ts = time.time() - 180
+                  os.utime(path, (old_ts, old_ts))
+
+          def invoke_exact_operator_check():
+              with open(OP_SCRIPT, "rb") as f:
+                  res = subprocess.run(
+                      ["/usr/bin/python3", "-I", "-"],
+                      stdin=f,
+                      capture_output=True,
+                      check=True,
+                  )
+              out = res.stdout.decode("utf-8", "replace")
+              err = res.stderr.decode("utf-8", "replace")
+              combined = out + "\n" + err
+              for forbidden in DUMMY_SENSITIVE_STRINGS:
+                  assert forbidden not in combined, f"LEAK DETECTED ({forbidden!r}) in output:\n{combined}"
+              kv = {}
+              for line in out.splitlines():
+                  if "=" in line:
+                      k, v = line.split("=", 1)
+                      kv[k] = v
+              return kv, out
+
+          ensure_user()
+
+          scenarios = []
+
+          def assert_case(name, expected):
+              kv, raw = invoke_exact_operator_check()
+              for k, v in expected.items():
+                  assert kv.get(k) == v, f"[{name}] expected {k}={v!r}, got {kv.get(k)!r}\n{raw}"
+              scenarios.append(name)
+              summary = " | ".join(line.strip() for line in raw.splitlines() if line.strip())
+              print(f"PASS: {name} :: {summary}")
+
+          # 1. Missing everywhere
+          reset_fs()
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_missing_everywhere", {
+              "service_state": "active/running",
+              "configured_startup_status": "missing",
+              "configured_startup_source": "absent_in_systemd_and_no_dotenv",
+              "live_runtime_status": "unable to verify",
+              "live_runtime_note": "dotenv_loaded_in_python_heap_not_observable_in_proc_environ",
+          })
+
+          # 2. Known placeholder in shared symlinked .env
+          reset_fs()
+          write_env_file(SHARED_BACKEND + "/.env", f"APP_ENV=production\nJWT_SECRET=royal_libas_dev_secret_key_change_in_prod\n{DUMMY_CANARY_KEY}\n", backdate=True)
+          os.symlink(SHARED_BACKEND + "/.env", RELEASE_BACKEND + "/.env")
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_placeholder_symlink_dotenv", {
+              "configured_startup_status": "known placeholder",
+              "configured_startup_source": "release_backend_dotenv",
+              "live_runtime_status": "unable to verify",
+          })
+
+          # 3. Configured in symlinked backend/.env (Python heap only -> live runtime unproven)
+          reset_fs()
+          write_env_file(SHARED_BACKEND + "/.env", f"APP_ENV=production\nDATABASE_URL=postgresql://u:p@localhost/db\nJWT_SECRET={DUMMY_SECRET_47}\n{DUMMY_CANARY_KEY}\n", backdate=True)
+          os.symlink(SHARED_BACKEND + "/.env", RELEASE_BACKEND + "/.env")
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_configured_dotenv_heap_unproven", {
+              "configured_startup_status": "configured",
+              "configured_startup_source": "release_backend_dotenv",
+              "live_runtime_status": "unable to verify",
+              "live_runtime_note": "dotenv_loaded_in_python_heap_not_observable_in_proc_environ",
+              "stray_release_root_dotenv": "false",
+          })
+
+          # 4. .env modified after service startup
+          write_env_file(SHARED_BACKEND + "/.env", f"APP_ENV=production\nJWT_SECRET={DUMMY_SECRET_47}\n", backdate=False)
+          assert_case("real_systemd_dotenv_modified_after_start", {
+              "configured_startup_status": "configured",
+              "live_runtime_status": "unable to verify",
+              "live_runtime_note": "dotenv_modified_after_or_near_start",
+          })
+
+          # 5. Stray release-root .env overrides backend/.env (matches config.py precedence)
+          reset_fs()
+          write_env_file(RELEASE_ROOT + "/.env", "JWT_SECRET=YOUR_JWT_SECRET_HERE\n", backdate=True)
+          write_env_file(RELEASE_BACKEND + "/.env", f"JWT_SECRET={DUMMY_SECRET_47}\n", backdate=True)
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_stray_root_dotenv_precedence", {
+              "configured_startup_status": "known placeholder",
+              "configured_startup_source": "release_root_dotenv",
+              "stray_release_root_dotenv": "true",
+          })
+
+          # 6. Configured via real systemd EnvironmentFile= (+ missing optional EnvironmentFile=-...)
+          reset_fs()
+          write_env_file(ENV_DIR + "/env", f"APP_ENV=production\nJWT_SECRET={DUMMY_SECRET_47}\n{DUMMY_CANARY_KEY}\n", backdate=True)
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              "EnvironmentFile=/etc/royal-libas/env",
+              "EnvironmentFile=-/etc/royal-libas/optional_missing.env",
+          ])
+          assert_case("real_systemd_envfile_with_optional_missing_and_proc", {
+              "configured_startup_status": "configured",
+              "configured_startup_source": "systemd_environment_file",
+              "live_runtime_status": "configured",
+              "live_runtime_note": "verified_from_execve_proc_environ",
+          })
+
+          # 7. EnvironmentFile modified after service startup
+          write_env_file(ENV_DIR + "/env", f"APP_ENV=production\nJWT_SECRET={DUMMY_SECRET_53}\n", backdate=False)
+          assert_case("real_systemd_envfile_modified_after_start", {
+              "configured_startup_status": "configured",
+              "live_runtime_status": "unable to verify",
+              "live_runtime_note": "systemd_envfile_modified_after_or_near_start",
+          })
+
+          # 8. Real systemd inline Environment= override (overrides placeholder .env)
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", "JWT_SECRET=royal_libas_dev_secret_key_change_in_prod\n", backdate=True)
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              f'Environment="JWT_SECRET={DUMMY_SECRET_47}" "APP_ENV=production"',
+          ])
+          assert_case("real_systemd_inline_environment_and_proc", {
+              "configured_startup_status": "configured",
+              "configured_startup_source": "systemd_inline_environment",
+              "live_runtime_status": "configured",
+              "live_runtime_note": "verified_from_execve_proc_environ",
+          })
+
+          # 9. Empty systemd override JWT_SECRET="" beats .env
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", f"JWT_SECRET={DUMMY_SECRET_47}\n", backdate=True)
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              'Environment="JWT_SECRET="',
+          ])
+          assert_case("real_systemd_empty_override_beats_dotenv", {
+              "configured_startup_status": "missing",
+              "configured_startup_source": "systemd_inline_environment",
+              "live_runtime_status": "missing",
+              "live_runtime_note": "verified_from_execve_proc_environ",
+          })
+
+          # 10. NeedDaemonReload=yes when unit modified without daemon-reload
+          reset_fs()
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              f'Environment="JWT_SECRET={DUMMY_SECRET_47}"',
+          ])
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              "Environment=JWT_SECRET=royal_libas_dev_secret_key_change_in_prod",
+          ], reload_daemon=False, restart=False)
+          assert_case("real_systemd_need_daemon_reload_fails_closed", {
+              "configured_startup_status": "configured",
+              "live_runtime_status": "unable to verify",
+              "live_runtime_note": "systemd_daemon_reload_needed",
+          })
+
+          # 11. Unit edited + daemon-reload WITHOUT service restart (stale /proc vs new unit)
+          reset_fs()
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              "Environment=JWT_SECRET=royal_libas_dev_secret_key_change_in_prod",
+          ], reload_daemon=True, restart=True)
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              f'Environment="JWT_SECRET={DUMMY_SECRET_53}"',
+          ], reload_daemon=True, restart=False)
+          assert_case("real_systemd_daemon_reload_without_restart_detects_stale_proc", {
+              "configured_startup_status": "configured",
+              "live_runtime_status": "known placeholder",
+              "live_runtime_note": "verified_from_execve_proc_environ",
+          })
+
+          # 12. Ambiguous: both systemd inline Environment= and EnvironmentFile= set JWT_SECRET
+          reset_fs()
+          write_env_file(ENV_DIR + "/env", f"JWT_SECRET={DUMMY_SECRET_47}\n", backdate=True)
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              f'Environment="JWT_SECRET={DUMMY_SECRET_53}"',
+              "EnvironmentFile=/etc/royal-libas/env",
+          ])
+          assert_case("real_systemd_ambiguous_inline_and_envfile", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "ambiguous_systemd_inline_vs_envfile_order",
+          })
+
+          # 12b. Ambiguous: two EnvironmentFiles both setting JWT_SECRET
+          reset_fs()
+          write_env_file(ENV_DIR + "/env1", f"JWT_SECRET={DUMMY_SECRET_47}\n", backdate=True)
+          write_env_file(ENV_DIR + "/env2", f"JWT_SECRET={DUMMY_SECRET_53}\n", backdate=True)
+          write_unit([
+              "WorkingDirectory=/var/www/royal-libas-releases/current/backend",
+              "EnvironmentFile=/etc/royal-libas/env1",
+              "EnvironmentFile=/etc/royal-libas/env2",
+          ])
+          assert_case("real_systemd_multiple_envfiles_set_jwt", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "multiple_systemd_envfiles_set_jwt",
+          })
+
+          # 13. Ambiguous .env interpolation / comment / duplicate / syntax / missing WorkingDirectory
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", "JWT_SECRET=foo # inline\n", backdate=True)
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_ambiguous_dotenv_inline_comment", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "dotenv_ambiguous_unquoted_value_JWT_SECRET",
+          })
+
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", "JWT_SECRET=${OTHER_VAR}\n", backdate=True)
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_ambiguous_dotenv_interpolation", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "dotenv_ambiguous_unquoted_value_JWT_SECRET",
+          })
+
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", f"JWT_SECRET=a\nJWT_SECRET={DUMMY_SECRET_47}\n", backdate=True)
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_ambiguous_dotenv_duplicate_key", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "dotenv_duplicate_key_JWT_SECRET",
+          })
+
+          reset_fs()
+          write_unit([])
+          assert_case("real_systemd_missing_working_directory", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "missing_systemd_working_directory",
+          })
+
+          # 14. Security guards: world-writable .env and oversized .env
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", f"JWT_SECRET={DUMMY_SECRET_47}\n", mode=0o666, backdate=True)
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_world_writable_dotenv", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "dotenv_world_writable_env_file",
+          })
+
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", f"JWT_SECRET={DUMMY_SECRET_47}\n" + ("# pad\n" * 200000), backdate=True)
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"])
+          assert_case("real_systemd_oversized_dotenv", {
+              "configured_startup_status": "unable to verify",
+              "configured_startup_source": "dotenv_env_file_too_large",
+          })
+
+          # 15. Stopped service fails closed on live runtime while still reporting startup config
+          reset_fs()
+          write_env_file(RELEASE_BACKEND + "/.env", f"JWT_SECRET={DUMMY_SECRET_47}\n", backdate=True)
+          write_unit(["WorkingDirectory=/var/www/royal-libas-releases/current/backend"], reload_daemon=True, restart=False)
+          assert_case("real_systemd_stopped_service", {
+              "service_state": "inactive/dead",
+              "configured_startup_status": "configured",
+              "live_runtime_status": "unable to verify",
+              "live_runtime_note": "service_not_running",
+          })
+
+          # Cleanup ephemeral test service
+          run(["systemctl", "stop", "royal-libas"], check=False)
+          if os.path.exists(UNIT_PATH):
+              os.unlink(UNIT_PATH)
+          run(["systemctl", "daemon-reload"], check=False)
+          print(f"ALL {len(scenarios)} REAL_SYSTEMD_AND_PROC_SCENARIOS_PASSED")
+          TEST_DRIVER
