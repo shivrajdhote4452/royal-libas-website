@@ -214,10 +214,23 @@ jobs:
               if res.returncode != 0:
                   return None, "systemctl_rc_" + str(res.returncode)
               parsed = {}
+              multi_env_files = []
+              multi_env_inline = []
               for line in res.stdout.splitlines():
                   if "=" in line:
                       k, v = line.split("=", 1)
-                      parsed[k.strip()] = v.strip()
+                      k = k.strip()
+                      v = v.strip()
+                      if k == "EnvironmentFiles":
+                          if v:
+                              multi_env_files.append(v)
+                      elif k == "Environment":
+                          if v:
+                              multi_env_inline.append(v)
+                      else:
+                          parsed[k] = v
+              parsed["EnvironmentFilesList"] = multi_env_files
+              parsed["Environment"] = " ".join(multi_env_inline)
               return parsed, None
 
           def parse_systemd_env_prop(raw_env):
@@ -323,7 +336,14 @@ jobs:
               work_dir = sysd.get("WorkingDirectory", "") or ""
 
               sysd_env_map, sysd_env_err = parse_systemd_env_prop(sysd.get("Environment", ""))
-              sysd_env_files, sysd_env_files_err = parse_systemd_env_files(sysd.get("EnvironmentFiles", ""))
+              sysd_env_files = []
+              sysd_env_files_err = None
+              for ef_line in sysd.get("EnvironmentFilesList", []):
+                  part_files, part_err = parse_systemd_env_files(ef_line)
+                  if part_err:
+                      sysd_env_files_err = part_err
+                      break
+                  sysd_env_files.extend(part_files)
 
               sysd_file_jwt_hits = []
               sysd_file_mtimes = []
