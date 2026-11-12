@@ -559,7 +559,7 @@ jobs:
 
               for label, cpath in candidates:
                   if os.path.lexists(cpath) and not os.path.exists(cpath):
-                      if winning_path is None:
+                      if winning_path is None and dangling_err is None:
                           dangling_err = "dangling_dotenv_symlink_" + label
                       if label == "release_root_dotenv":
                           stray_root_dotenv = True
