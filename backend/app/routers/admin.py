@@ -1328,7 +1328,7 @@ def admin_list_inventory(
     subcategory: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve variant-level inventory with stock levels and filtering."""
     query = (
@@ -1501,7 +1501,7 @@ def admin_adjust_stock(
 @router.get("/inventory/summary", response_model=InventorySummaryResponse)
 def admin_get_inventory_summary(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve stable aggregate inventory metrics across the entire boutique catalogue."""
     # 1. Published Live Catalogue
@@ -1775,7 +1775,7 @@ def admin_list_stock_adjustments(
     product_id: Optional[int] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve audit history of stock adjustments (filtered by variant or product)."""
     query = (
@@ -1827,7 +1827,7 @@ def admin_list_returns(
     request_type: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """List customer return, exchange, and refund requests."""
     query = (
@@ -1894,7 +1894,7 @@ def admin_list_returns(
 def admin_create_return_request(
     payload: ReturnRequestCreate,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Initiate a return or exchange request on behalf of a customer.
 
@@ -2096,7 +2096,7 @@ def admin_get_customer_detail(
 def admin_list_inquiries(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve customer concierge and contact form inquiries."""
     query = db.query(ContactInquiry)
@@ -2111,7 +2111,7 @@ def admin_reply_inquiry(
     id: int,
     payload: ContactInquiryReply,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Record staff response and update inquiry resolution state."""
     inquiry = db.query(ContactInquiry).filter(ContactInquiry.id == id).first()
@@ -2425,7 +2425,7 @@ def ensure_ancestor_folders(db: Session, folder_path: str, known_paths: set) -> 
 @router.get("/media/folders", response_model=List[MediaFolderResponse])
 def admin_list_media_folders(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """List all media folders with recursive asset counts and subfolder counts."""
     folders = db.query(MediaFolder).order_by(MediaFolder.path.asc()).all()
@@ -2813,7 +2813,7 @@ def admin_list_media(
     hide_samples: bool = Query(True, description="Hide Cloudinary demo samples from normal boutique view"),
     sort_by: Optional[str] = Query("newest", description="Sort order: newest, oldest, largest, name"),
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve all uploaded persistent media assets with filtering, folder selection, and product usage."""
     query = db.query(MediaAsset)
@@ -3267,7 +3267,7 @@ def admin_delete_media(
 def admin_check_media_usage(
     payload: BulkDeleteMediaRequest,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Check if the specified media assets are currently referenced by products or editorial sections."""
     if not payload.asset_ids:
@@ -3962,7 +3962,7 @@ def admin_sync_cloudinary_media(
 @router.get("/media/status", response_model=CloudinaryStatusResponse)
 def admin_get_media_status(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Return status of Cloudinary configuration and media library statistics."""
     status_info = get_cloudinary_status()
@@ -4250,7 +4250,7 @@ def admin_attach_product_media(
 @router.get("/size-charts", response_model=List[SizeChartResponse])
 def admin_list_size_charts(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """List all reusable size charts with product reference counts."""
     charts = db.query(SizeChart).order_by(SizeChart.name.asc(), SizeChart.id.asc()).all()
@@ -4366,7 +4366,7 @@ def admin_delete_size_chart(
 @router.get("/products", response_model=List[ProductDetailResponse])
 def admin_list_products(
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve all products (active, draft, and archived) for admin catalogue management."""
     products = (
@@ -4386,7 +4386,7 @@ def admin_list_products(
 def admin_get_product(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve a single product by ID (including draft and archived) for admin editing."""
     product = (
@@ -5351,7 +5351,7 @@ def admin_list_coupons(
     search: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve all promotional coupons with usage statistics and status filtering."""
     now = datetime.now(timezone.utc)
@@ -5419,7 +5419,7 @@ def admin_create_coupon(
 def admin_get_coupon(
     id: int,
     db: Session = Depends(get_db),
-    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER")),
+    current_admin: Admin = Depends(require_roles("OWNER", "STORE_MANAGER", "MANAGER")),
 ):
     """Retrieve single coupon details by ID."""
     coupon = db.query(Coupon).filter(Coupon.id == id).first()

@@ -55,6 +55,7 @@ from app.models import (
     StoreSetting,
     MediaFolder,
     MediaAsset,
+    ReturnRequest,
 )
 from app.auth import hash_password
 
@@ -254,14 +255,28 @@ class TestAdminRolesAndPermissions(unittest.TestCase):
             )
             db.add(cls.test_asset)
 
+            # 9. Seed test Return Request
+            cls.test_return = ReturnRequest(
+                return_code="RET-TEST-001",
+                order_id=cls.test_order.id,
+                order_item_id=cls.test_order_item.id,
+                request_type="RETURN",
+                reason="Fitting issue",
+                status="PENDING",
+            )
+            db.add(cls.test_return)
+
             db.commit()
             cls.product_id = cls.test_product.id
+            cls.variant_id = cls.test_variant.id
             cls.order_id = cls.test_order.id
+            cls.customer_phone = cls.test_order.phone
             cls.size_chart_id = cls.test_size_chart.id
             cls.coupon_id = cls.test_coupon.id
             cls.inquiry_id = cls.test_inquiry.id
             cls.folder_id = cls.test_folder.id
             cls.asset_id = cls.test_asset.id
+            cls.return_id = cls.test_return.id
 
             cls.fulfillment_staff_id = cls.fulfillment_staff.id
         finally:
@@ -511,22 +526,77 @@ class TestAdminRolesAndPermissions(unittest.TestCase):
     # 5. LEGACY MANAGER: PRESERVED ACCESS & BOUNDARIES
     # ==========================================================================
     def test_16_legacy_manager_preserves_existing_operational_access(self):
-        """Legacy MANAGER retains access to Dashboard, Orders, Payments, Shipping, Customers, Reports, Settings."""
+        """Legacy MANAGER retains access to all endpoints previously available before RBAC hardening."""
+        # 1. Operations
         self.assertEqual(client.get("/admin/dashboard", headers=self.legacy_mgr_headers).status_code, 200)
         self.assertEqual(client.get("/admin/orders", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get(f"/admin/orders/{self.order_id}", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.patch(f"/admin/orders/{self.order_id}/notes", json={"notes": "Legacy note"}, headers=self.legacy_mgr_headers).status_code, 200)
         self.assertEqual(client.get("/admin/payments", headers=self.legacy_mgr_headers).status_code, 200)
         self.assertEqual(client.get("/admin/shipping", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/fulfillment/config", headers=self.legacy_mgr_headers).status_code, 200)
+
+        # 2. Customers & Support
         self.assertEqual(client.get("/admin/customers", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get(f"/admin/customers/{self.customer_phone}", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/inquiries", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(
+            client.patch(f"/admin/inquiries/{self.inquiry_id}", json={"reply_text": "We will dispatch soon.", "status": "RESOLVED"}, headers=self.legacy_mgr_headers).status_code,
+            200,
+        )
+
+        # 3. Reports & Settings
         self.assertEqual(client.get("/admin/reports", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/reports/export-orders-csv", headers=self.legacy_mgr_headers).status_code, 200)
         self.assertEqual(client.get("/admin/settings", headers=self.legacy_mgr_headers).status_code, 200)
 
+        # 4. Inventory & Returns
+        self.assertEqual(client.get("/admin/inventory", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/inventory/summary", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/inventory/adjustments", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/returns", headers=self.legacy_mgr_headers).status_code, 200)
+
+        # 5. Catalogue & Stock (Read endpoints)
+        self.assertEqual(client.get("/admin/products", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get(f"/admin/products/{self.product_id}", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/size-charts", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/coupons", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get(f"/admin/coupons/{self.coupon_id}", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/media", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/media/folders", headers=self.legacy_mgr_headers).status_code, 200)
+        self.assertEqual(client.get("/admin/media/status", headers=self.legacy_mgr_headers).status_code, 200)
+
     def test_17_legacy_manager_denied_store_manager_and_owner_endpoints(self):
-        """Legacy MANAGER is not silently promoted and is blocked on catalogue mutations and staff management."""
+        """Legacy MANAGER is not silently promoted and is strictly blocked on catalogue mutations and staff management."""
+        # 1. Product mutations (requires OWNER, STORE_MANAGER)
         self.assertEqual(client.post("/admin/products", json={"name": "x", "slug": "x", "category": "SUIT SET"}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.patch(f"/admin/products/{self.product_id}", json={"name": "Updated x"}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.delete(f"/admin/products/{self.product_id}", headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.post(f"/admin/products/{self.product_id}/variants", json={"size": "XXL", "selling_price": 5000, "mrp": 6000, "stock": 10}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.patch(f"/admin/variants/{self.variant_id}", json={"stock": 20}, headers=self.legacy_mgr_headers).status_code, 403)
+
+        # 2. Stock & Return Mutations (requires OWNER, STORE_MANAGER)
+        self.assertEqual(client.post("/admin/inventory/adjust", json={"variant_id": self.variant_id, "new_stock": 10, "reason": "RESTOCK"}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.post("/admin/inventory/bulk-adjust", json={"product_id": self.product_id, "items": [{"variant_id": self.variant_id, "expected_stock": 10, "new_stock": 15}]}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.patch(f"/admin/returns/{self.return_id}/status", json={"status": "APPROVED"}, headers=self.legacy_mgr_headers).status_code, 403)
+
+        # 3. Coupon Mutations (requires OWNER, STORE_MANAGER / OWNER)
+        self.assertEqual(client.post("/admin/coupons", json={"code": "NEWCODE10", "type": "PERCENT", "value": 10, "min_order_value": 500}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.delete(f"/admin/coupons/{self.coupon_id}", headers=self.legacy_mgr_headers).status_code, 403)
+
+        # 4. Media Mutations & Size Chart Mutations
+        self.assertEqual(client.post("/admin/media/folders", json={"name": "new_folder"}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.delete(f"/admin/media/{self.asset_id}", headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.post("/admin/size-charts", json={"name": "New Chart", "category": "SUIT SET", "measurements": "{}"}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.delete(f"/admin/size-charts/{self.size_chart_id}", headers=self.legacy_mgr_headers).status_code, 403)
+
+        # 5. Activity logs (requires OWNER, STORE_MANAGER)
+        self.assertEqual(client.get("/admin/activity-logs", headers=self.legacy_mgr_headers).status_code, 403)
+
+        # 6. Staff administration (requires OWNER only)
         self.assertEqual(client.get("/admin/staff", headers=self.legacy_mgr_headers).status_code, 403)
-        self.assertEqual(client.get("/admin/coupons", headers=self.legacy_mgr_headers).status_code, 403)
-        self.assertEqual(client.get("/admin/inquiries", headers=self.legacy_mgr_headers).status_code, 403)
-        self.assertEqual(client.get("/admin/media", headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.post("/admin/staff", json={"email": "new_staff@test.com", "role": "STORE_MANAGER", "password": "pass"}, headers=self.legacy_mgr_headers).status_code, 403)
+        self.assertEqual(client.patch(f"/admin/staff/{self.fulfillment_staff_id}", json={"role": "OWNER"}, headers=self.legacy_mgr_headers).status_code, 403)
 
     # ==========================================================================
     # 6. OWNER: UNRESTRICTED ACCESS
@@ -574,6 +644,80 @@ class TestAdminRolesAndPermissions(unittest.TestCase):
         created_res = client.post("/admin/products", json=new_prod_payload, headers=self.store_mgr_headers)
         self.assertEqual(created_res.status_code, 201)
         self.assertEqual(created_res.json()["name"], "Artisanal Silk Sharara")
+
+    # ==========================================================================
+    # 8. ORDER CANCELLATION PERMISSIONS ACROSS ROLES
+    # ==========================================================================
+    def test_20_order_cancellation_permissions_across_roles(self):
+        """Verifies order status update and cancellation behavior across all roles without policy changes."""
+        db = SessionLocal()
+        orders_by_role = {}
+        try:
+            for role_name in ["OWNER", "STORE_MANAGER", "FULFILLMENT_STAFF", "MANAGER"]:
+                ord_obj = Order(
+                    order_code=f"RL-CANCEL-{role_name[:4]}",
+                    customer_name="Test Customer",
+                    phone="9876543210",
+                    subtotal=Decimal("1999.00"),
+                    total=Decimal("1999.00"),
+                    payment_method="COD",
+                    payment_status="PENDING",
+                    status="CONFIRMED",
+                )
+                db.add(ord_obj)
+                db.flush()
+                addr = Address(order_id=ord_obj.id, name="Test", phone="9876543210", line1="Road", city="Indore", state="MP", pincode="452001")
+                db.add(addr)
+                item = OrderItem(order_id=ord_obj.id, variant_id=self.variant_id, product_name_snapshot="Item", size_snapshot="M", unit_price_snapshot=Decimal("1999.00"), quantity=1, line_total=Decimal("1999.00"))
+                db.add(item)
+                db.commit()
+                orders_by_role[role_name] = ord_obj.id
+        finally:
+            db.close()
+
+        # Each role currently has authorized access to PATCH /admin/orders/{id}/status to cancel
+        headers_map = {
+            "OWNER": self.owner_headers,
+            "STORE_MANAGER": self.store_mgr_headers,
+            "FULFILLMENT_STAFF": self.fulfillment_headers,
+            "MANAGER": self.legacy_mgr_headers,
+        }
+
+        for role_name, o_id in orders_by_role.items():
+            res = client.patch(
+                f"/admin/orders/{o_id}/status",
+                json={"status": "CANCELLED"},
+                headers=headers_map[role_name],
+            )
+            self.assertEqual(res.status_code, 200, f"Role {role_name} failed to cancel order: {res.text}")
+            self.assertEqual(res.json()["status"], "CANCELLED")
+
+    # ==========================================================================
+    # 9. BEFORE/AFTER REGRESSION SAFETY VERIFICATION
+    # ==========================================================================
+    def test_21_before_after_regression_safety_verification(self):
+        """Verifies no unintended privilege regression or escalation across any role."""
+        # 1. Fulfillment staff remains strictly quarantined from business/catalogue data
+        for path in [
+            "/admin/dashboard",
+            "/admin/payments",
+            "/admin/customers",
+            "/admin/reports",
+            "/admin/settings",
+            "/admin/products",
+            "/admin/inventory",
+            "/admin/coupons",
+            "/admin/media",
+            "/admin/size-charts",
+            "/admin/staff",
+            "/admin/activity-logs",
+        ]:
+            res = client.get(path, headers=self.fulfillment_headers)
+            self.assertEqual(res.status_code, 403, f"Fulfillment staff should be 403 on {path}, got {res.status_code}")
+
+        # 2. Store Manager has access to catalogue/reports but blocked on staff administration & deletions
+        self.assertEqual(client.get("/admin/staff", headers=self.store_mgr_headers).status_code, 403)
+        self.assertEqual(client.delete(f"/admin/products/{self.product_id}", headers=self.store_mgr_headers).status_code, 403)
 
 
 if __name__ == "__main__":

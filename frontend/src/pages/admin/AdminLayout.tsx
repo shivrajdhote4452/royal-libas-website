@@ -67,6 +67,7 @@ export const AdminLayout: React.FC = () => {
   const currentRole = (staffProfile?.role || 'OWNER').toUpperCase().trim();
   const isOwner = currentRole === 'OWNER';
   const isFulfillment = currentRole === 'FULFILLMENT_STAFF';
+  const canViewActivity = isOwner || currentRole === 'STORE_MANAGER';
 
   // Automatically redirect fulfillment staff away from dashboard to orders
   useEffect(() => {
@@ -121,7 +122,7 @@ export const AdminLayout: React.FC = () => {
           title: 'MANAGEMENT',
           items: [
             ...(isOwner ? [{ to: '/admin/staff', label: 'Staff & Roles', icon: Shield }] : []),
-            { to: '/admin/activity', label: 'Activity Log', icon: FileText },
+            ...(canViewActivity ? [{ to: '/admin/activity', label: 'Activity Log', icon: FileText }] : []),
             { to: '/admin/settings', label: 'Store Settings', icon: Settings },
           ],
         },
@@ -148,6 +149,15 @@ export const AdminLayout: React.FC = () => {
       return {
         allowed: false,
         reason: 'Staff account and role management is reserved exclusively for the boutique Owner. If you need account changes or permission adjustments, please contact the store owner.',
+        redirectPath: isFulfillment ? '/admin/orders' : '/admin/dashboard',
+        redirectLabel: isFulfillment ? 'Go to Orders' : 'Return to Dashboard',
+      };
+    }
+
+    if (!canViewActivity && (p === '/admin/activity' || p.startsWith('/admin/activity/'))) {
+      return {
+        allowed: false,
+        reason: 'Activity audit logs are accessible only by Store Managers and the boutique Owner.',
         redirectPath: isFulfillment ? '/admin/orders' : '/admin/dashboard',
         redirectLabel: isFulfillment ? 'Go to Orders' : 'Return to Dashboard',
       };
