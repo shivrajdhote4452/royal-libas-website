@@ -64,6 +64,7 @@ jobs:
           python -m unittest discover backend/tests -p "test_order_phone_authorization.py"
           python -m unittest discover backend/tests -p "test_jwt_startup_guard.py"
           python -m unittest discover backend/tests -p "test_runner_safety_harness.py"
+          python -m unittest discover backend/tests -p "test_admin_roles_and_permissions.py"
           python backend/tests/test_bulk_inventory_adjustment.py
           python backend/tests/test_postgres_concurrency.py
           python backend/tests/test_postgres_variant_migration.py
@@ -79,6 +80,7 @@ jobs:
           python backend/tests/test_order_phone_authorization.py
           python backend/tests/test_jwt_startup_guard.py
           python backend/tests/test_runner_safety_harness.py
+          python backend/tests/test_admin_roles_and_permissions.py
           python backend/run_all_tests.py
 
   frontend-build:
