@@ -782,7 +782,7 @@ export const AdminProductEdit: React.FC = () => {
         slug: slug.trim() || undefined,
         description: description.trim() || null,
         category,
-        subcategory: subcategory || null,
+        subcategory: availableSubcategories.length > 0 ? (subcategory || null) : null,
         fabric: effectiveFabric,
         fit: effectiveFit,
         care: effectiveCare,
@@ -1413,22 +1413,31 @@ export const AdminProductEdit: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-0.5">
-                      Subcategory
+                      Subcategory {availableSubcategories.length === 0 && <span className="text-gray-400 font-normal lowercase">(optional)</span>}
                     </label>
-                    <select
-                      value={subcategory}
-                      onChange={(e) => {
-                        setSubcategory(e.target.value);
-                        setIsDirty(true);
-                      }}
-                      className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all"
-                    >
-                      {availableSubcategories.map((sub) => (
-                        <option key={sub} value={sub}>
-                          {sub}
-                        </option>
-                      ))}
-                    </select>
+                    {availableSubcategories.length > 0 ? (
+                      <select
+                        value={subcategory}
+                        onChange={(e) => {
+                          setSubcategory(e.target.value);
+                          setIsDirty(true);
+                        }}
+                        className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:bg-white transition-all"
+                      >
+                        {availableSubcategories.map((sub) => (
+                          <option key={sub} value={sub}>
+                            {sub}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        disabled
+                        value="None (Direct Category)"
+                        className="w-full px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-500 italic cursor-not-allowed"
+                      />
+                    )}
                   </div>
 
                   <div>

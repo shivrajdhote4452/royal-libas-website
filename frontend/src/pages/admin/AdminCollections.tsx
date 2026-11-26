@@ -43,7 +43,7 @@ const CANONICAL_TAXONOMY: Record<
   },
   'WINTER COLLECTION': {
     slug: 'winter-collection',
-    subcategories: ['Velvet Suits', 'Pashmina', 'Woolen Sets', 'Shawls'],
+    subcategories: [],
   },
 };
 

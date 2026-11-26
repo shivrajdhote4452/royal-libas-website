@@ -173,7 +173,7 @@ export const AdminProducts: React.FC = () => {
       care: 'Dry clean only',
       fit: 'Tailored Regular Fit',
       category: newCategory,
-      subcategory: newSubcategory,
+      subcategory: (CATEGORY_GROUPS[newCategory]?.length > 0 ? newSubcategory : null),
       status: newStatus,
       is_active: newStatus === 'PUBLISHED',
       is_bestseller: false,
@@ -720,22 +720,36 @@ export const AdminProducts: React.FC = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">
-                    Subcategory <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={newSubcategory}
-                    onChange={(e) => setNewSubcategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224] focus:outline-none bg-white"
-                  >
-                    {(CATEGORY_GROUPS[newCategory] || []).map((sub) => (
-                      <option key={sub} value={sub}>
-                        {sub}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {CATEGORY_GROUPS[newCategory]?.length > 0 ? (
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      Subcategory <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={newSubcategory}
+                      onChange={(e) => setNewSubcategory(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#5E1224] focus:outline-none bg-white"
+                    >
+                      {(CATEGORY_GROUPS[newCategory] || []).map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      Subcategory <span className="text-xs font-normal text-gray-400">(Optional / None)</span>
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value="None (Direct Category)"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 text-xs italic cursor-not-allowed"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>

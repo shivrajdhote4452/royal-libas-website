@@ -18,7 +18,7 @@ CANONICAL_TAXONOMY: Dict[str, List[str]] = {
     "SUIT SET": ["Three Pieces", "Semi-party Wear", "Party Wear"],
     "HEAVY DRESS": ["Lehenga", "Short Kurta", "Palazzo Set", "Designer Wear", "Sharara / Gharara"],
     "UNSTITCHED MATERIAL": ["Unstitched Suits", "Dress Material"],
-    "WINTER COLLECTION": ["Velvet Suits", "Pashmina", "Woolen Sets", "Shawls"],
+    "WINTER COLLECTION": [],
 }
 
 CATEGORY_TO_COLLECTION_SLUG: Dict[str, str] = {
@@ -95,6 +95,11 @@ def validate_category_and_subcategory(
     if subcategory is not None and subcategory.strip():
         sub_raw = subcategory.strip()
         valid_subs = CANONICAL_TAXONOMY[clean_cat]
+        if not valid_subs:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Category '{clean_cat}' does not have subcategories. Subcategory must be omitted.",
+            )
         matched = next((s for s in valid_subs if s.lower() == sub_raw.lower()), None)
         if not matched:
             valid_subs_str = ", ".join(valid_subs)
@@ -126,7 +131,7 @@ def sync_product_category_and_collections(
 
     if clean_cat is not None:
         product.category = clean_cat
-    if subcategory is not None:
+    if subcategory is not None or (clean_cat and not CANONICAL_TAXONOMY.get(clean_cat)):
         product.subcategory = clean_sub
 
     # Determine base collections
