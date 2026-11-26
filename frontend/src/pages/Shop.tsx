@@ -55,6 +55,10 @@ export const MAIN_CATEGORIES_CONFIG = [
     name: 'UNSTITCHED MATERIAL',
     subcategories: ['Unstitched Suits', 'Dress Material'],
   },
+  {
+    name: 'WINTER COLLECTION',
+    subcategories: ['Velvet Suits', 'Pashmina', 'Woolen Sets', 'Shawls'],
+  },
 ];
 
 export const Shop: React.FC = () => {

@@ -18,6 +18,7 @@ CANONICAL_TAXONOMY: Dict[str, List[str]] = {
     "SUIT SET": ["Three Pieces", "Semi-party Wear", "Party Wear"],
     "HEAVY DRESS": ["Lehenga", "Short Kurta", "Palazzo Set", "Designer Wear", "Sharara / Gharara"],
     "UNSTITCHED MATERIAL": ["Unstitched Suits", "Dress Material"],
+    "WINTER COLLECTION": ["Velvet Suits", "Pashmina", "Woolen Sets", "Shawls"],
 }
 
 CATEGORY_TO_COLLECTION_SLUG: Dict[str, str] = {
@@ -25,6 +26,7 @@ CATEGORY_TO_COLLECTION_SLUG: Dict[str, str] = {
     "SUIT SET": "suit-set",
     "HEAVY DRESS": "heavy-dress",
     "UNSTITCHED MATERIAL": "unstitched-material",
+    "WINTER COLLECTION": "winter-collection",
 }
 
 CANONICAL_COLLECTION_SLUGS: Set[str] = {
@@ -36,6 +38,8 @@ CANONICAL_COLLECTION_SLUGS: Set[str] = {
     "heavy-dresses",
     "unstitched-material",
     "unstitched",
+    "winter-collection",
+    "winter",
 }
 CANONICAL_COLLECTION_NAMES: Set[str] = {
     "TWO PIECES",
@@ -46,6 +50,8 @@ CANONICAL_COLLECTION_NAMES: Set[str] = {
     "HEAVY DRESSES",
     "UNSTITCHED MATERIAL",
     "UNSTITCHED",
+    "WINTER COLLECTION",
+    "WINTER",
 }
 
 

@@ -96,6 +96,7 @@ const CATEGORY_TAXONOMY: Record<string, string[]> = {
   'SUIT SET': ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
   'HEAVY DRESS': ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
   'UNSTITCHED MATERIAL': ['Unstitched Suits', 'Dress Material'],
+  'WINTER COLLECTION': ['Velvet Suits', 'Pashmina', 'Woolen Sets', 'Shawls'],
 };
 
 const STANDARD_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
@@ -972,6 +973,7 @@ export const AdminInventory: React.FC = () => {
               <option value="SUIT SET">SUIT SET</option>
               <option value="HEAVY DRESS">HEAVY DRESS</option>
               <option value="UNSTITCHED MATERIAL">UNSTITCHED MATERIAL</option>
+              <option value="WINTER COLLECTION">WINTER COLLECTION</option>
             </select>
 
             {/* Subcategories (if category selected) */}

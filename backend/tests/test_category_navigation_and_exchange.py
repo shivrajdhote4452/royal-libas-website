@@ -376,5 +376,113 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("Cash on Delivery (COD) is currently unavailable", res.json()["detail"])
 
+    def test_08_canonical_taxonomy_includes_winter_collection(self):
+        """Verify WINTER COLLECTION is part of canonical taxonomy with supported subcategories."""
+        self.assertIn("WINTER COLLECTION", CANONICAL_TAXONOMY)
+        expected_subs = ["Velvet Suits", "Pashmina", "Woolen Sets", "Shawls"]
+        self.assertEqual(CANONICAL_TAXONOMY["WINTER COLLECTION"], expected_subs)
+        self.assertEqual(CATEGORY_TO_COLLECTION_SLUG.get("WINTER COLLECTION"), "winter-collection")
+
+        # Category and subcategory validation tests
+        cat, sub = validate_category_and_subcategory("WINTER COLLECTION", "Velvet Suits")
+        self.assertEqual(cat, "WINTER COLLECTION")
+        self.assertEqual(sub, "Velvet Suits")
+
+        cat, sub = validate_category_and_subcategory("WINTER COLLECTION", "Pashmina")
+        self.assertEqual(cat, "WINTER COLLECTION")
+        self.assertEqual(sub, "Pashmina")
+
+        # Subcategory is optional
+        cat, sub = validate_category_and_subcategory("WINTER COLLECTION", None)
+        self.assertEqual(cat, "WINTER COLLECTION")
+        self.assertIsNone(sub)
+
+        # Invalid subcategory raises HTTP 400
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as cm:
+            validate_category_and_subcategory("WINTER COLLECTION", "Summer Cotton")
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertIn("Invalid subcategory", cm.exception.detail)
+
+    def test_09_winter_collection_migration_seeding(self):
+        """Verify database migration seeded canonical WINTER COLLECTION record."""
+        winter_col = self.db.query(Collection).filter(Collection.slug == "winter-collection").first()
+        self.assertIsNotNone(winter_col, "Expected 'winter-collection' canonical collection to exist")
+        self.assertEqual(winter_col.name, "WINTER COLLECTION")
+        self.assertTrue(winter_col.is_active)
+
+    def test_10_winter_collection_product_crud_and_storefront_filtering(self):
+        """Verify end-to-end admin creation, canonical collection sync, and storefront filtering for WINTER COLLECTION."""
+        headers = {"Authorization": f"Bearer {self.admin_token}"}
+
+        # 1. Admin creates a WINTER COLLECTION product
+        create_payload = {
+            "name": "Noorani Velvet Winter Suit",
+            "slug": "noorani-velvet-winter-suit",
+            "description": "Exquisite winter velvet suit with artisanal embroidery.",
+            "category": "WINTER COLLECTION",
+            "subcategory": "Velvet Suits",
+            "fabric": "Micro Velvet",
+            "status": "PUBLISHED",
+            "variants": [
+                {
+                    "size": "M",
+                    "colour": "Wine",
+                    "sku": "RL-WIN-VEL-WINE-M",
+                    "mrp": 6999.0,
+                    "selling_price": 5999.0,
+                    "stock": 8,
+                }
+            ],
+        }
+        res = client.post("/admin/products", json=create_payload, headers=headers)
+        self.assertEqual(res.status_code, 201, f"Failed creating product: {res.text}")
+        created_data = res.json()
+        self.assertEqual(created_data["category"], "WINTER COLLECTION")
+        self.assertEqual(created_data["subcategory"], "Velvet Suits")
+        prod_id = created_data["id"]
+
+        # Verify automatic canonical collection assignment
+        self.assertIn("WINTER COLLECTION", created_data.get("collections", []))
+
+        # 2. Storefront listing filter by category=WINTER COLLECTION
+        store_res = client.get("/products?category=WINTER%20COLLECTION")
+        self.assertEqual(store_res.status_code, 200)
+        store_items = store_res.json()
+        self.assertTrue(any(p["slug"] == "noorani-velvet-winter-suit" for p in store_items))
+
+        # 3. Storefront listing filter by category + matching subcategory
+        sub_res = client.get("/products?category=WINTER%20COLLECTION&subcategory=Velvet%20Suits")
+        self.assertEqual(sub_res.status_code, 200)
+        sub_items = sub_res.json()
+        self.assertTrue(any(p["slug"] == "noorani-velvet-winter-suit" for p in sub_items))
+
+        # 4. Storefront listing filter by unassigned subcategory (empty state)
+        empty_res = client.get("/products?category=WINTER%20COLLECTION&subcategory=Pashmina")
+        self.assertEqual(empty_res.status_code, 200)
+        empty_items = empty_res.json()
+        self.assertEqual(len(empty_items), 0)
+
+        # 5. Admin inventory filtering by category=WINTER COLLECTION
+        inv_res = client.get("/admin/inventory?category=WINTER%20COLLECTION", headers=headers)
+        self.assertEqual(inv_res.status_code, 200)
+        inv_data = inv_res.json()
+        self.assertTrue(any(item["product_slug"] == "noorani-velvet-winter-suit" for item in inv_data))
+
+        # 6. Admin updates subcategory to Pashmina
+        update_payload = {
+            "subcategory": "Pashmina",
+        }
+        update_res = client.patch(f"/admin/products/{prod_id}", json=update_payload, headers=headers)
+        self.assertEqual(update_res.status_code, 200)
+        updated_data = update_res.json()
+        self.assertEqual(updated_data["subcategory"], "Pashmina")
+
+        # Now Pashmina has the product
+        pashmina_res = client.get("/products?category=WINTER%20COLLECTION&subcategory=Pashmina")
+        self.assertEqual(pashmina_res.status_code, 200)
+        pashmina_items = pashmina_res.json()
+        self.assertTrue(any(p["slug"] == "noorani-velvet-winter-suit" for p in pashmina_items))
+
 if __name__ == "__main__":
     unittest.main()

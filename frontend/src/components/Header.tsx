@@ -39,6 +39,12 @@ export const NAV_CATEGORIES: NavCategory[] = [
     displayName: 'Unstitched Material',
     href: '/shop?category=UNSTITCHED+MATERIAL',
   },
+  {
+    id: 'winter_collection',
+    name: 'WINTER COLLECTION',
+    displayName: 'Winter Collection',
+    href: '/shop?category=WINTER+COLLECTION',
+  },
 ];
 
 export const Header: React.FC = () => {
