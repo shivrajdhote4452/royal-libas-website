@@ -235,4 +235,5 @@ export const CATEGORY_GROUPS: Record<string, string[]> = {
   'SUIT SET': ['Three Pieces', 'Semi-party Wear', 'Party Wear'],
   'HEAVY DRESS': ['Lehenga', 'Short Kurta', 'Palazzo Set', 'Designer Wear', 'Sharara / Gharara'],
   'UNSTITCHED MATERIAL': ['Unstitched Suits', 'Dress Material'],
+  'WINTER COLLECTION': [],
 };

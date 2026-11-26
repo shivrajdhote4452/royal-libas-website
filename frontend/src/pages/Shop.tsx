@@ -55,6 +55,10 @@ export const MAIN_CATEGORIES_CONFIG = [
     name: 'UNSTITCHED MATERIAL',
     subcategories: ['Unstitched Suits', 'Dress Material'],
   },
+  {
+    name: 'WINTER COLLECTION',
+    subcategories: [],
+  },
 ];
 
 export const Shop: React.FC = () => {
@@ -562,7 +566,7 @@ export const Shop: React.FC = () => {
                       </button>
 
                       {/* Subcategories shown for the selected category (or all when browsing all) */}
-                      {(isSelected || !currentCategory) && (
+                      {(isSelected || !currentCategory) && group.subcategories.length > 0 && (
                         <div className="pl-3 space-y-1 border-l-2 border-[#B58A3C]/40 ml-1 mt-1 animate-in fade-in duration-150">
                           {group.subcategories.map((sub) => {
                             const isSubSelected = isSelected && currentSubcategory === sub;
@@ -986,7 +990,7 @@ export const Shop: React.FC = () => {
                           </span>
                         </button>
 
-                        {(isSelected || !currentCategory) && (
+                        {(isSelected || !currentCategory) && group.subcategories.length > 0 && (
                           <div className="pl-3 space-y-1.5 border-l-2 border-[#D4AF67]/50 ml-1 mt-1 animate-in fade-in duration-150">
                             {group.subcategories.map((sub) => {
                               const isSubSelected = isSelected && currentSubcategory === sub;

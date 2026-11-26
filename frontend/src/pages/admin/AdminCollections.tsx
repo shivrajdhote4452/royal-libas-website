@@ -41,6 +41,10 @@ const CANONICAL_TAXONOMY: Record<
     slug: 'unstitched-material',
     subcategories: ['Unstitched Suits', 'Dress Material'],
   },
+  'WINTER COLLECTION': {
+    slug: 'winter-collection',
+    subcategories: [],
+  },
 };
 
 interface CollectionWithProducts extends Collection {

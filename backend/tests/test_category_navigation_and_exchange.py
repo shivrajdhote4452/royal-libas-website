@@ -376,5 +376,157 @@ class TestCategoryNavigationAndExchange(unittest.TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("Cash on Delivery (COD) is currently unavailable", res.json()["detail"])
 
+    def test_08_canonical_taxonomy_includes_winter_collection(self):
+        """Verify WINTER COLLECTION has no subcategories and enforces subcategory-free validation."""
+        self.assertIn("WINTER COLLECTION", CANONICAL_TAXONOMY)
+        # Requirement: Client confirmed NO subcategories for WINTER COLLECTION
+        self.assertEqual(CANONICAL_TAXONOMY["WINTER COLLECTION"], [])
+        self.assertEqual(CATEGORY_TO_COLLECTION_SLUG.get("WINTER COLLECTION"), "winter-collection")
+
+        # Category validation without subcategory succeeds
+        cat, sub = validate_category_and_subcategory("WINTER COLLECTION", None)
+        self.assertEqual(cat, "WINTER COLLECTION")
+        self.assertIsNone(sub)
+
+        cat, sub = validate_category_and_subcategory("WINTER COLLECTION", "")
+        self.assertEqual(cat, "WINTER COLLECTION")
+        self.assertIsNone(sub)
+
+        # Supplying any subcategory to WINTER COLLECTION raises HTTP 400
+        from fastapi import HTTPException
+        for invalid_sub in ["Velvet Suits", "Pashmina", "Woolen Sets", "Shawls"]:
+            with self.assertRaises(HTTPException) as cm:
+                validate_category_and_subcategory("WINTER COLLECTION", invalid_sub)
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertIn("does not have subcategories", cm.exception.detail)
+
+    def test_09_winter_collection_migration_seeding(self):
+        """Verify database migration seeded canonical WINTER COLLECTION record."""
+        winter_col = self.db.query(Collection).filter(Collection.slug == "winter-collection").first()
+        self.assertIsNotNone(winter_col, "Expected 'winter-collection' canonical collection to exist")
+        self.assertEqual(winter_col.name, "WINTER COLLECTION")
+        self.assertTrue(winter_col.is_active)
+
+    def test_10_winter_collection_product_crud_and_storefront_filtering(self):
+        """Verify product creation without subcategory, separate category results, and inventory filter."""
+        headers = {"Authorization": f"Bearer {self.admin_token}"}
+
+        # 1. Admin creates a WINTER COLLECTION product directly (no subcategory)
+        create_payload = {
+            "name": "Noorani Velvet Winter Ensemble",
+            "slug": "noorani-velvet-winter-ensemble",
+            "description": "Exquisite winter edit with artisanal embroidery.",
+            "category": "WINTER COLLECTION",
+            "subcategory": None,
+            "fabric": "Micro Velvet",
+            "status": "PUBLISHED",
+            "variants": [
+                {
+                    "size": "M",
+                    "colour": "Wine",
+                    "sku": "RL-WIN-ENS-WINE-M",
+                    "mrp": 6999.0,
+                    "selling_price": 5999.0,
+                    "stock": 8,
+                }
+            ],
+        }
+        res = client.post("/admin/products", json=create_payload, headers=headers)
+        self.assertEqual(res.status_code, 201, f"Failed creating product: {res.text}")
+        created_data = res.json()
+        self.assertEqual(created_data["category"], "WINTER COLLECTION")
+        self.assertIsNone(created_data["subcategory"])
+        prod_id = created_data["id"]
+
+        # Verify automatic canonical collection assignment
+        self.assertIn("WINTER COLLECTION", created_data.get("collections", []))
+
+        # 2. Storefront listing filter by category=WINTER COLLECTION
+        store_res = client.get("/products?category=WINTER%20COLLECTION")
+        self.assertEqual(store_res.status_code, 200)
+        store_items = store_res.json()
+        self.assertTrue(any(p["slug"] == "noorani-velvet-winter-ensemble" for p in store_items))
+
+        # 3. Strict Category Separation:
+        # A product assigned to WINTER COLLECTION must NOT appear under SUIT SET
+        suit_res = client.get("/products?category=SUIT%20SET")
+        self.assertEqual(suit_res.status_code, 200)
+        suit_items = suit_res.json()
+        self.assertFalse(any(p["slug"] == "noorani-velvet-winter-ensemble" for p in suit_items))
+
+        # And WINTER COLLECTION must NOT contain products from TWO PIECES or UNSTITCHED MATERIAL
+        self.assertFalse(any(p["slug"] == "test-coord-nav-item-active" for p in store_items))
+        self.assertFalse(any(p["slug"] == "test-unstitched-suit-material" for p in store_items))
+
+        # 4. Admin inventory filtering by category=WINTER COLLECTION
+        inv_res = client.get("/admin/inventory?category=WINTER%20COLLECTION", headers=headers)
+        self.assertEqual(inv_res.status_code, 200)
+        inv_data = inv_res.json()
+        self.assertTrue(any(item["product_slug"] == "noorani-velvet-winter-ensemble" for item in inv_data))
+
+    def test_11_category_switching_and_collection_sync_isolation(self):
+        """Verify switching between categories correctly replaces canonical collection and cleans subcategory."""
+        headers = {"Authorization": f"Bearer {self.admin_token}"}
+
+        # 1. Create a product in SUIT SET with subcategory Three Pieces
+        create_payload = {
+            "name": "Switch Test Suit Set",
+            "slug": "switch-test-suit-set",
+            "category": "SUIT SET",
+            "subcategory": "Three Pieces",
+            "status": "PUBLISHED",
+            "variants": [
+                {
+                    "size": "L",
+                    "colour": "Teal",
+                    "sku": "RL-SW-SUIT-L",
+                    "mrp": 5999.0,
+                    "selling_price": 4999.0,
+                    "stock": 5,
+                }
+            ],
+        }
+        res = client.post("/admin/products", json=create_payload, headers=headers)
+        self.assertEqual(res.status_code, 201)
+        prod = res.json()
+        prod_id = prod["id"]
+        self.assertEqual(prod["category"], "SUIT SET")
+        self.assertEqual(prod["subcategory"], "Three Pieces")
+        self.assertIn("SUIT SET", prod["collections"])
+        self.assertNotIn("WINTER COLLECTION", prod["collections"])
+
+        # 2. Switch category to WINTER COLLECTION (subcategory omitted/None)
+        update_res = client.patch(
+            f"/admin/products/{prod_id}",
+            json={"category": "WINTER COLLECTION", "subcategory": None},
+            headers=headers,
+        )
+        self.assertEqual(update_res.status_code, 200)
+        switched = update_res.json()
+        self.assertEqual(switched["category"], "WINTER COLLECTION")
+        self.assertIsNone(switched["subcategory"], "Old subcategory must be cleared when switching to WINTER COLLECTION")
+        self.assertIn("WINTER COLLECTION", switched["collections"])
+        self.assertNotIn("SUIT SET", switched["collections"], "Previous canonical collection must be removed")
+
+        # Verify storefront queries reflect switch cleanly
+        winter_res = client.get("/products?category=WINTER%20COLLECTION")
+        self.assertTrue(any(p["slug"] == "switch-test-suit-set" for p in winter_res.json()))
+
+        suit_res = client.get("/products?category=SUIT%20SET")
+        self.assertFalse(any(p["slug"] == "switch-test-suit-set" for p in suit_res.json()))
+
+        # 3. Switch back to SUIT SET with subcategory Party Wear
+        back_res = client.patch(
+            f"/admin/products/{prod_id}",
+            json={"category": "SUIT SET", "subcategory": "Party Wear"},
+            headers=headers,
+        )
+        self.assertEqual(back_res.status_code, 200)
+        switched_back = back_res.json()
+        self.assertEqual(switched_back["category"], "SUIT SET")
+        self.assertEqual(switched_back["subcategory"], "Party Wear")
+        self.assertIn("SUIT SET", switched_back["collections"])
+        self.assertNotIn("WINTER COLLECTION", switched_back["collections"])
+
 if __name__ == "__main__":
     unittest.main()
