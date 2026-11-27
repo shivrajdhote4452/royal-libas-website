@@ -585,7 +585,7 @@ if False:  # pragma: no cover
 
         with patch("app.services.payment_service.is_cashfree_configured", return_value=True), \
              patch("httpx.Client.get", return_value=mock_resp):
-            sync_res = client.post(f"/payments/cashfree/sync/{order_code}")
+            sync_res = client.post(f"/payments/cashfree/sync/{order_code}", json={"token": order_token})
             assert sync_res.status_code == 200
             sync_data = sync_res.json()
             assert sync_data["is_paid"] is True

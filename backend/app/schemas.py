@@ -551,6 +551,10 @@ class OrderCancelRequest(BaseModel):
     token: Optional[str] = None
 
 
+class CashfreeCustomerSyncRequest(BaseModel):
+    token: Optional[str] = None
+
+
 class CashfreeSyncResponse(BaseModel):
     order_code: str
     payment_status: str

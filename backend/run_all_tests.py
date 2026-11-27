@@ -76,6 +76,7 @@ VERIFIED_SAFE_SUITES = [
     "test_shiprocket.py",
     "test_shiprocket_invoice.py",
     "test_cashfree_sandbox_flow.py",
+    "test_payment_sync_authorization.py",
     "test_seo_sitemap.py",
     "test_admin_upgrade.py",
     "test_boutique_settings_and_validation.py",

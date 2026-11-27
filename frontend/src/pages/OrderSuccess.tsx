@@ -126,9 +126,10 @@ export const OrderSuccess: React.FC = () => {
     const timer = setInterval(async () => {
       pollAttempts += 1;
       try {
-        const syncResult = await syncCashfreePayment(order.order_code);
+        const effectiveToken = orderToken || order.order_token || '';
+        const syncResult = await syncCashfreePayment(order.order_code, effectiveToken);
         if (syncResult && syncResult.payment_status === 'PAID') {
-          const updated = await fetchOrderByCode(order.order_code, orderToken);
+          const updated = await fetchOrderByCode(order.order_code, effectiveToken);
           setOrder(updated);
           tryClearPurchasedItems(updated);
           clearInterval(timer);
@@ -149,9 +150,10 @@ export const OrderSuccess: React.FC = () => {
     setSyncing(true);
     setSyncMessage(null);
     try {
-      const syncResult = await syncCashfreePayment(orderCode);
+      const effectiveToken = orderToken || order?.order_token || '';
+      const syncResult = await syncCashfreePayment(orderCode, effectiveToken);
       setSyncMessage(syncResult.message);
-      const updated = await fetchOrderByCode(orderCode, orderToken);
+      const updated = await fetchOrderByCode(orderCode, effectiveToken);
       setOrder(updated);
       tryClearPurchasedItems(updated);
     } catch (err: any) {

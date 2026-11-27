@@ -305,9 +305,10 @@ class TestCashfreeSandboxIntegration(unittest.TestCase):
             },
         })
         order_code = order_res.json()["order_code"]
+        order_token = order_res.json()["order_token"]
 
-        # Perform server sync
-        sync_res = client.post(f"/payments/cashfree/sync/{order_code}")
+        # Perform server sync with required customer token
+        sync_res = client.post(f"/payments/cashfree/sync/{order_code}", json={"token": order_token})
         self.assertEqual(sync_res.status_code, 200)
         sync_data = sync_res.json()
         self.assertTrue(sync_data["is_paid"])

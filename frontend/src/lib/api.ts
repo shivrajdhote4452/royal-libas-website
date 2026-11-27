@@ -205,10 +205,11 @@ export async function createCashfreeOrder(orderCode: string): Promise<CashfreeOr
   return response.json();
 }
 
-export async function syncCashfreePayment(orderCode: string): Promise<CashfreeSyncResult> {
+export async function syncCashfreePayment(orderCode: string, token: string): Promise<CashfreeSyncResult> {
   const response = await fetch(`${API_BASE_URL}/payments/cashfree/sync/${encodeURIComponent(orderCode)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: token || '' }),
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
