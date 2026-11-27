@@ -469,6 +469,142 @@ class TestCashfreeConcurrencyPostgres(unittest.TestCase):
         finally:
             db_check.close()
 
+    def test_05_sold_out_delayed_payment_postgres_no_crash(self):
+        """Verifies sold-out delayed payment fits into VARCHAR(20) payment_status on PostgreSQL without error."""
+        from app.models import Order, PaymentEvent, ProductVariant
+        from app.services.payment_service import process_cashfree_webhook
+        from app.services.order_service import cancel_order_atomic
+
+        db_setup = self.SessionLocal()
+        order_code = f"PG-SOLDOUT-{int(time.time())}"
+        order, v1, _ = self._create_test_order(db_setup, order_code, Decimal("1800.00"), initial_stock=1)
+        order_id = order.id
+        variant_id = v1.id
+        db_setup.close()
+
+        # Step 1: Cancel the order with restock
+        db_cancel = self.SessionLocal()
+        order_to_cancel = db_cancel.query(Order).filter(Order.id == order_id).first()
+        cancel_order_atomic(db_cancel, order_to_cancel, reason="Payment window expired", restock=True)
+        db_cancel.close()
+
+        # Step 2: Simulate stock getting sold to another buyer
+        db_buy = self.SessionLocal()
+        v_bought = db_buy.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
+        v_bought.stock = 0
+        db_buy.commit()
+        db_buy.close()
+
+        # Step 3: Delayed Cashfree payment arrives for the cancelled order
+        cf_payment_id = f"cf_pay_soldout_{int(time.time())}"
+        payload = {
+            "type": "PAYMENT_SUCCESS_WEBHOOK",
+            "event_time": datetime.now(timezone.utc).isoformat(),
+            "data": {
+                "order": {"order_id": order_code, "order_amount": 1800.00, "order_currency": "INR"},
+                "payment": {
+                    "cf_payment_id": cf_payment_id,
+                    "payment_status": "SUCCESS",
+                    "payment_amount": 1800.00,
+                    "payment_currency": "INR",
+                },
+            },
+        }
+        body_bytes = json.dumps(payload).encode("utf-8")
+
+        db_pay = self.SessionLocal()
+        try:
+            # This MUST NOT raise psycopg2.errors.StringDataRightTruncation: value too long for type character varying(20)
+            success, msg = process_cashfree_webhook(db_pay, payload, raw_body_bytes=body_bytes)
+            self.assertTrue(success)
+            self.assertIn("refund", msg.lower())
+
+            # Verify order status and payment status in PostgreSQL
+            db_pay.expire_all()
+            final_order = db_pay.query(Order).filter(Order.id == order_id).first()
+            self.assertEqual(final_order.status, "CANCELLED")
+            self.assertEqual(final_order.payment_status, "PAID")
+            self.assertLessEqual(len(final_order.payment_status), 20)
+            self.assertIn("INVENTORY CONFLICT", final_order.admin_notes)
+
+            # Verify PaymentEvent outcome
+            event = db_pay.query(PaymentEvent).filter(PaymentEvent.payment_id == cf_payment_id).first()
+            self.assertIsNotNone(event)
+            self.assertEqual(event.outcome, "INVENTORY_CONFLICT_REFUND_REQUIRED")
+
+            # Verify stock was not driven negative
+            v_check = db_pay.query(ProductVariant).filter(ProductVariant.id == variant_id).first()
+            self.assertEqual(v_check.stock, 0)
+        finally:
+            db_pay.close()
+
+    def test_06_sync_endpoint_no_lock_during_network_call(self):
+        """Verifies sync_cashfree_payment_status releases/does not hold row locks across network requests."""
+        from unittest.mock import patch
+        from app.models import Order
+        from app.services.payment_service import sync_cashfree_payment_status
+
+        db_setup = self.SessionLocal()
+        order_code = f"PG-SYNC-NOLOCK-{int(time.time())}"
+        order, _, _ = self._create_test_order(db_setup, order_code, Decimal("1500.00"))
+        order_id = order.id
+        db_setup.close()
+
+        lock_acquired_concurrently = [False]
+        lock_error = [None]
+
+        # Mock external Cashfree GET response
+        mock_response_data = [
+            {
+                "cf_payment_id": f"cf_sync_{int(time.time())}",
+                "payment_status": "SUCCESS",
+                "payment_amount": 1500.00,
+                "payment_currency": "INR",
+                "payment_time": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+
+        def slow_mock_get(*args, **kwargs):
+            # While the mock network call is in flight, another thread attempts to lock the Order row
+            db_concurrent = self.SessionLocal()
+            try:
+                # If sync_cashfree_payment_status held with_for_update() across the network call,
+                # with_for_update(nowait=True) here would immediately raise LockNotAvailable / OperationalError!
+                locked_row = (
+                    db_concurrent.query(Order)
+                    .filter(Order.id == order_id)
+                    .with_for_update(nowait=True)
+                    .first()
+                )
+                if locked_row:
+                    lock_acquired_concurrently[0] = True
+                db_concurrent.commit()
+            except Exception as e:
+                lock_error[0] = e
+            finally:
+                db_concurrent.close()
+
+            # Return a mock response mimicking Cashfree payments API
+            class MockResponse:
+                status_code = 200
+                def json(self):
+                    return mock_response_data
+            return MockResponse()
+
+        db_sync = self.SessionLocal()
+        try:
+            with patch("httpx.Client.get", side_effect=slow_mock_get):
+                success, msg, synced_order = sync_cashfree_payment_status(db_sync, order_code)
+                self.assertTrue(success)
+                self.assertEqual(synced_order.payment_status, "PAID")
+
+            self.assertTrue(
+                lock_acquired_concurrently[0],
+                f"Concurrent transaction could not acquire row lock during network call: {lock_error[0]}",
+            )
+        finally:
+            db_sync.close()
+
 
 if __name__ == "__main__":
     unittest.main()

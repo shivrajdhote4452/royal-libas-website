@@ -393,8 +393,8 @@ class TestPaymentEventLedger(unittest.TestCase):
 
             db.expire_all()
             updated_order = db.query(Order).filter(Order.id == order_id).first()
-            self.assertIn(updated_order.status, ("CANCELLED", "ACTION_REQUIRED_REFUND"))
-            self.assertEqual(updated_order.payment_status, "PAID_RECONCILIATION_REQUIRED")
+            self.assertEqual(updated_order.status, "CANCELLED")
+            self.assertEqual(updated_order.payment_status, "PAID")
             self.assertIn("INVENTORY CONFLICT", updated_order.admin_notes)
 
             # Stock must NEVER go negative

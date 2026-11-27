@@ -360,10 +360,10 @@ def process_cashfree_webhook(
                 outcome = "RECONCILED_POST_CANCELLATION"
                 msg = f"Order '{order.order_code}' reconciled and marked PAID"
             else:
-                order.payment_status = "PAID_RECONCILIATION_REQUIRED"
-                order.status = "ACTION_REQUIRED_REFUND"
+                order.payment_status = "PAID"
+                order.status = "CANCELLED"
                 note = (
-                    f"[{now_str}] ALERT - INVENTORY CONFLICT: Successful payment of ₹{webhook_amount} received, "
+                    f"[{now_str}] ALERT - INVENTORY CONFLICT: Successful payment of INR {webhook_amount} received, "
                     f"but items were already sold out following cancellation. "
                     f"ACTION REQUIRED: Initiate customer refund via Cashfree Dashboard or customer concierge."
                 )
@@ -420,9 +420,15 @@ def process_cashfree_webhook(
 
 
 def sync_cashfree_payment_status(db: Session, order_code: str) -> Tuple[bool, str, Order]:
-    """Server-to-server query to Cashfree to reconcile delayed or missing webhooks."""
+    """Server-to-server query to Cashfree to reconcile delayed or missing webhooks.
+    
+    CRITICAL TRANSACTION BOUNDARY:
+    - Never hold a database row lock across external HTTP network calls.
+    - Initial order lookup is non-locking.
+    - Re-reads and acquires row lock inside atomic transaction via process_cashfree_webhook.
+    """
     clean_code = order_code.strip().upper()
-    order = db.query(Order).filter(Order.order_code == clean_code).with_for_update().first()
+    order = db.query(Order).filter(Order.order_code == clean_code).first()
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -481,9 +487,17 @@ def sync_cashfree_payment_status(db: Session, order_code: str) -> Tuple[bool, st
 
     # Check for failed attempts
     if any(p.get("payment_status") == "FAILED" for p in payments_list):
-        order.payment_status = "FAILED"
-        db.commit()
-        db.refresh(order)
+        locked_order = (
+            db.query(Order)
+            .populate_existing()
+            .with_for_update()
+            .filter(Order.id == order.id)
+            .first()
+        )
+        if locked_order and locked_order.payment_status != "PAID":
+            locked_order.payment_status = "FAILED"
+            db.commit()
+            db.refresh(order)
         return False, "Payment attempt was declined or failed.", order
 
     return False, "Payment is still awaiting confirmation from Cashfree.", order

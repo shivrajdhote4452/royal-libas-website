@@ -242,10 +242,13 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
         subtotal = Decimal("0.00")
         order_items_to_create: List[OrderItem] = []
 
-        # Lock rows or re-verify each variant stock & price directly from DB
-        for req_item in payload.items:
+        # Lock rows or re-verify each variant stock & price directly from DB in strictly ascending variant_id order
+        # to eliminate potential deadlocks between concurrent multi-item checkouts or checkouts vs restock
+        sorted_items = sorted(payload.items, key=lambda x: x.variant_id)
+        for req_item in sorted_items:
             variant = (
                 db.query(ProductVariant)
+                .populate_existing()
                 .with_for_update()  # Row-level lock to prevent race condition / overselling
                 .filter(ProductVariant.id == req_item.variant_id)
                 .first()
