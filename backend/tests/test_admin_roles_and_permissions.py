@@ -56,6 +56,7 @@ from app.models import (
     MediaFolder,
     MediaAsset,
     ReturnRequest,
+    ActivityLog,
 )
 from app.auth import hash_password
 
@@ -718,6 +719,158 @@ class TestAdminRolesAndPermissions(unittest.TestCase):
         # 2. Store Manager has access to catalogue/reports but blocked on staff administration & deletions
         self.assertEqual(client.get("/admin/staff", headers=self.store_mgr_headers).status_code, 403)
         self.assertEqual(client.delete(f"/admin/products/{self.product_id}", headers=self.store_mgr_headers).status_code, 403)
+
+    def test_22_inquiry_delete_owner_only_and_audit_logging(self):
+        """Owner-only inquiry deletion with non-owner rejection, 404 handling, and message-sanitized audit logging."""
+        db = SessionLocal()
+        try:
+            # Seed 2 fresh inquiries specifically for this test
+            target_inq = ContactInquiry(
+                name="Amina Khan",
+                email="amina.khan@example.com",
+                phone="9823456789",
+                subject="Bespoke Velvet Lehenga Inquiry",
+                message="CONFIDENTIAL_SENSITIVE_CUSTOMER_MESSAGE: Need velvet lehenga customized with heavy zardozi embroidery.",
+                admin_reply="CONFIDENTIAL_STAFF_REPLY: Quoted 45000 INR with 3-week delivery.",
+                status="RESPONDED",
+            )
+            survivor_inq = ContactInquiry(
+                name="Fatima Sheikh",
+                email="fatima.sheikh@example.com",
+                phone="9812345678",
+                subject="Bridal Gharara Query",
+                message="Can I schedule a boutique visit in Jhansi next Friday?",
+                status="NEW",
+            )
+            db.add(target_inq)
+            db.add(survivor_inq)
+            db.commit()
+            target_id = target_inq.id
+            survivor_id = survivor_inq.id
+        finally:
+            db.close()
+
+        # 1. Non-owner roles must be rejected with 403 Forbidden
+        for role_name, headers in [
+            ("STORE_MANAGER", self.store_mgr_headers),
+            ("LEGACY_MANAGER", self.legacy_mgr_headers),
+            ("FULFILLMENT_STAFF", self.fulfillment_headers),
+        ]:
+            res = client.delete(f"/admin/inquiries/{target_id}", headers=headers)
+            self.assertEqual(
+                res.status_code,
+                403,
+                f"Role {role_name} should be rejected with 403 Forbidden when deleting inquiry, got {res.status_code}",
+            )
+            self.assertIn("Access denied", res.json().get("detail", ""))
+
+        # 2. Unauthenticated request must be rejected with 401 Unauthorized
+        res_unauth = client.delete(f"/admin/inquiries/{target_id}")
+        self.assertEqual(res_unauth.status_code, 401)
+
+        # 3. Verify target inquiry was NOT deleted by non-owner attempts
+        db = SessionLocal()
+        try:
+            inq_check = db.query(ContactInquiry).filter(ContactInquiry.id == target_id).first()
+            self.assertIsNotNone(inq_check, "Target inquiry must not be affected by rejected non-owner attempts")
+        finally:
+            db.close()
+
+        # 4. Missing inquiry handling returns 404 Not Found
+        missing_res = client.delete("/admin/inquiries/999999", headers=self.owner_headers)
+        self.assertEqual(missing_res.status_code, 404)
+        self.assertIn("Inquiry #999999 not found", missing_res.json().get("detail", ""))
+
+        # 5. Owner successfully deletes target inquiry
+        del_res = client.delete(f"/admin/inquiries/{target_id}", headers=self.owner_headers)
+        self.assertEqual(del_res.status_code, 200)
+        del_data = del_res.json()
+        self.assertEqual(del_data.get("status"), "success")
+        self.assertEqual(del_data.get("deleted_id"), target_id)
+        self.assertIn(f"Inquiry #{target_id} deleted successfully", del_data.get("message", ""))
+
+        # 6. Verify target inquiry is gone from database and inquiries list
+        db = SessionLocal()
+        try:
+            inq_after = db.query(ContactInquiry).filter(ContactInquiry.id == target_id).first()
+            self.assertIsNone(inq_after, "Deleted inquiry must no longer exist in the database")
+
+            # 7. Verify survivor inquiry and other system entities remain intact
+            survivor_check = db.query(ContactInquiry).filter(ContactInquiry.id == survivor_id).first()
+            self.assertIsNotNone(survivor_check, "Survivor inquiry must remain intact")
+            self.assertEqual(survivor_check.name, "Fatima Sheikh")
+
+            # 8. Verify audit log entry stores only necessary audit info:
+            # action, inquiry ID, actor, and timestamp.
+            # Customer name, email, subject, message, and reply text must NOT be stored.
+            log_entry = (
+                db.query(ActivityLog)
+                .filter(
+                    ActivityLog.action == "INQUIRY_DELETED",
+                    ActivityLog.target_type == "inquiry",
+                    ActivityLog.target_id == str(target_id),
+                )
+                .first()
+            )
+            self.assertIsNotNone(log_entry, "Audit log entry must be created for inquiry deletion")
+            self.assertEqual(log_entry.action, "INQUIRY_DELETED")
+            self.assertEqual(log_entry.target_type, "inquiry")
+            self.assertEqual(log_entry.target_id, str(target_id))
+            self.assertEqual(log_entry.actor_role, "OWNER")
+            self.assertEqual(log_entry.actor_email, self.owner_email)
+            self.assertIsNotNone(log_entry.created_at)
+
+            # Details contains only action/inquiry ID description
+            self.assertEqual(log_entry.details, f"Inquiry #{target_id} deleted")
+
+            # ZERO CUSTOMER PII CHECK:
+            # Customer name, email, subject, message body, and admin reply must NEVER appear in details
+            self.assertNotIn("Amina Khan", log_entry.details)
+            self.assertNotIn("amina.khan@example.com", log_entry.details)
+            self.assertNotIn("Bespoke Velvet Lehenga Inquiry", log_entry.details)
+            self.assertNotIn("CONFIDENTIAL_SENSITIVE_CUSTOMER_MESSAGE", log_entry.details)
+            self.assertNotIn("zardozi embroidery", log_entry.details)
+            self.assertNotIn("CONFIDENTIAL_STAFF_REPLY", log_entry.details)
+            self.assertNotIn("45000 INR", log_entry.details)
+        finally:
+            db.close()
+
+    def test_23_inquiry_delete_resilience_when_logging_fails(self):
+        """Verify inquiry deletion succeeds and commits even if audit logging encounters an exception."""
+        db = SessionLocal()
+        try:
+            test_inq = ContactInquiry(
+                name="Parveen Bano",
+                email="parveen@example.com",
+                phone="9877766655",
+                subject="Silk Dupatta Availability",
+                message="Is the crimson silk dupatta available in store?",
+                status="NEW",
+            )
+            db.add(test_inq)
+            db.commit()
+            inq_id = test_inq.id
+        finally:
+            db.close()
+
+        # Simulate a logging failure (e.g. database table lock or logging exception)
+        with patch("app.routers.admin.log_activity", side_effect=RuntimeError("Simulated logging infrastructure failure")):
+            res = client.delete(f"/admin/inquiries/{inq_id}", headers=self.owner_headers)
+
+        # 1. API endpoint should still succeed and return 200 OK
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data.get("status"), "success")
+        self.assertEqual(data.get("deleted_id"), inq_id)
+        self.assertIn(f"Inquiry #{inq_id} deleted successfully", data.get("message", ""))
+
+        # 2. Database verification: inquiry must be permanently deleted despite the logging failure
+        db = SessionLocal()
+        try:
+            deleted_check = db.query(ContactInquiry).filter(ContactInquiry.id == inq_id).first()
+            self.assertIsNone(deleted_check, "Inquiry deletion must remain committed even if audit logging fails")
+        finally:
+            db.close()
 
 
 if __name__ == "__main__":

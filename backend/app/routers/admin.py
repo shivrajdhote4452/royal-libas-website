@@ -2129,6 +2129,44 @@ def admin_reply_inquiry(
     return inquiry
 
 
+@router.delete("/inquiries/{id}")
+def admin_delete_inquiry(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(require_roles("OWNER")),
+):
+    """Permanently delete a customer contact inquiry (Owner only)."""
+    inquiry = db.query(ContactInquiry).filter(ContactInquiry.id == id).first()
+    if not inquiry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inquiry #{id} not found.",
+        )
+
+    db.delete(inquiry)
+    db.commit()
+
+    # Log audit activity storing only action, inquiry ID, actor, and timestamp.
+    # Customer name, email, subject, message, and reply text are strictly excluded.
+    try:
+        log_activity(
+            db,
+            current_admin,
+            "INQUIRY_DELETED",
+            "inquiry",
+            id,
+            f"Inquiry #{id} deleted",
+        )
+    except Exception as log_err:
+        print(f"[Inquiry Delete Audit Warning] Failed to log activity: {log_err}")
+
+    return {
+        "status": "success",
+        "message": f"Inquiry #{id} deleted successfully.",
+        "deleted_id": id,
+    }
+
+
 # ==========================================
 # Reports & Analytics (Real Records & CSV Export)
 # ==========================================
