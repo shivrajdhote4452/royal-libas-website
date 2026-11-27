@@ -95,6 +95,7 @@ export const AdminCustomers: React.FC = () => {
 
   // Delete Confirmation Modal State (Owner Only)
   const [deletingInquiry, setDeletingInquiry] = useState<InquiryDetail | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [submittingDelete, setSubmittingDelete] = useState(false);
 
   // Current Admin Role State
@@ -194,11 +195,23 @@ export const AdminCustomers: React.FC = () => {
     }
   };
 
+  const handleOpenDeleteModal = (inq: InquiryDetail) => {
+    setDeleteError(null);
+    setDeletingInquiry(inq);
+  };
+
+  const handleCloseDeleteModal = () => {
+    if (submittingDelete) return;
+    setDeleteError(null);
+    setDeletingInquiry(null);
+  };
+
   const handleConfirmDeleteInquiry = async () => {
     if (!deletingInquiry) return;
     const targetId = deletingInquiry.id;
     const targetName = deletingInquiry.name;
 
+    setDeleteError(null);
     setSubmittingDelete(true);
     try {
       await adminDeleteInquiry(token, targetId);
@@ -206,14 +219,13 @@ export const AdminCustomers: React.FC = () => {
         type: 'success',
         message: `Inquiry #${targetId} from ${targetName} deleted successfully.`,
       });
+      setDeleteError(null);
       setDeletingInquiry(null);
       // Remove deleted inquiry from current list immediately
       setInquiries((prev) => prev.filter((i) => i.id !== targetId));
     } catch (err: any) {
-      setNotification({
-        type: 'error',
-        message: err.message || 'Failed to delete inquiry.',
-      });
+      // Keep modal open and display error clearly inside the confirmation dialog
+      setDeleteError(err.message || 'Failed to delete inquiry. Please try again.');
     } finally {
       setSubmittingDelete(false);
     }
@@ -485,7 +497,7 @@ export const AdminCustomers: React.FC = () => {
                       {isOwner && (
                         <button
                           type="button"
-                          onClick={() => setDeletingInquiry(inq)}
+                          onClick={() => handleOpenDeleteModal(inq)}
                           className="px-2.5 py-1 text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded text-xs font-semibold transition-colors flex items-center gap-1.5"
                           title="Permanently delete this inquiry (Owner only)"
                         >
@@ -713,9 +725,7 @@ export const AdminCustomers: React.FC = () => {
               </h3>
               <button
                 type="button"
-                onClick={() => {
-                  if (!submittingDelete) setDeletingInquiry(null);
-                }}
+                onClick={handleCloseDeleteModal}
                 disabled={submittingDelete}
                 className="text-gray-400 hover:text-gray-600 p-1"
                 aria-label="Close dialog"
@@ -728,6 +738,29 @@ export const AdminCustomers: React.FC = () => {
               <p className="text-xs text-gray-600 leading-relaxed">
                 Are you sure you want to permanently delete this customer inquiry? This action cannot be undone. All other inquiries, customers, and orders will remain unaffected.
               </p>
+
+              {deleteError && (
+                <div
+                  data-testid="delete-modal-error"
+                  className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start justify-between gap-2 animate-in fade-in duration-150"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-rose-900">Deletion Failed</div>
+                      <div className="mt-0.5 text-rose-700 leading-normal">{deleteError}</div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteError(null)}
+                    className="text-rose-400 hover:text-rose-600 p-0.5"
+                    aria-label="Dismiss error"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5 text-xs">
                 <div className="flex justify-between text-gray-500">
@@ -778,7 +811,7 @@ export const AdminCustomers: React.FC = () => {
             <div className="p-3 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setDeletingInquiry(null)}
+                onClick={handleCloseDeleteModal}
                 disabled={submittingDelete}
                 className="px-3 py-1.5 border border-gray-300 rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
