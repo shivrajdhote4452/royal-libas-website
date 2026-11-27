@@ -11,6 +11,8 @@ import {
   X,
   ShoppingBag,
   Send,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   fetchAdminCustomers,
@@ -18,6 +20,7 @@ import {
   adminGetCustomerDetail,
   adminListInquiries,
   adminReplyInquiry,
+  adminDeleteInquiry,
 } from '../../lib/api';
 import { AdminCustomerResponse } from '../../types/order';
 
@@ -90,6 +93,39 @@ export const AdminCustomers: React.FC = () => {
   const [replyText, setReplyText] = useState('');
   const [submittingReply, setSubmittingReply] = useState(false);
 
+  // Delete Confirmation Modal State (Owner Only)
+  const [deletingInquiry, setDeletingInquiry] = useState<InquiryDetail | null>(null);
+  const [submittingDelete, setSubmittingDelete] = useState(false);
+
+  // Current Admin Role State
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(() => {
+    if (!token) return null;
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return payload?.role ? String(payload.role).toUpperCase().trim() : null;
+      }
+    } catch (_) {}
+    return null;
+  });
+
+  useEffect(() => {
+    if (token) {
+      const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+      fetch(`${API_BASE_URL}/admin/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.role) setCurrentUserRole(String(data.role).toUpperCase().trim());
+        })
+        .catch(() => {});
+    }
+  }, [token]);
+
+  const isOwner = currentUserRole === 'OWNER';
+
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const loadCustomers = async () => {
@@ -155,6 +191,31 @@ export const AdminCustomers: React.FC = () => {
       setNotification({ type: 'error', message: err.message || 'Failed to send reply' });
     } finally {
       setSubmittingReply(false);
+    }
+  };
+
+  const handleConfirmDeleteInquiry = async () => {
+    if (!deletingInquiry) return;
+    const targetId = deletingInquiry.id;
+    const targetName = deletingInquiry.name;
+
+    setSubmittingDelete(true);
+    try {
+      await adminDeleteInquiry(token, targetId);
+      setNotification({
+        type: 'success',
+        message: `Inquiry #${targetId} from ${targetName} deleted successfully.`,
+      });
+      setDeletingInquiry(null);
+      // Remove deleted inquiry from current list immediately
+      setInquiries((prev) => prev.filter((i) => i.id !== targetId));
+    } catch (err: any) {
+      setNotification({
+        type: 'error',
+        message: err.message || 'Failed to delete inquiry.',
+      });
+    } finally {
+      setSubmittingDelete(false);
     }
   };
 
@@ -419,17 +480,32 @@ export const AdminCustomers: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => {
-                        setReplyingInquiry(inq);
-                        setReplyText(inq.admin_reply || '');
-                      }}
-                      className="px-3 py-1 bg-[#5E1224] text-white rounded text-xs font-semibold hover:bg-[#4A0E1C] transition-colors flex items-center gap-1.5"
-                    >
-                      <Send className="w-3 h-3" />
-                      {inq.admin_reply ? 'Update Reply' : 'Record Reply'}
-                    </button>
+                  <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                    <div>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingInquiry(inq)}
+                          className="px-2.5 py-1 text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded text-xs font-semibold transition-colors flex items-center gap-1.5"
+                          title="Permanently delete this inquiry (Owner only)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                          <span>Delete Inquiry</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setReplyingInquiry(inq);
+                          setReplyText(inq.admin_reply || '');
+                        }}
+                        className="px-3 py-1 bg-[#5E1224] text-white rounded text-xs font-semibold hover:bg-[#4A0E1C] transition-colors flex items-center gap-1.5"
+                      >
+                        <Send className="w-3 h-3" />
+                        {inq.admin_reply ? 'Update Reply' : 'Record Reply'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -622,6 +698,111 @@ export const AdminCustomers: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal (Owner Only) */}
+      {deletingInquiry && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full border border-red-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-red-50/60">
+              <h3 className="text-sm font-bold text-red-900 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+                Confirm Inquiry Deletion
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!submittingDelete) setDeletingInquiry(null);
+                }}
+                disabled={submittingDelete}
+                className="text-gray-400 hover:text-gray-600 p-1"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Are you sure you want to permanently delete this customer inquiry? This action cannot be undone. All other inquiries, customers, and orders will remain unaffected.
+              </p>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5 text-xs">
+                <div className="flex justify-between text-gray-500">
+                  <span>Inquiry ID:</span>
+                  <span className="font-mono font-semibold text-gray-800">#{deletingInquiry.id}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Customer Name:</span>
+                  <span className="font-semibold text-gray-900">{deletingInquiry.name}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Email:</span>
+                  <span className="text-gray-800">{deletingInquiry.email}</span>
+                </div>
+                {deletingInquiry.phone && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Phone:</span>
+                    <span className="font-mono text-gray-800">+91 {deletingInquiry.phone}</span>
+                  </div>
+                )}
+                {deletingInquiry.subject && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>Subject:</span>
+                    <span className="text-gray-800 font-medium truncate max-w-[200px]" title={deletingInquiry.subject}>
+                      {deletingInquiry.subject}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-gray-500">
+                  <span>Received:</span>
+                  <span className="text-gray-600">
+                    {new Date(deletingInquiry.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Status:</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    deletingInquiry.status === 'RESPONDED'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {deletingInquiry.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingInquiry(null)}
+                disabled={submittingDelete}
+                className="px-3 py-1.5 border border-gray-300 rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteInquiry}
+                disabled={submittingDelete}
+                className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {submittingDelete ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3 h-3" />
+                    Confirm Delete
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

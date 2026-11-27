@@ -965,6 +965,20 @@ export async function adminReplyInquiry(
   return response.json();
 }
 
+export async function adminDeleteInquiry(token: string, id: number): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/admin/inquiries/${id}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to delete inquiry');
+  }
+  return response.json();
+}
+
 export async function adminGetReports(token: string, period: string = '30d'): Promise<any> {
   const response = await fetch(`${API_BASE_URL}/admin/reports?period=${period}`, {
     headers: { Authorization: `Bearer ${token}` },
