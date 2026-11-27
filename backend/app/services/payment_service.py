@@ -1,9 +1,12 @@
 import base64
 import hashlib
 import hmac
+import json
+import logging
 from decimal import Decimal
-from typing import Tuple
+from typing import Tuple, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 import httpx
 
@@ -17,8 +20,28 @@ from app.config import (
     is_cashfree_configured,
 )
 from datetime import datetime, timezone
-from app.models import Order, ProductVariant, StoreSetting
+from app.models import Order, ProductVariant, StoreSetting, PaymentEvent
 from app.schemas import CashfreeCreateOrderResponse
+
+logger = logging.getLogger("royal_libas.payments")
+
+SUPPORTED_CASHFREE_EVENTS = frozenset({
+    "PAYMENT_SUCCESS_WEBHOOK",
+    "PAYMENT_FAILED_WEBHOOK",
+    "PAYMENT_USER_DROPPED_WEBHOOK",
+})
+
+
+class ProcessWebhookResult(tuple):
+    """Result tuple (success, message) with an is_duplicate attribute for backward compatibility."""
+
+    def __new__(cls, success: bool, message: str, is_duplicate: bool = False):
+        return super().__new__(cls, (success, message))
+
+    def __init__(self, success: bool, message: str, is_duplicate: bool = False):
+        self.success = success
+        self.message = message
+        self.is_duplicate = is_duplicate
 
 
 def get_cashfree_base_url() -> str:
@@ -168,85 +191,175 @@ def verify_cashfree_webhook_signature(
     return hmac.compare_digest(expected_signature, received_signature)
 
 
-def process_cashfree_webhook(db: Session, event_payload: dict) -> Tuple[bool, str]:
-    """Process verified Cashfree webhook idempotently.
-    
-    Critical rules:
-    - Only a verified webhook marks an order PAID. Browser callbacks or return visits must NEVER mark an order PAID.
-    - Idempotent: duplicate webhook requests do not change order twice.
-    - Server-computed order.total must strictly match webhook payment amount; otherwise reject and do not mark PAID.
+def process_cashfree_webhook(
+    db: Session,
+    event_payload: dict,
+    raw_body_bytes: Optional[bytes] = None,
+) -> ProcessWebhookResult:
+    """Process verified Cashfree webhook idempotently with row locking and audit ledger.
+
+    Locking & Concurrency Invariants:
+    1. Lock Order row FIRST with with_for_update() to serialize all operations on this order.
+    2. Check PaymentEvent ledger for (provider, payment_id, event_type). If exists, return safe duplicate 200.
+    3. If order is CANCELLED/EXPIRED, lock all affected ProductVariant rows in STRICTLY ASCENDING ID ORDER
+       to prevent deadlocks with other transactions.
+    4. Record sanitized event in PaymentEvent inside the same database transaction.
+    5. Never store raw webhook JSON, customer details, phone, email, address, card, UPI data, tokens or secrets.
     """
     data = event_payload.get("data", {})
     order_info = data.get("order", {})
-    order_code = order_info.get("order_id")
+    order_code = str(order_info.get("order_id") or "").strip().upper()
 
     if not order_code:
-        return False, "Missing order_id in webhook payload"
-
-    order = db.query(Order).filter(Order.order_code == order_code).first()
-    if not order:
-        return False, f"No matching order found for order_id '{order_code}'"
-
-    # IDEMPOTENCY CHECK: If already processed, return success without duplicate modification
-    if order.payment_status == "PAID":
-        return True, f"Order '{order.order_code}' already marked PAID (idempotent duplicate request)"
+        return ProcessWebhookResult(False, "Missing order_id in webhook payload", False)
 
     payment_info = data.get("payment", {})
-    payment_status = payment_info.get("payment_status", "")
-    payment_amount = payment_info.get("payment_amount", order_info.get("order_amount"))
+    payment_id = str(payment_info.get("cf_payment_id") or "").strip()
+    if not payment_id:
+        payment_id = str(order_info.get("order_id") or "")
+        if not payment_id:
+            return ProcessWebhookResult(False, "Missing cf_payment_id in webhook payload", False)
 
-    # AMOUNT VERIFICATION: Server-computed total must strictly match webhook payment amount
+    event_type = str(event_payload.get("type") or "").strip()
+    payment_status = str(payment_info.get("payment_status") or "").strip().upper()
+    payment_amount = payment_info.get("payment_amount", order_info.get("order_amount"))
+    currency = str(payment_info.get("payment_currency") or "INR").strip().upper()
+
+    # Calculate payload fingerprint without storing raw JSON
+    if raw_body_bytes:
+        payload_hash = hashlib.sha256(raw_body_bytes).hexdigest()
+    else:
+        canonical_json = json.dumps(event_payload, sort_keys=True).encode("utf-8")
+        payload_hash = hashlib.sha256(canonical_json).hexdigest()
+
+    # Parse gateway event_time safely if present
+    parsed_event_time = None
+    event_time_raw = event_payload.get("event_time")
+    if event_time_raw:
+        try:
+            parsed_event_time = datetime.fromisoformat(str(event_time_raw))
+        except Exception:
+            pass
+
+    # 1. LOCK ORDER ROW FIRST (Hierarchy: Order -> ProductVariants in ascending ID order)
+    order = (
+        db.query(Order)
+        .populate_existing()
+        .with_for_update()
+        .filter(Order.order_code == order_code)
+        .first()
+    )
+    if not order:
+        return ProcessWebhookResult(False, f"No matching order found for order_id '{order_code}'", False)
+
+    # 2. CHECK PAYMENT EVENT LEDGER FOR DUPLICATES
+    if payment_id and event_type:
+        existing_event = (
+            db.query(PaymentEvent)
+            .filter(
+                PaymentEvent.provider == "cashfree",
+                PaymentEvent.payment_id == payment_id,
+                PaymentEvent.event_type == event_type,
+            )
+            .first()
+        )
+        if existing_event:
+            return ProcessWebhookResult(
+                True,
+                f"Event '{event_type}' for payment '{payment_id}' already processed (duplicate ignored)",
+                is_duplicate=True,
+            )
+
+    # 3. AMOUNT VERIFICATION: Server-computed total must strictly match webhook payment amount
     if payment_amount is None:
-        return False, "Missing payment amount in webhook payload"
+        return ProcessWebhookResult(False, "Missing payment amount in webhook payload", False)
 
     try:
         webhook_amount = Decimal(str(payment_amount))
         server_total = Decimal(str(order.total))
         if webhook_amount != server_total:
-            return False, f"Payment amount mismatch: expected {server_total}, received {webhook_amount}"
+            return ProcessWebhookResult(
+                False,
+                f"Payment amount mismatch: expected {server_total}, received {webhook_amount}",
+                False,
+            )
     except Exception as e:
-        return False, f"Invalid payment amount: {str(e)}"
+        return ProcessWebhookResult(False, f"Invalid payment amount: {str(e)}", False)
 
-    event_type = event_payload.get("type", "")
+    # Check for unverified event types (e.g. deferred refund, dispute, settlement events)
+    if event_type and event_type not in SUPPORTED_CASHFREE_EVENTS:
+        return ProcessWebhookResult(True, f"Unhandled event '{event_type}' ignored safely", False)
 
+    outcome = "PROCESSED"
+    msg = ""
+
+    # 4. PROCESS EVENT LOGIC
     if payment_status == "SUCCESS" or event_type == "PAYMENT_SUCCESS_WEBHOOK":
+        if order.payment_status == "PAID":
+            outcome = "DUPLICATE_PAID_ALREADY"
+            payment_event = PaymentEvent(
+                order_id=order.id,
+                provider="cashfree",
+                payment_id=payment_id,
+                event_type=event_type or "PAYMENT_SUCCESS_WEBHOOK",
+                payment_status=payment_status or "SUCCESS",
+                amount=webhook_amount,
+                currency=currency,
+                payload_hash=payload_hash,
+                outcome=outcome,
+                event_time=parsed_event_time,
+            )
+            db.add(payment_event)
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+            return ProcessWebhookResult(
+                True,
+                f"Order '{order.order_code}' already marked PAID (idempotent duplicate request)",
+                is_duplicate=True,
+            )
+
         # SPECIAL SCENARIO: Payment received for CANCELLED or EXPIRED order
         if order.status in ("CANCELLED", "EXPIRED"):
-            # Check if variant stock can be safely re-reserved
-            can_reclaim = True
+            variant_quantities = {}
             for item in order.items:
                 if item.variant_id:
-                    v = (
-                        db.query(ProductVariant)
-                        .with_for_update()
-                        .filter(ProductVariant.id == item.variant_id)
-                        .first()
+                    variant_quantities[item.variant_id] = (
+                        variant_quantities.get(item.variant_id, 0) + item.quantity
                     )
-                    if not v or v.stock < item.quantity:
-                        can_reclaim = False
-                        break
+
+            # Lock variants in STRICTLY ASCENDING ID ORDER to guarantee no deadlocks
+            locked_variants = {}
+            for vid in sorted(variant_quantities.keys()):
+                v = (
+                    db.query(ProductVariant)
+                    .populate_existing()
+                    .with_for_update()
+                    .filter(ProductVariant.id == vid)
+                    .first()
+                )
+                if v:
+                    locked_variants[vid] = v
+
+            can_reclaim = True
+            for vid, qty in variant_quantities.items():
+                v = locked_variants.get(vid)
+                if not v or v.stock < qty:
+                    can_reclaim = False
+                    break
 
             now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             if can_reclaim:
-                for item in order.items:
-                    if item.variant_id:
-                        v = (
-                            db.query(ProductVariant)
-                            .with_for_update()
-                            .filter(ProductVariant.id == item.variant_id)
-                            .first()
-                        )
-                        if v:
-                            v.stock -= item.quantity
+                for vid, qty in variant_quantities.items():
+                    locked_variants[vid].stock -= qty
                 order.status = "PAID"
                 order.payment_status = "PAID"
                 note = f"[{now_str}] Reconciled: Delayed payment arrived after cancellation. Inventory successfully re-reserved."
                 order.admin_notes = f"{order.admin_notes}\n{note}" if order.admin_notes else note
-                db.commit()
-                return True, f"Order '{order.order_code}' reconciled and marked PAID"
+                outcome = "RECONCILED_POST_CANCELLATION"
+                msg = f"Order '{order.order_code}' reconciled and marked PAID"
             else:
-                # INVENTORY CONFLICT: Cannot re-reserve because item was sold to another customer!
-                # Do NOT mark status=PAID to prevent physical overselling and duplicate fulfillment!
                 order.payment_status = "PAID_RECONCILIATION_REQUIRED"
                 order.status = "ACTION_REQUIRED_REFUND"
                 note = (
@@ -255,24 +368,61 @@ def process_cashfree_webhook(db: Session, event_payload: dict) -> Tuple[bool, st
                     f"ACTION REQUIRED: Initiate customer refund via Cashfree Dashboard or customer concierge."
                 )
                 order.admin_notes = f"{order.admin_notes}\n{note}" if order.admin_notes else note
-                db.commit()
-                return True, f"Order '{order.order_code}' flagged for refund due to overselling conflict"
+                outcome = "INVENTORY_CONFLICT_REFUND_REQUIRED"
+                msg = f"Order '{order.order_code}' flagged for refund due to overselling conflict"
+        else:
+            order.status = "PAID"
+            order.payment_status = "PAID"
+            outcome = "SUCCESS"
+            msg = f"Order '{order.order_code}' successfully marked PAID"
 
-        order.status = "PAID"
-        order.payment_status = "PAID"
-        db.commit()
-        return True, f"Order '{order.order_code}' successfully marked PAID"
     elif payment_status == "FAILED" or event_type == "PAYMENT_FAILED_WEBHOOK":
-        order.payment_status = "FAILED"
-        db.commit()
-        return True, f"Order '{order.order_code}' payment recorded as FAILED"
+        if order.payment_status != "PAID":
+            order.payment_status = "FAILED"
+        outcome = "FAILED"
+        msg = f"Order '{order.order_code}' payment recorded as FAILED"
 
-    return True, f"Unhandled event '{event_type}' ignored safely"
+    elif payment_status == "USER_DROPPED" or event_type == "PAYMENT_USER_DROPPED_WEBHOOK":
+        if order.payment_status != "PAID":
+            order.payment_status = "FAILED"
+        outcome = "USER_DROPPED"
+        msg = f"Order '{order.order_code}' payment recorded as USER_DROPPED"
+
+    else:
+        return ProcessWebhookResult(True, f"Unhandled event '{event_type}' ignored safely", False)
+
+    # 5. INSERT PAYMENT EVENT RECORD INSIDE THE SAME TRANSACTION
+    payment_event = PaymentEvent(
+        order_id=order.id,
+        provider="cashfree",
+        payment_id=payment_id,
+        event_type=event_type or f"PAYMENT_{payment_status}_EVENT",
+        payment_status=payment_status or "UNKNOWN",
+        amount=webhook_amount,
+        currency=currency,
+        payload_hash=payload_hash,
+        outcome=outcome,
+        event_time=parsed_event_time,
+    )
+    db.add(payment_event)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return ProcessWebhookResult(
+            True,
+            f"Event '{event_type}' for payment '{payment_id}' already processed (concurrent duplicate)",
+            is_duplicate=True,
+        )
+
+    return ProcessWebhookResult(True, msg, False)
 
 
 def sync_cashfree_payment_status(db: Session, order_code: str) -> Tuple[bool, str, Order]:
     """Server-to-server query to Cashfree to reconcile delayed or missing webhooks."""
-    order = db.query(Order).filter(Order.order_code == order_code).first()
+    clean_code = order_code.strip().upper()
+    order = db.query(Order).filter(Order.order_code == clean_code).with_for_update().first()
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -310,13 +460,19 @@ def sync_cashfree_payment_status(db: Session, order_code: str) -> Tuple[bool, st
     for p in payments_list:
         p_status = p.get("payment_status")
         p_amount = p.get("payment_amount")
+        p_id = str(p.get("cf_payment_id") or "").strip()
         if p_status == "SUCCESS" and p_amount is not None:
             if Decimal(str(p_amount)) == Decimal(str(order.total)):
                 synthetic_payload = {
                     "type": "PAYMENT_SUCCESS_WEBHOOK",
                     "data": {
                         "order": {"order_id": order.order_code, "order_amount": float(order.total)},
-                        "payment": {"payment_status": "SUCCESS", "payment_amount": float(p_amount)},
+                        "payment": {
+                            "cf_payment_id": p_id or f"cf_sync_{order.order_code}",
+                            "payment_status": "SUCCESS",
+                            "payment_amount": float(p_amount),
+                            "payment_currency": p.get("payment_currency", "INR"),
+                        },
                     },
                 }
                 ok, msg = process_cashfree_webhook(db, synthetic_payload)

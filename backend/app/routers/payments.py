@@ -51,6 +51,7 @@ async def cashfree_webhook(
     request: Request,
     x_webhook_signature: str = Header(None, alias="x-webhook-signature"),
     x_webhook_timestamp: str = Header(None, alias="x-webhook-timestamp"),
+    x_webhook_attempt: Optional[str] = Header(None, alias="x-webhook-attempt"),
     db: Session = Depends(get_db),
 ):
     """Verify cryptographic HMAC-SHA256 signature and mark order PAID idempotently.
@@ -61,7 +62,8 @@ async def cashfree_webhook(
     - Constant-time signature comparison.
     - Server-computed order.total must match webhook amount.
     - Only a verified SUCCESS webhook marks an order PAID.
-    - Idempotent: duplicate webhook requests do not change order twice.
+    - Idempotent: duplicate webhook requests do not change order twice and return HTTP 200.
+    - Cashfree retry attempts reuse timestamp & signature; deduplicated via PaymentEvent ledger.
     - Browser callbacks or return-url visits must NEVER mark an order PAID.
     """
     body_bytes = await request.body()
@@ -92,12 +94,22 @@ async def cashfree_webhook(
             detail="Invalid JSON payload in webhook body",
         )
 
-    success, message = process_cashfree_webhook(db, event_payload)
+    res = process_cashfree_webhook(db, event_payload, raw_body_bytes=body_bytes)
+    success, message = res[0], res[1]
+    is_duplicate = getattr(res, "is_duplicate", False)
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=message,
         )
+
+    if is_duplicate:
+        return {
+            "status": "ok",
+            "message": "Duplicate event already processed",
+            "detail": message,
+        }
 
     return {"status": "ok", "detail": message}
 

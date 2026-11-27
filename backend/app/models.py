@@ -278,6 +278,12 @@ class Order(Base):
         cascade="all, delete-orphan",
         order_by="ReturnRequest.created_at.desc()",
     )
+    payment_events = relationship(
+        "PaymentEvent",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        order_by="PaymentEvent.created_at.desc()",
+    )
 
 
 class OrderItem(Base):
@@ -306,6 +312,40 @@ class OrderItem(Base):
     # Relationships
     order = relationship("Order", back_populates="items")
     variant = relationship("ProductVariant")
+
+
+class PaymentEvent(Base):
+    """Immutable audit ledger for payment provider events and replay deduplication.
+
+    Stores strictly sanitized event metadata. Never contains raw webhook JSON,
+    customer details, phone, email, address, card data, UPI identifiers, tokens, or secrets.
+    """
+    __tablename__ = "payment_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(
+        Integer,
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider = Column(String(50), default="cashfree", nullable=False)
+    payment_id = Column(String(100), nullable=False, index=True)  # cf_payment_id
+    event_type = Column(String(100), nullable=False, index=True)  # e.g., PAYMENT_SUCCESS_WEBHOOK
+    payment_status = Column(String(50), nullable=False)  # SUCCESS, FAILED, USER_DROPPED
+    amount = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(10), default="INR", nullable=False)
+    payload_hash = Column(String(64), nullable=False)  # SHA-256 fingerprint of raw webhook payload
+    outcome = Column(String(50), nullable=False)  # SUCCESS, DUPLICATE_IGNORED, RECONCILED_POST_CANCELLATION, etc.
+    event_time = Column(DateTime(timezone=True), nullable=True)  # Gateway event_time if safely parseable
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("provider", "payment_id", "event_type", name="uq_payment_events_provider_payment_event"),
+    )
+
+    # Relationships
+    order = relationship("Order", back_populates="payment_events")
 
 
 class Address(Base):
