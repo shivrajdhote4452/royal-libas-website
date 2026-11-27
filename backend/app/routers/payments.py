@@ -2,14 +2,18 @@ import json
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from typing import Optional
 from app.database import get_db
+from app.models import Order
 from app.config import CASHFREE_ENVIRONMENT, is_cashfree_configured
 from app.schemas import (
     CashfreeConfigResponse,
     CashfreeCreateOrderRequest,
     CashfreeCreateOrderResponse,
+    CashfreeCustomerSyncRequest,
     CashfreeSyncResponse,
 )
+from app.services.order_service import order_tokens_match
 from app.services.payment_service import (
     create_cashfree_order,
     verify_cashfree_webhook_signature,
@@ -101,19 +105,37 @@ async def cashfree_webhook(
 @router.post("/cashfree/sync/{order_code}", response_model=CashfreeSyncResponse)
 def sync_payment_status(
     order_code: str,
+    payload: Optional[CashfreeCustomerSyncRequest] = None,
     db: Session = Depends(get_db),
 ):
     """Reconcile payment status directly from Cashfree's server-side API.
     
-    Enables instant verification when webhooks are delayed or when customers return
-    from the Cashfree checkout sheet.
+    Protected customer endpoint: requires the matching customer order_token
+    in the POST JSON request body.
+    For missing, malformed, or mismatched tokens:
+    - Rejects before any Cashfree API call
+    - Does not reveal order or payment status
+    - Returns a generic HTTP 403 Forbidden to prevent order-code enumeration
+    - Never logs the raw token
     """
-    ok, msg, order = sync_cashfree_payment_status(db, order_code.strip().upper())
+    clean_code = order_code.strip().upper()
+    order = db.query(Order).filter(Order.order_code == clean_code).first()
+
+    provided_token = payload.token.strip() if (payload and payload.token) else None
+
+    # Constant-time comparison; generic rejection prevents order-code enumeration
+    if not order or not provided_token or not order_tokens_match(provided_token, order.order_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: valid customer order token required.",
+        )
+
+    ok, msg, updated_order = sync_cashfree_payment_status(db, clean_code)
     return CashfreeSyncResponse(
-        order_code=order.order_code,
-        payment_status=order.payment_status,
-        order_status=order.status,
+        order_code=updated_order.order_code,
+        payment_status=updated_order.payment_status,
+        order_status=updated_order.status,
         message=msg,
-        is_paid=order.payment_status == "PAID",
+        is_paid=updated_order.payment_status == "PAID",
     )
 
