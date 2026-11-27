@@ -2143,22 +2143,23 @@ def admin_delete_inquiry(
             detail=f"Inquiry #{id} not found.",
         )
 
-    inquiry_name = inquiry.name
-    inquiry_email = inquiry.email
-    inquiry_subject = inquiry.subject or "No Subject"
-
     db.delete(inquiry)
     db.commit()
 
-    # Log audit activity without exposing sensitive message body contents
-    log_activity(
-        db,
-        current_admin,
-        "INQUIRY_DELETED",
-        "inquiry",
-        id,
-        f"Deleted inquiry #{id} from {inquiry_name} <{inquiry_email}> (subject: {inquiry_subject})",
-    )
+    # Log audit activity storing only action, inquiry ID, actor, and timestamp.
+    # Customer name, email, subject, message, and reply text are strictly excluded.
+    try:
+        log_activity(
+            db,
+            current_admin,
+            "INQUIRY_DELETED",
+            "inquiry",
+            id,
+            f"Inquiry #{id} deleted",
+        )
+    except Exception as log_err:
+        print(f"[Inquiry Delete Audit Warning] Failed to log activity: {log_err}")
+
     return {
         "status": "success",
         "message": f"Inquiry #{id} deleted successfully.",

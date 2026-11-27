@@ -800,7 +800,9 @@ class TestAdminRolesAndPermissions(unittest.TestCase):
             self.assertIsNotNone(survivor_check, "Survivor inquiry must remain intact")
             self.assertEqual(survivor_check.name, "Fatima Sheikh")
 
-            # 8. Verify audit log entry was created without exposing sensitive message contents
+            # 8. Verify audit log entry stores only necessary audit info:
+            # action, inquiry ID, actor, and timestamp.
+            # Customer name, email, subject, message, and reply text must NOT be stored.
             log_entry = (
                 db.query(ActivityLog)
                 .filter(
@@ -811,17 +813,62 @@ class TestAdminRolesAndPermissions(unittest.TestCase):
                 .first()
             )
             self.assertIsNotNone(log_entry, "Audit log entry must be created for inquiry deletion")
+            self.assertEqual(log_entry.action, "INQUIRY_DELETED")
+            self.assertEqual(log_entry.target_type, "inquiry")
+            self.assertEqual(log_entry.target_id, str(target_id))
             self.assertEqual(log_entry.actor_role, "OWNER")
             self.assertEqual(log_entry.actor_email, self.owner_email)
-            self.assertIn("Amina Khan", log_entry.details)
-            self.assertIn("amina.khan@example.com", log_entry.details)
-            self.assertIn("Bespoke Velvet Lehenga Inquiry", log_entry.details)
+            self.assertIsNotNone(log_entry.created_at)
 
-            # SENSITIVITY CHECK: Sensitive message body and admin reply must NEVER appear in audit log details
+            # Details contains only action/inquiry ID description
+            self.assertEqual(log_entry.details, f"Inquiry #{target_id} deleted")
+
+            # ZERO CUSTOMER PII CHECK:
+            # Customer name, email, subject, message body, and admin reply must NEVER appear in details
+            self.assertNotIn("Amina Khan", log_entry.details)
+            self.assertNotIn("amina.khan@example.com", log_entry.details)
+            self.assertNotIn("Bespoke Velvet Lehenga Inquiry", log_entry.details)
             self.assertNotIn("CONFIDENTIAL_SENSITIVE_CUSTOMER_MESSAGE", log_entry.details)
             self.assertNotIn("zardozi embroidery", log_entry.details)
             self.assertNotIn("CONFIDENTIAL_STAFF_REPLY", log_entry.details)
             self.assertNotIn("45000 INR", log_entry.details)
+        finally:
+            db.close()
+
+    def test_23_inquiry_delete_resilience_when_logging_fails(self):
+        """Verify inquiry deletion succeeds and commits even if audit logging encounters an exception."""
+        db = SessionLocal()
+        try:
+            test_inq = ContactInquiry(
+                name="Parveen Bano",
+                email="parveen@example.com",
+                phone="9877766655",
+                subject="Silk Dupatta Availability",
+                message="Is the crimson silk dupatta available in store?",
+                status="NEW",
+            )
+            db.add(test_inq)
+            db.commit()
+            inq_id = test_inq.id
+        finally:
+            db.close()
+
+        # Simulate a logging failure (e.g. database table lock or logging exception)
+        with patch("app.routers.admin.log_activity", side_effect=RuntimeError("Simulated logging infrastructure failure")):
+            res = client.delete(f"/admin/inquiries/{inq_id}", headers=self.owner_headers)
+
+        # 1. API endpoint should still succeed and return 200 OK
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data.get("status"), "success")
+        self.assertEqual(data.get("deleted_id"), inq_id)
+        self.assertIn(f"Inquiry #{inq_id} deleted successfully", data.get("message", ""))
+
+        # 2. Database verification: inquiry must be permanently deleted despite the logging failure
+        db = SessionLocal()
+        try:
+            deleted_check = db.query(ContactInquiry).filter(ContactInquiry.id == inq_id).first()
+            self.assertIsNone(deleted_check, "Inquiry deletion must remain committed even if audit logging fails")
         finally:
             db.close()
 
