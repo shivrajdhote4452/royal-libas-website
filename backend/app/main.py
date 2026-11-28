@@ -1,7 +1,8 @@
+import hmac
 import os
 from pathlib import Path
 from typing import Optional, Tuple
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException, status as http_status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -99,21 +100,27 @@ async def shiprocket_webhook(request: Request, db: Session = Depends(get_db)):
     """Webhook for Shiprocket shipment status updates.
     
     SAFETY & SECURITY RULES:
-    1. Authenticate webhook using x-api-key if SHIPROCKET_WEBHOOK_TOKEN is configured.
+    1. Authenticate webhook using x-api-key; fails closed (401) if SHIPROCKET_WEBHOOK_TOKEN
+       is unconfigured or if header is missing/invalid, evaluated via constant-time hmac.compare_digest.
     2. RE-FETCH tracking live from Shiprocket once via track(awb_code) and only then update the order.
     3. Never regress terminal statuses: DELIVERED and CANCELLED cannot be overwritten by out-of-order events.
     4. Idempotent: repeated webhook events do not cause duplicate updates.
     """
-    from app.config import SHIPROCKET_WEBHOOK_TOKEN
+    import app.config as app_config
 
-    if SHIPROCKET_WEBHOOK_TOKEN:
-        auth_header = request.headers.get("x-api-key") or request.headers.get("HTTP_X_API_KEY") or ""
-        if auth_header != SHIPROCKET_WEBHOOK_TOKEN:
-            from fastapi import HTTPException, status as http_status
-            raise HTTPException(
-                status_code=http_status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Shiprocket webhook authentication token.",
-            )
+    configured_token = (getattr(app_config, "SHIPROCKET_WEBHOOK_TOKEN", None) or "").strip()
+    if not configured_token:
+        raise HTTPException(
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Shiprocket webhook authentication token.",
+        )
+
+    auth_header = (request.headers.get("x-api-key") or request.headers.get("HTTP_X_API_KEY") or "").strip()
+    if not auth_header or not hmac.compare_digest(auth_header, configured_token):
+        raise HTTPException(
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Shiprocket webhook authentication token.",
+        )
 
     try:
         body = await request.json()
