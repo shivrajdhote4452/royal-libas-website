@@ -35,6 +35,7 @@ import socket
 import sys
 import tempfile
 import unittest
+import uuid
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -48,6 +49,8 @@ os.environ["DATABASE_URL"] = f"sqlite:///{ISOLATED_DB_PATH}"
 os.environ["JWT_SECRET"] = "isolated-test-jwt-secret-key-shiprocket-32bytes"
 os.environ["SHIPROCKET_API_EMAIL"] = "test@royallibas.com"
 os.environ["SHIPROCKET_API_PASSWORD"] = "test_shiprocket_password"
+TEST_SHIPROCKET_WEBHOOK_TOKEN = "test-isolated-shiprocket-webhook-token-32b"
+os.environ["SHIPROCKET_WEBHOOK_TOKEN"] = TEST_SHIPROCKET_WEBHOOK_TOKEN
 
 # Safety pattern guard: Fail immediately if any real database pattern is detected
 FORBIDDEN_DB_PATTERNS = ["royal_libas.db", "postgres", "hostinger", "neon", "vps", "prod"]
@@ -409,6 +412,7 @@ class TestShiprocketFulfillment(unittest.TestCase):
         with patch("app.services.shiprocket.track", mock_track):
             res = client.post(
                 "/shiprocket/webhook",
+                headers={"x-api-key": TEST_SHIPROCKET_WEBHOOK_TOKEN},
                 json={"awb": unique_awb, "current_status": "DELIVERED"},
             )
             self.assertEqual(res.status_code, 200)
@@ -419,6 +423,139 @@ class TestShiprocketFulfillment(unittest.TestCase):
         updated = db.query(Order).filter(Order.id == oid).first()
         self.assertEqual(updated.status, "DELIVERED")
         db.close()
+
+    def test_webhook_unconfigured_token_fails_closed_401(self):
+        """Fail closed: Returns HTTP 401 when SHIPROCKET_WEBHOOK_TOKEN is unconfigured/empty."""
+        import app.config as app_config
+        orig_token = getattr(app_config, "SHIPROCKET_WEBHOOK_TOKEN", "")
+        try:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = ""
+            res = client.post(
+                "/shiprocket/webhook",
+                headers={"x-api-key": "any-token-or-empty"},
+                json={"awb": "AWB-ANY-123", "current_status": "DELIVERED"},
+            )
+            self.assertEqual(res.status_code, 401)
+            self.assertEqual(res.json()["detail"], "Invalid Shiprocket webhook authentication token.")
+        finally:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = orig_token
+
+    def test_webhook_whitespace_token_fails_closed_401(self):
+        """Fail closed: Returns HTTP 401 when SHIPROCKET_WEBHOOK_TOKEN is whitespace only."""
+        import app.config as app_config
+        orig_token = getattr(app_config, "SHIPROCKET_WEBHOOK_TOKEN", "")
+        try:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = "   \t\n  "
+            res = client.post(
+                "/shiprocket/webhook",
+                headers={"x-api-key": "some-token"},
+                json={"awb": "AWB-ANY-123", "current_status": "DELIVERED"},
+            )
+            self.assertEqual(res.status_code, 401)
+            self.assertEqual(res.json()["detail"], "Invalid Shiprocket webhook authentication token.")
+        finally:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = orig_token
+
+    def test_webhook_missing_header_fails_closed_401(self):
+        """Returns HTTP 401 when x-api-key header is missing."""
+        import app.config as app_config
+        orig_token = getattr(app_config, "SHIPROCKET_WEBHOOK_TOKEN", "")
+        try:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = TEST_SHIPROCKET_WEBHOOK_TOKEN
+            res = client.post(
+                "/shiprocket/webhook",
+                json={"awb": "AWB-ANY-123", "current_status": "DELIVERED"},
+            )
+            self.assertEqual(res.status_code, 401)
+            self.assertEqual(res.json()["detail"], "Invalid Shiprocket webhook authentication token.")
+        finally:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = orig_token
+
+    def test_webhook_wrong_header_fails_closed_401(self):
+        """Returns HTTP 401 when x-api-key header does not match configured token."""
+        import app.config as app_config
+        orig_token = getattr(app_config, "SHIPROCKET_WEBHOOK_TOKEN", "")
+        try:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = TEST_SHIPROCKET_WEBHOOK_TOKEN
+            res = client.post(
+                "/shiprocket/webhook",
+                headers={"x-api-key": "completely-wrong-token-value"},
+                json={"awb": "AWB-ANY-123", "current_status": "DELIVERED"},
+            )
+            self.assertEqual(res.status_code, 401)
+            self.assertEqual(res.json()["detail"], "Invalid Shiprocket webhook authentication token.")
+        finally:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = orig_token
+
+    def test_webhook_header_variations_and_malformed_inputs(self):
+        """Constant-time comparison handles alternate header name, uneven lengths, and malformed inputs safely."""
+        import app.config as app_config
+        orig_token = getattr(app_config, "SHIPROCKET_WEBHOOK_TOKEN", "")
+        try:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = TEST_SHIPROCKET_WEBHOOK_TOKEN
+
+            # Test alternative header name HTTP_X_API_KEY with valid token
+            res_alt = client.post(
+                "/shiprocket/webhook",
+                headers={"HTTP_X_API_KEY": TEST_SHIPROCKET_WEBHOOK_TOKEN},
+                json={"awb": "NONEXISTENT-AWB", "current_status": "DELIVERED"},
+            )
+            # Authenticated successfully, then order lookup returns ignored
+            self.assertEqual(res_alt.status_code, 200)
+            self.assertEqual(res_alt.json()["status"], "ignored")
+
+            # Uneven lengths (shorter, much longer, empty string, symbols)
+            malformed_cases = [
+                "",
+                "   ",
+                "a",
+                TEST_SHIPROCKET_WEBHOOK_TOKEN[:5],
+                TEST_SHIPROCKET_WEBHOOK_TOKEN + "extra",
+                "x" * 2000,
+                "\x00\x01\x02",
+                "!!!@@@###$$$%%%",
+            ]
+            for bad_header in malformed_cases:
+                res = client.post(
+                    "/shiprocket/webhook",
+                    headers={"x-api-key": bad_header},
+                    json={"awb": "AWB-ANY-123", "current_status": "DELIVERED"},
+                )
+                self.assertEqual(res.status_code, 401, f"Failed on bad_header={bad_header!r}")
+                self.assertEqual(res.json()["detail"], "Invalid Shiprocket webhook authentication token.")
+        finally:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = orig_token
+
+    def test_webhook_terminal_order_protection_with_valid_auth(self):
+        """Order in DELIVERED terminal status is protected from downgrade even with valid auth."""
+        import app.config as app_config
+        orig_token = getattr(app_config, "SHIPROCKET_WEBHOOK_TOKEN", "")
+        try:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = TEST_SHIPROCKET_WEBHOOK_TOKEN
+            unique_awb = f"AWB-{uuid.uuid4().hex[:8].upper()}"
+            oid, code = create_test_order(status="DELIVERED")
+            db = SessionLocal()
+            o = db.query(Order).filter(Order.id == oid).first()
+            o.awb_code = unique_awb
+            db.commit()
+            db.close()
+
+            res = client.post(
+                "/shiprocket/webhook",
+                headers={"x-api-key": TEST_SHIPROCKET_WEBHOOK_TOKEN},
+                json={"awb": unique_awb, "current_status": "SHIPPED"},
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json()["status"], "ignored")
+            self.assertIn("already in terminal state", res.json()["reason"])
+
+            # Verify DB was NOT updated/regressed
+            db = SessionLocal()
+            persisted = db.query(Order).filter(Order.id == oid).first()
+            self.assertEqual(persisted.status, "DELIVERED")
+            db.close()
+        finally:
+            app_config.SHIPROCKET_WEBHOOK_TOKEN = orig_token
 
 
 if __name__ == "__main__":
