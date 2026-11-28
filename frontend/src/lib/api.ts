@@ -192,11 +192,11 @@ export async function fetchPaymentGatewayConfig(): Promise<PaymentGatewayConfigR
   }
 }
 
-export async function createCashfreeOrder(orderCode: string): Promise<CashfreeOrderResponse> {
+export async function createCashfreeOrder(orderCode: string, token?: string): Promise<CashfreeOrderResponse> {
   const response = await fetch(`${API_BASE_URL}/payments/cashfree/create-order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ order_code: orderCode }),
+    body: JSON.stringify({ order_code: orderCode, token: token || '' }),
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

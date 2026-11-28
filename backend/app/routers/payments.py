@@ -42,8 +42,29 @@ def create_payment_order(
     payload: CashfreeCreateOrderRequest,
     db: Session = Depends(get_db),
 ):
-    """Create a Cashfree order tied strictly to the server-computed total of an existing PENDING order."""
-    return create_cashfree_order(db, payload.order_code)
+    """Create a Cashfree order tied strictly to the server-computed total of an existing PENDING order.
+
+    Protected customer endpoint: requires the matching customer order_token.
+    For missing, malformed, wrong, or nonexistent order/token combinations:
+    - Rejects before any outbound Cashfree API call
+    - Does not reveal order or payment status
+    - Returns a generic HTTP 403 Forbidden to prevent enumeration
+    - Uses constant-time token comparison via order_tokens_match
+    - Never logs the raw token
+    """
+    clean_code = payload.order_code.strip().upper() if (payload and payload.order_code) else ""
+    order = db.query(Order).filter(Order.order_code == clean_code).first() if clean_code else None
+
+    provided_token = payload.token.strip() if (payload and payload.token) else None
+
+    # Constant-time comparison; generic denial prevents order existence/token enumeration
+    if not order or not provided_token or not order_tokens_match(provided_token, order.order_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: valid customer order token required.",
+        )
+
+    return create_cashfree_order(db, clean_code, order=order)
 
 
 @router.post("/cashfree/webhook")

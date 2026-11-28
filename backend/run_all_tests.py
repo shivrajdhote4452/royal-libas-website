@@ -99,6 +99,7 @@ VERIFIED_SAFE_SUITES = [
     "test_jwt_startup_guard.py",
     "test_runner_safety_harness.py",
     "test_admin_roles_and_permissions.py",
+    "test_production_security_hardening.py",
 ]
 
 # 4. Explicit mapping of quarantined legacy test suites
