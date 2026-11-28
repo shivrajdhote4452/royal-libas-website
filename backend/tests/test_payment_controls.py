@@ -207,6 +207,7 @@ def test_payment_controls_lifecycle():
     assert prepaid_order_data["status"] == "PENDING"
     assert prepaid_order_data["payment_method"] == "PREPAID"
     historical_prepaid_code = prepaid_order_data["order_code"]
+    historical_prepaid_token = prepaid_order_data.get("order_token")
     print(f"  [OK] Prepaid order created successfully: {historical_prepaid_code}")
 
     # Check cashfree gateway config endpoint
@@ -230,7 +231,10 @@ def test_payment_controls_lifecycle():
     assert "Online payment is currently unavailable" in resp_prepaid_rejected.json()["detail"]
 
     # Attempt to create Cashfree payment order -> must be rejected with 400
-    resp_cf_create = client.post("/payments/cashfree/create-order", json={"order_code": historical_prepaid_code})
+    resp_cf_create = client.post(
+        "/payments/cashfree/create-order",
+        json={"order_code": historical_prepaid_code, "token": historical_prepaid_token},
+    )
     assert resp_cf_create.status_code == 400
     assert "Online payments are currently disabled" in resp_cf_create.json()["detail"]
     print("  [OK] Disabling online payment blocks both order placement and payment initiation with HTTP 400.")

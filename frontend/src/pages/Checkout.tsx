@@ -346,7 +346,7 @@ export const Checkout: React.FC = () => {
           return;
         }
 
-        const cfOrder = await createCashfreeOrder(orderResponse.order_code);
+        const cfOrder = await createCashfreeOrder(orderResponse.order_code, orderToken);
         const mode = (cfOrder.mode || gatewayConfig.mode || 'sandbox') === 'production' ? 'production' : 'sandbox';
         const cashfree = (window as any).Cashfree({ mode });
 

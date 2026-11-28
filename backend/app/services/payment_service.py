@@ -52,7 +52,7 @@ def get_cashfree_base_url() -> str:
 
 
 
-def create_cashfree_order(db: Session, order_code: str) -> CashfreeCreateOrderResponse:
+def create_cashfree_order(db: Session, order_code: str, order: Optional[Order] = None) -> CashfreeCreateOrderResponse:
     """Creates a Cashfree order tied strictly to the server-computed total of an existing PENDING order.
     
     Critical rules:
@@ -61,17 +61,19 @@ def create_cashfree_order(db: Session, order_code: str) -> CashfreeCreateOrderRe
     - Uses order_code as Cashfree order_id, customer_id, etc.
     - Never returns the client secret
     """
-    order = db.query(Order).filter(Order.order_code == order_code).first()
+    clean_code = order_code.strip().upper()
+    if order is None:
+        order = db.query(Order).filter(Order.order_code == clean_code).first()
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Order '{order_code}' not found.",
+            detail=f"Order '{clean_code}' not found.",
         )
 
     if order.status != "PENDING" or order.payment_method != "PREPAID":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Order '{order_code}' is not awaiting prepaid payment (status: {order.status}).",
+            detail=f"Order '{clean_code}' is not awaiting prepaid payment (status: {order.status}).",
         )
 
     store_setting = db.query(StoreSetting).first()

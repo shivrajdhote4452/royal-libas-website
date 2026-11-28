@@ -570,6 +570,7 @@ class CashfreeSyncResponse(BaseModel):
 
 class CashfreeCreateOrderRequest(BaseModel):
     order_code: str
+    token: Optional[str] = None
 
 
 class CashfreeCreateOrderResponse(BaseModel):
@@ -1295,6 +1296,8 @@ class ContactInquiryCreate(BaseModel):
         clean = (v or "").strip()
         if len(clean) < 5:
             raise ValueError("Please provide a message with at least 5 characters")
+        if len(clean) > 2000:
+            raise ValueError("Inquiry message cannot exceed 2,000 characters")
         return clean
 
 

@@ -57,6 +57,10 @@ export const Contact: React.FC = () => {
       setErrorMsg('Please complete all required fields.');
       return;
     }
+    if (formData.message.trim().length > 2000) {
+      setErrorMsg('Inquiry message cannot exceed 2,000 characters.');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -238,13 +242,19 @@ export const Contact: React.FC = () => {
                   </div>
 
                   <div>
-                    <label htmlFor="message" className="block text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Message / Custom Requirement
-                    </label>
+                    <div className="flex justify-between items-center">
+                      <label htmlFor="message" className="block text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Message / Custom Requirement
+                      </label>
+                      <span className={`text-[10px] ${formData.message.length > 2000 ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                        {formData.message.length}/2000
+                      </span>
+                    </div>
                     <textarea
                       id="message"
                       rows={3}
                       required
+                      maxLength={2000}
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                       className="mt-1 block w-full px-3 py-2 bg-[#FCF8F0]/30 border border-[#B58A3C]/40 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#5E1224] focus:border-[#5E1224]"

@@ -219,9 +219,10 @@ class TestCashfreeSandboxIntegration(unittest.TestCase):
         })
         self.assertEqual(order_res.status_code, 201)
         order_code = order_res.json()["order_code"]
+        order_token = order_res.json().get("order_token")
 
-        # Call create-order endpoint
-        cf_res = client.post("/payments/cashfree/create-order", json={"order_code": order_code})
+        # Call create-order endpoint with required customer order_token
+        cf_res = client.post("/payments/cashfree/create-order", json={"order_code": order_code, "token": order_token})
         self.assertEqual(cf_res.status_code, 200)
         cf_data = cf_res.json()
 

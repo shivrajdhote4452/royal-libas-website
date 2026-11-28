@@ -1,9 +1,11 @@
+import os
 from pathlib import Path
+from typing import Optional, Tuple
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from app.config import FRONTEND_URL
+from app.config import FRONTEND_URL, APP_ENV_MODE
 from app.database import get_db, engine, Base
 from app.models import Order
 from app.routers import admin, products, collections, cart, orders, payments, coupons, store_info, seo
@@ -14,10 +16,37 @@ Base.metadata.create_all(bind=engine)
 from app.migrations import run_migrations
 run_migrations(engine)
 
+def resolve_api_docs_routes(
+    env_mode: Optional[str] = None,
+    enable_docs_override: Optional[bool] = None,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Determine whether interactive documentation and schema are exposed.
+
+    SECURITY REQUIREMENT:
+    In production mode, /docs, /redoc, and /openapi.json are disabled by default
+    to eliminate public schema enumeration and reconnaissance attack surface.
+    They remain enabled in local development and automated testing environments.
+    """
+    mode = env_mode if env_mode is not None else APP_ENV_MODE
+    is_prod = mode == "production"
+    if enable_docs_override is not None:
+        explicit_allow = enable_docs_override
+    else:
+        explicit_allow = os.getenv("ENABLE_API_DOCS", "false").strip().lower() in ("true", "1", "yes")
+
+    if is_prod and not explicit_allow:
+        return None, None, None
+    return "/docs", "/redoc", "/openapi.json"
+
+docs_path, redoc_path, openapi_path = resolve_api_docs_routes()
+
 app = FastAPI(
     title="Royal Libas by Tanya API",
     description="Backend API for Royal Libas custom shop (Launch & Honesty Hardened)",
     version="0.8.1",
+    docs_url=docs_path,
+    redoc_url=redoc_path,
+    openapi_url=openapi_path,
 )
 
 # Mount uploads directory for persistent product images
