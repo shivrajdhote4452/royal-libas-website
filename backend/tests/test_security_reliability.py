@@ -545,9 +545,9 @@ if False:  # pragma: no cover
         assert "refund" in message.lower()
 
         db.refresh(order1)
-        # Order 1 MUST NOT be marked PAID or CONFIRMED
-        assert order1.status == "ACTION_REQUIRED_REFUND"
-        assert order1.payment_status == "PAID_RECONCILIATION_REQUIRED"
+        # Order 1 status must be CANCELLED with payment_status PAID (fits within VARCHAR(20))
+        assert order1.status == "CANCELLED"
+        assert order1.payment_status == "PAID"
         assert "INVENTORY CONFLICT" in order1.admin_notes
         assert "Initiate customer refund" in order1.admin_notes
         db.close()

@@ -286,5 +286,51 @@ def run_migrations(engine: Engine) -> None:
             else:
                 conn.execute(text("UPDATE coupons SET is_public = 0 WHERE is_public IS NULL;"))
 
+        # 9. PaymentEvent table creation for Cashfree replay protection
+        if "payment_events" not in existing_tables:
+            logger.info("Creating payment_events table...")
+            if dialect_name == "postgresql":
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS payment_events (
+                        id SERIAL PRIMARY KEY,
+                        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                        provider VARCHAR(50) DEFAULT 'cashfree' NOT NULL,
+                        payment_id VARCHAR(100) NOT NULL,
+                        event_type VARCHAR(100) NOT NULL,
+                        payment_status VARCHAR(50) NOT NULL,
+                        amount NUMERIC(10, 2) NOT NULL,
+                        currency VARCHAR(10) DEFAULT 'INR' NOT NULL,
+                        payload_hash VARCHAR(64) NOT NULL,
+                        outcome VARCHAR(50) NOT NULL,
+                        event_time TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        CONSTRAINT uq_payment_events_provider_payment_event UNIQUE (provider, payment_id, event_type)
+                    );
+                """))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_payment_events_order_id ON payment_events (order_id);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_payment_events_payment_id ON payment_events (payment_id);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_payment_events_event_type ON payment_events (event_type);"))
+            else:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS payment_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                        provider VARCHAR(50) DEFAULT 'cashfree' NOT NULL,
+                        payment_id VARCHAR(100) NOT NULL,
+                        event_type VARCHAR(100) NOT NULL,
+                        payment_status VARCHAR(50) NOT NULL,
+                        amount NUMERIC(10, 2) NOT NULL,
+                        currency VARCHAR(10) DEFAULT 'INR' NOT NULL,
+                        payload_hash VARCHAR(64) NOT NULL,
+                        outcome VARCHAR(50) NOT NULL,
+                        event_time TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                        CONSTRAINT uq_payment_events_provider_payment_event UNIQUE (provider, payment_id, event_type)
+                    );
+                """))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_payment_events_order_id ON payment_events (order_id);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_payment_events_payment_id ON payment_events (payment_id);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_payment_events_event_type ON payment_events (event_type);"))
+
     logger.info("Database schema migrations completed successfully.")
 

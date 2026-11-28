@@ -486,7 +486,7 @@ def admin_update_order_status(
     """Update order status with strict business transitions and inventory restocking on cancellation."""
     order = (
         db.query(Order)
-        .options(joinedload(Order.items), joinedload(Order.address))
+        .with_for_update()
         .filter(Order.id == id)
         .first()
     )
@@ -548,23 +548,30 @@ def admin_update_order_status(
                         detail=f"Shiprocket cancellation failed ({str(cancel_err)}). Please cancel the shipment directly in the Shiprocket dashboard before restocking.",
                     )
 
-        # Restock variants
+        # Restock variants in strictly ascending ID order to prevent deadlocks
+        variant_quantities: dict[int, int] = {}
         for item in order.items:
             if item.variant_id:
-                variant = db.query(ProductVariant).with_for_update().filter(ProductVariant.id == item.variant_id).first()
-                if variant:
-                    prev_stock = variant.stock
-                    variant.stock += item.quantity
-                    adj = StockAdjustment(
-                        variant_id=variant.id,
-                        previous_stock=prev_stock,
-                        new_stock=variant.stock,
-                        change_amount=item.quantity,
-                        reason="ORDER_CANCELLED",
-                        note=f"Restocked {item.quantity} units from cancelled order {order.order_code}",
-                        actor_email=current_admin.email,
-                    )
-                    db.add(adj)
+                variant_quantities[item.variant_id] = (
+                    variant_quantities.get(item.variant_id, 0) + item.quantity
+                )
+
+        for vid in sorted(variant_quantities.keys()):
+            variant = db.query(ProductVariant).with_for_update().filter(ProductVariant.id == vid).first()
+            if variant:
+                prev_stock = variant.stock
+                qty = variant_quantities[vid]
+                variant.stock += qty
+                adj = StockAdjustment(
+                    variant_id=variant.id,
+                    previous_stock=prev_stock,
+                    new_stock=variant.stock,
+                    change_amount=qty,
+                    reason="ORDER_CANCELLED",
+                    note=f"Restocked {qty} units from cancelled order {order.order_code}",
+                    actor_email=current_admin.email,
+                )
+                db.add(adj)
 
     order.status = target_status
     if payload.courier_name is not None:

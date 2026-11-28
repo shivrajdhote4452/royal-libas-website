@@ -437,7 +437,9 @@ class TestCashfreeSandboxIntegration(unittest.TestCase):
             headers={"x-webhook-signature": legit_sig, "x-webhook-timestamp": timestamp},
         )
         self.assertEqual(res_dup.status_code, 200)
-        self.assertIn("already marked PAID", res_dup.json()["detail"])
+        self.assertTrue(
+            "already processed" in res_dup.json()["detail"] or "already marked PAID" in res_dup.json()["detail"]
+        )
 
     def test_08_no_automatic_shiprocket_booking_and_admin_panel_visibility(self):
         """Verify that paid orders appear correctly in admin panel without triggering Shiprocket."""

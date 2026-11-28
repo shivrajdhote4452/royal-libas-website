@@ -242,10 +242,13 @@ def create_order_transaction(db: Session, payload: OrderCreateRequest) -> Order:
         subtotal = Decimal("0.00")
         order_items_to_create: List[OrderItem] = []
 
-        # Lock rows or re-verify each variant stock & price directly from DB
-        for req_item in payload.items:
+        # Lock rows or re-verify each variant stock & price directly from DB in strictly ascending variant_id order
+        # to eliminate potential deadlocks between concurrent multi-item checkouts or checkouts vs restock
+        sorted_items = sorted(payload.items, key=lambda x: x.variant_id)
+        for req_item in sorted_items:
             variant = (
                 db.query(ProductVariant)
+                .populate_existing()
                 .with_for_update()  # Row-level lock to prevent race condition / overselling
                 .filter(ProductVariant.id == req_item.variant_id)
                 .first()
@@ -509,39 +512,67 @@ def cancel_order_atomic(
     """Atomically cancel an order and restock inventory with strict idempotency.
     
     Guarantees:
+    - Lock order row first with with_for_update() to serialize against incoming webhooks.
     - If order is ALREADY cancelled, returns order immediately without duplicate restocking.
-    - Locks product variant rows with with_for_update() to prevent concurrent race conditions.
+    - If order is already PAID, refuses cancellation.
+    - Aggregates and locks ProductVariant rows in strictly ASCENDING ID order (sorted(keys)).
     - Appends audit trail to admin_notes.
     """
-    if order.status == "CANCELLED":
-        return order  # Strictly idempotent: do NOT restock twice!
+    # 1. Row-level lock on Order to serialize against concurrent payment webhooks
+    locked_order = (
+        db.query(Order)
+        .populate_existing()
+        .with_for_update()
+        .filter(Order.id == order.id)
+        .first()
+    )
+    if not locked_order:
+        return order
+
+    if locked_order.status == "CANCELLED":
+        return locked_order  # Strictly idempotent: do NOT restock twice!
+
+    if (
+        locked_order.status in ("PAID", "CONFIRMED", "SHIPPED", "DELIVERED")
+        or locked_order.payment_status == "PAID"
+    ):
+        # Order was already paid concurrently; do not cancel out from under payment
+        return locked_order
 
     if restock:
-        for item in order.items:
+        # Group variant quantities to avoid duplicate lock attempts
+        variant_quantities: dict[int, int] = {}
+        for item in locked_order.items:
             if item.variant_id:
-                variant = (
-                    db.query(ProductVariant)
-                    .with_for_update()
-                    .filter(ProductVariant.id == item.variant_id)
-                    .first()
+                variant_quantities[item.variant_id] = (
+                    variant_quantities.get(item.variant_id, 0) + item.quantity
                 )
-                if variant:
-                    variant.stock += item.quantity
 
-    order.status = "CANCELLED"
-    if order.payment_status in ("PENDING", "FAILED"):
-        order.payment_status = "CANCELLED"
+        # Lock variants in strictly ASCENDING ID order to avoid deadlocks
+        for vid in sorted(variant_quantities.keys()):
+            variant = (
+                db.query(ProductVariant)
+                .with_for_update()
+                .filter(ProductVariant.id == vid)
+                .first()
+            )
+            if variant:
+                variant.stock += variant_quantities[vid]
+
+    locked_order.status = "CANCELLED"
+    if locked_order.payment_status in ("PENDING", "FAILED"):
+        locked_order.payment_status = "CANCELLED"
 
     timestamp_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     note_entry = f"[{timestamp_str}] Order cancelled. Reason: {reason}"
-    if order.admin_notes:
-        order.admin_notes = f"{order.admin_notes}\n{note_entry}"
+    if locked_order.admin_notes:
+        locked_order.admin_notes = f"{locked_order.admin_notes}\n{note_entry}"
     else:
-        order.admin_notes = note_entry
+        locked_order.admin_notes = note_entry
 
     db.commit()
-    db.refresh(order)
-    return order
+    db.refresh(locked_order)
+    return locked_order
 
 
 def expire_unpaid_prepaid_reservations(db: Session) -> int:
